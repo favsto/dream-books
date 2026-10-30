@@ -15,7 +15,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\DreamBooks.Pdf.Tests\TestPdfFactory.cs" Link="TestPdfFactory.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="System.IO" />
   </ItemGroup>
 
 </Project>
