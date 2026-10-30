@@ -45,7 +45,8 @@ implementation, review). Project-specific additions:
   DocumentSession. No references to WPF, PDFium or PDFsharp.
 - `src/DreamBooks.Pdf/` — PdfRenderer (PDFium), PdfWriter (PDFsharp),
   RecoveryStore.
-- `tests/DreamBooks.Core.Tests/`, `tests/DreamBooks.Pdf.Tests/` — xUnit.
+- `tests/DreamBooks.Core.Tests/`, `tests/DreamBooks.Pdf.Tests/`,
+  `tests/DreamBooks.App.Tests/` — xUnit.
 - `docs/` — requirements and plans.
 
 Specific rules live in `.claude/rules/` and load automatically.

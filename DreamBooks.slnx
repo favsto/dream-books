@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DreamBooks.App/DreamBooks.App.csproj" />
+    <Project Path="src/DreamBooks.Core/DreamBooks.Core.csproj" />
+    <Project Path="src/DreamBooks.Pdf/DreamBooks.Pdf.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DreamBooks.App.Tests/DreamBooks.App.Tests.csproj" />
+    <Project Path="tests/DreamBooks.Core.Tests/DreamBooks.Core.Tests.csproj" />
+    <Project Path="tests/DreamBooks.Pdf.Tests/DreamBooks.Pdf.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -14,8 +14,6 @@
 - App-private data stored in the PDF carries a schema version number.
 - Never log document content (NFR-12). The app makes no network calls (NFR-40).
 
-## Proposed defaults (to confirm with Fausto)
-
 - Nullable reference types enabled in every project.
 - File-scoped namespaces; one public type per file, file named after the type.
 - Async methods end in `Async` and accept a `CancellationToken` when they do I/O.
