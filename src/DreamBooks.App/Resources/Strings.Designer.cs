@@ -12,12 +12,6 @@ internal static class Strings
 
     public static string Page => Get(nameof(Page));
 
-    public static string Renderer => Get(nameof(Renderer));
-
-    public static string RendererStock => Get(nameof(RendererStock));
-
-    public static string RendererCustom => Get(nameof(RendererCustom));
-
     public static string ToolPen => Get(nameof(ToolPen));
 
     public static string ToolEraser => Get(nameof(ToolEraser));

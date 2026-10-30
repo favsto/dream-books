@@ -27,9 +27,6 @@
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <data name="OpenPdf" xml:space="preserve"><value>Apri PDF</value></data>
   <data name="Page" xml:space="preserve"><value>Pagina</value></data>
-  <data name="Renderer" xml:space="preserve"><value>Resa del tratto</value></data>
-  <data name="RendererStock" xml:space="preserve"><value>A · WPF standard</value></data>
-  <data name="RendererCustom" xml:space="preserve"><value>B · Personalizzata</value></data>
   <data name="ToolPen" xml:space="preserve"><value>Penna</value></data>
   <data name="ToolEraser" xml:space="preserve"><value>Gomma</value></data>
   <data name="PressureCurve" xml:space="preserve"><value>Curva di pressione</value></data>

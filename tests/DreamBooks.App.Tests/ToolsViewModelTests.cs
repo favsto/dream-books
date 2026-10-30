@@ -46,13 +46,12 @@ public class ToolsViewModelTests
     }
 
     [Fact]
-    public void Curve_controls_enabled_only_for_custom_renderer()
+    public void Tools_expose_no_renderer_choice()
     {
-        var tools = new ToolsViewModel();
-        Assert.True(tools.IsCustomRenderer);
+        var properties = typeof(ToolsViewModel).GetProperties().Select(p => p.Name).ToList();
 
-        tools.Renderer = RendererMode.StockWpf;
-        Assert.False(tools.IsCustomRenderer);
+        Assert.DoesNotContain("Renderer", properties);
+        Assert.DoesNotContain("IsCustomRenderer", properties);
     }
 
     [Fact]
@@ -60,8 +59,8 @@ public class ToolsViewModelTests
     {
         var tools = new ToolsViewModel();
 
-        Assert.Equal(PressureCurve.Linear, tools.Curve);
-        Assert.Equal(SmoothingLevel.Light, tools.Smoothing);
+        Assert.Equal(PressureCurve.Firm, tools.Curve);
+        Assert.Equal(SmoothingLevel.Strong, tools.Smoothing);
         Assert.Equal(EraserMode.WholeStroke, tools.EraserMode);
         Assert.Equal(6, tools.EraserSizeMm);
         Assert.Equal(Palette.Colors[0], tools.Color);

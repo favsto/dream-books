@@ -6,7 +6,7 @@ using DreamBooks.Core.Model;
 namespace DreamBooks.App.Ink;
 
 /// <summary>
-/// Mode B committed strokes: one frozen outline geometry per stroke, in page points, cached by stroke Id
+/// Committed strokes: one frozen outline geometry per stroke, in page points, cached by stroke Id
 /// and drawn under a scale transform, so zooming only changes the transform (FR-26, NFR-07).
 /// </summary>
 public sealed class CustomInkLayer : FrameworkElement
@@ -100,11 +100,13 @@ public sealed class CustomInkLayer : FrameworkElement
         return geometry;
     }
 
+    internal static Color ToColor(InkColor c) => Color.FromArgb(c.A, c.R, c.G, c.B);
+
     private Brush BrushFor(InkColor color)
     {
         if (!_brushes.TryGetValue(color, out var brush))
         {
-            brush = new SolidColorBrush(StockStrokeConverter.ToColor(color));
+            brush = new SolidColorBrush(ToColor(color));
             brush.Freeze();
             _brushes[color] = brush;
         }

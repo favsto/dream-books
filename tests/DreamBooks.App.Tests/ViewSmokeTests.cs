@@ -60,7 +60,7 @@ public sealed class ViewSmokeTests : IDisposable
     }
 
     [Fact]
-    public async Task Ink_surface_is_page_size_times_scale_and_switches_modes()
+    public async Task Ink_surface_is_page_size_times_scale_and_zoom_only_changes_the_layer_scale()
     {
         await WithDocumentAsync(vm =>
         {
@@ -71,30 +71,12 @@ public sealed class ViewSmokeTests : IDisposable
             Assert.Equal(new Size(400, 600), surface.DesiredSize);
 
             Assert.True(editor.CommitStroke(_line, InkTool.Pen, vm.Tools.Color, 1));
-
-            // Mode B: outline layer shows the stroke, the stock presenter holds none.
-            Assert.IsType<CustomDynamicRenderer>(surface.ActiveRenderer);
             Assert.Single(surface.CustomLayer.Strokes);
-            Assert.Empty(surface.StockStrokes);
             Assert.Equal(Visibility.Visible, surface.CustomLayer.Visibility);
 
-            surface.Mode = RendererMode.StockWpf;
-            Assert.IsNotType<CustomDynamicRenderer>(surface.ActiveRenderer);
-            Assert.Equal(1, surface.PlugInCount);
-            Assert.Single(surface.StockStrokes);
-            Assert.Equal(10 * InkSurface.StockReferenceScale, surface.StockStrokes[0].StylusPoints[0].X, 9);
-            Assert.Equal(2 / InkSurface.StockReferenceScale, surface.StockStrokeScale, 9);
-            Assert.Equal(Visibility.Collapsed, surface.CustomLayer.Visibility);
-
-            surface.Scale = 4; // zoom rescales mode A strokes by transform only (FR-26)
-            Assert.Equal(10 * InkSurface.StockReferenceScale, surface.StockStrokes[0].StylusPoints[0].X, 9);
-            Assert.Equal(4 / InkSurface.StockReferenceScale, surface.StockStrokeScale, 9);
-
-            surface.Mode = RendererMode.Custom;
-            Assert.IsType<CustomDynamicRenderer>(surface.ActiveRenderer);
-            Assert.Equal(1, surface.PlugInCount);
-            Assert.Empty(surface.StockStrokes);
+            surface.Scale = 4;
             Assert.Equal(4, surface.CustomLayer.Scale, 9);
+            Assert.Single(surface.CustomLayer.Strokes);
 
             vm.Undo.Undo();
             Assert.Empty(surface.CustomLayer.Strokes);
@@ -102,6 +84,25 @@ public sealed class ViewSmokeTests : IDisposable
         });
     }
 
+    [Fact]
+    public async Task One_wet_renderer_is_installed_and_refuses_touch_and_back_end_devices()
+    {
+        await WithDocumentAsync(vm =>
+        {
+            var surface = CreateSurface(vm);
+            Assert.Equal(1, surface.PlugInCount);
+            var renderer = Assert.IsType<CustomDynamicRenderer>(surface.ActiveRenderer);
+
+            Assert.False(renderer.IsIgnoredDevice(tabletId: 1, stylusId: 10));
+
+            renderer.SetIgnoredDevices([1], [11]);
+            Assert.True(renderer.IsIgnoredDevice(tabletId: 1, stylusId: 10)); // touch tablet
+            Assert.True(renderer.IsIgnoredDevice(tabletId: 2, stylusId: 11)); // pen back end
+            Assert.False(renderer.IsIgnoredDevice(tabletId: 2, stylusId: 10)); // pen tip
+
+            Assert.Equal(1, surface.PlugInCount);
+        });
+    }
     [Fact]
     public async Task Wet_renderer_is_disabled_while_the_eraser_tool_is_active()
     {
@@ -129,66 +130,21 @@ public sealed class ViewSmokeTests : IDisposable
     ];
 
     [Fact]
-    public async Task Mode_a_commit_adds_one_stroke_to_the_existing_collection()
+    public async Task Commit_adds_one_stroke_and_undo_removes_only_the_matching_one()
     {
         await WithDocumentAsync(vm =>
         {
             var surface = CreateSurface(vm);
-            surface.Mode = RendererMode.StockWpf;
             vm.Editor!.CommitStroke(_line, InkTool.Pen, vm.Tools.Color, 1);
-            var collection = surface.StockStrokes;
-            var first = collection[0];
-
+            var first = vm.Editor.Page.Strokes[0];
             vm.Editor.CommitStroke(_otherLine, InkTool.Pen, vm.Tools.Color, 1);
-
-            Assert.Same(collection, surface.StockStrokes);
-            Assert.Equal(2, collection.Count);
-            Assert.Same(first, collection[0]);
-        });
-    }
-
-    [Fact]
-    public async Task Mode_a_zoom_keeps_the_stroke_instances_and_changes_only_the_scale()
-    {
-        await WithDocumentAsync(vm =>
-        {
-            var surface = CreateSurface(vm);
-            surface.Mode = RendererMode.StockWpf;
-            vm.Editor!.CommitStroke(_line, InkTool.Pen, vm.Tools.Color, 1);
-            var collection = surface.StockStrokes;
-            var stroke = collection[0];
-            var x = stroke.StylusPoints[0].X;
-
-            surface.Scale = 8 * Units.DipPerPt;
-
-            Assert.Same(collection, surface.StockStrokes);
-            Assert.Same(stroke, surface.StockStrokes[0]);
-            Assert.Equal(x, stroke.StylusPoints[0].X, 9);
-
-            // Screen position of the first point = page point × Scale (FR-26).
-            Assert.Equal(10 * 8 * Units.DipPerPt, x * surface.StockStrokeScale, 9);
-        });
-    }
-
-    [Fact]
-    public async Task Mode_a_undo_removes_only_the_matching_stroke()
-    {
-        await WithDocumentAsync(vm =>
-        {
-            var surface = CreateSurface(vm);
-            surface.Mode = RendererMode.StockWpf;
-            vm.Editor!.CommitStroke(_line, InkTool.Pen, vm.Tools.Color, 1);
-            var collection = surface.StockStrokes;
-            var first = collection[0];
-            vm.Editor.CommitStroke(_otherLine, InkTool.Pen, vm.Tools.Color, 1);
+            Assert.Equal(2, surface.CustomLayer.Strokes.Count);
 
             vm.Undo.Undo();
 
-            Assert.Same(collection, surface.StockStrokes);
-            Assert.Same(first, Assert.Single(collection));
+            Assert.Same(first, Assert.Single(surface.CustomLayer.Strokes));
         });
     }
-
     [Fact]
     public async Task Zoom_is_locked_while_a_mouse_stroke_is_live_and_the_stroke_commits_on_release()
     {
@@ -251,25 +207,20 @@ public sealed class ViewSmokeTests : IDisposable
             Assert.Null(vm.ActiveErase);
             Assert.False(vm.ZoomVm.IsLocked);
             Assert.Same(vm.Editor.Page.Strokes, surface.DisplayStrokes);
-            Assert.Empty(surface.StockStrokes); // no ink was drawn by the mouse
             Assert.Single(vm.Editor.Page.Strokes);
         });
     }
 
-    [Theory]
-    [InlineData(RendererMode.StockWpf)]
-    [InlineData(RendererMode.Custom)]
-    public async Task Back_end_erase_is_one_undo_step_and_gives_the_previous_tool_back(RendererMode mode)
+    [Fact]
+    public async Task Back_end_erase_is_one_undo_step_and_gives_the_previous_tool_back()
     {
         await WithDocumentAsync(vm =>
         {
             var surface = CreateSurface(vm);
-            surface.Mode = mode;
             surface.Scale = 2;
             vm.Editor!.CommitStroke(_line, InkTool.Pen, vm.Tools.Color, 1); // (10,10)-(60,40) pt
             vm.Editor.CommitStroke(_otherLine, InkTool.Pen, vm.Tools.Color, 1);
             var kept = vm.Editor.Page.Strokes[1];
-            var keptWpf = mode == RendererMode.StockWpf ? surface.StockStrokes[1] : null;
             vm.Undo.Clear();
 
             Assert.True(surface.BeginEraseGesture(inverted: true, stylusId: 7));
@@ -280,7 +231,7 @@ public sealed class ViewSmokeTests : IDisposable
             // Live preview: the first line is gone from the view, the page is untouched.
             Assert.Equal([kept], surface.DisplayStrokes);
             Assert.Equal(2, vm.Editor.Page.Strokes.Count);
-            Assert.Equal(1, ShownStrokeCount(surface, mode));
+            Assert.Single(surface.CustomLayer.Strokes);
             Assert.Equal(Visibility.Visible, surface.EraserCursor.Visibility);
 
             surface.EndEraseGesture();
@@ -295,11 +246,8 @@ public sealed class ViewSmokeTests : IDisposable
             Assert.True(vm.Undo.Undo());
             Assert.False(vm.Undo.CanUndo); // exactly one step
 
-            Assert.Equal(2, ShownStrokeCount(surface, mode));
-            if (keptWpf is not null)
-            {
-                Assert.Same(keptWpf, surface.StockStrokes[1]); // the surviving stroke was never rebuilt
-            }
+            Assert.Equal(2, surface.CustomLayer.Strokes.Count);
+            Assert.Same(kept, surface.CustomLayer.Strokes[1]); // undo restores the same instances
         });
     }
 
@@ -362,9 +310,6 @@ public sealed class ViewSmokeTests : IDisposable
             Assert.Equal(Visibility.Collapsed, cursor.Visibility);
         });
     }
-
-    private static int ShownStrokeCount(InkSurface surface, RendererMode mode) =>
-        mode == RendererMode.StockWpf ? surface.StockStrokes.Count : surface.CustomLayer.Strokes.Count;
 
     [Fact]
     public async Task Failed_page_render_yields_no_bitmap_instead_of_throwing()

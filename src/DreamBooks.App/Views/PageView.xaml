@@ -19,7 +19,6 @@
                         AutomationProperties.Name="{x:Static res:Strings.Page}"
                         ViewModel="{Binding}"
                         Page="{Binding Editor.Page}"
-                        Mode="{Binding Tools.Renderer}"
                         Curve="{Binding Tools.Curve}"
                         Smoothing="{Binding Tools.Smoothing}" />
     </ScrollViewer>

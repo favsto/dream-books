@@ -4,7 +4,7 @@ using DreamBooks.Core.Geometry;
 
 namespace DreamBooks.App.Ink;
 
-/// <summary>Turns outline figures from Core into a frozen, non-zero filled geometry (mode B).</summary>
+/// <summary>Turns outline figures from Core into a frozen, non-zero filled geometry.</summary>
 internal static class OutlineGeometry
 {
     public static StreamGeometry ToStreamGeometry(IReadOnlyList<IReadOnlyList<PointD>> figures)

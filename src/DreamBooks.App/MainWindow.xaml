@@ -37,15 +37,6 @@
                                 AutomationProperties.Name="{x:Static res:Strings.Page}" />
                     </StackPanel>
 
-                    <!-- Renderer A / B -->
-                    <TextBlock Text="{x:Static res:Strings.Renderer}" Style="{StaticResource SectionLabel}" />
-                    <StackPanel Orientation="Vertical">
-                        <RadioButton GroupName="Renderer" Content="{x:Static res:Strings.RendererStock}"
-                                     IsChecked="{Binding Tools.Renderer, Converter={StaticResource EnumMatch}, ConverterParameter=StockWpf}" />
-                        <RadioButton GroupName="Renderer" Content="{x:Static res:Strings.RendererCustom}"
-                                     IsChecked="{Binding Tools.Renderer, Converter={StaticResource EnumMatch}, ConverterParameter=Custom}" />
-                    </StackPanel>
-
                     <!-- Tool -->
                     <StackPanel Orientation="Horizontal" Margin="{StaticResource SectionGap}">
                         <RadioButton GroupName="Tool" Content="{x:Static res:Strings.ToolPen}"
@@ -54,8 +45,8 @@
                                      IsChecked="{Binding Tools.ActiveTool, Converter={StaticResource EnumMatch}, ConverterParameter=Eraser}" />
                     </StackPanel>
 
-                    <!-- Pressure curve and smoothing: renderer B only -->
-                    <StackPanel IsEnabled="{Binding Tools.IsCustomRenderer}">
+                    <!-- Pressure curve and smoothing -->
+                    <StackPanel>
                         <TextBlock Text="{x:Static res:Strings.PressureCurve}" Style="{StaticResource SectionLabel}" />
                         <StackPanel Orientation="Horizontal">
                             <RadioButton GroupName="Curve" Content="{x:Static res:Strings.CurveLinear}"

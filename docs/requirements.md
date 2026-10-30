@@ -169,6 +169,8 @@ La scrittura è la funzione centrale: deve essere immediata, fluida e fedele all
 | FR-27 | Ogni tratto appartiene a una sola pagina e viene ritagliato al suo bordo | Must |
 | FR-28 | Il pulsante laterale della penna, tenuto premuto, attiva temporaneamente lo strumento Selezione (lazo) | Should |
 
+**Decisione (30/10/2026).** Dopo un confronto su dispositivo con l'inchiostro standard di WPF, è stato adottato il renderer personalizzato come unico motore del tratto. Impostazioni predefinite: curva di pressione "decisa" (FR-21) e levigatura "forte" (FR-23).
+
 ### Gomma
 
 | ID | Requisito | Priorità |

@@ -16,9 +16,8 @@ public sealed class ToolsViewModel : ObservableObject
 
     private AppTool _activeTool = AppTool.Pen;
     private bool _isInverted;
-    private RendererMode _renderer = RendererMode.Custom;
-    private PressureCurve _curve = PressureCurve.Linear;
-    private SmoothingLevel _smoothing = SmoothingLevel.Light;
+    private PressureCurve _curve = PressureCurve.Firm;
+    private SmoothingLevel _smoothing = SmoothingLevel.Strong;
     private double _baseWidthMm = 0.5;
     private InkColor _color = Palette.Colors[0];
     private EraserMode _eraserMode = EraserMode.WholeStroke;
@@ -43,20 +42,6 @@ public sealed class ToolsViewModel : ObservableObject
     public bool IsInverted => _isInverted;
 
     public AppTool EffectiveTool => _isInverted ? AppTool.Eraser : _activeTool;
-
-    public RendererMode Renderer
-    {
-        get => _renderer;
-        set
-        {
-            if (SetProperty(ref _renderer, value))
-            {
-                OnPropertyChanged(nameof(IsCustomRenderer));
-            }
-        }
-    }
-
-    public bool IsCustomRenderer => _renderer == RendererMode.Custom;
 
     public PressureCurve Curve
     {
