@@ -22,6 +22,6 @@ public static class StrokeGeometry
             widths[i] = PressureMapping.WidthAt(stroke.BaseWidthPt, smoothed[i].Pressure, curve);
         }
 
-        return StrokeOutline.Build(centers, widths);
+        return StrokeOutline.BuildContour(centers, widths);
     }
 }

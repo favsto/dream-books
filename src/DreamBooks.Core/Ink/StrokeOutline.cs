@@ -48,6 +48,20 @@ public static class StrokeOutline
         return figures;
     }
 
+    /// <summary>
+    /// Builds the same filled shape as <see cref="Build"/> as one closed polygon with positive shoelace
+    /// area, to be filled with the non-zero rule: round caps, round joins on the outer side of turns,
+    /// and a contour simplified to within <paramref name="tolerancePt"/> (or 2% of the mean radius, if
+    /// finer) outside the visible arcs. It is over ten times lighter than <see cref="Build"/>, which the
+    /// wet renderer keeps using.
+    /// </summary>
+    /// <param name="centers">Stroke centerline points.</param>
+    /// <param name="widths">Full diameter at each center; values &lt;= 0 are clamped to a tiny width.</param>
+    /// <param name="tolerancePt">Maximum simplification error in page points; 0 disables it.</param>
+    public static IReadOnlyList<IReadOnlyList<PointD>> BuildContour(
+        IReadOnlyList<PointD> centers, IReadOnlyList<double> widths, double tolerancePt = 0.05) =>
+        StrokeContour.Build(centers, widths, tolerancePt);
+
     private static PointD[] Disc(PointD c, double r)
     {
         var n = (int)Math.Clamp(Math.Ceiling(2 * Math.PI * r / _discSegmentLength), _minDiscVertices, _maxDiscVertices);
