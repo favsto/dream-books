@@ -85,6 +85,9 @@ public sealed class PdfRenderer : IAsyncDisposable
             CancellationToken.None).ConfigureAwait(false);
     }
 
+    internal static bool IsValidPageSize(float width, float height) =>
+        float.IsFinite(width) && float.IsFinite(height) && width > 0 && height > 0;
+
     private static PdfRenderer Open(string path)
     {
         nint document = PdfiumNative.FPDF_LoadDocument(path, null);
@@ -105,6 +108,11 @@ public sealed class PdfRenderer : IAsyncDisposable
             for (int i = 0; i < count; i++)
             {
                 if (PdfiumNative.FPDF_GetPageSizeByIndexF(document, i, out PdfiumNative.FS_SIZEF size) == 0)
+                {
+                    throw new PdfOpenException(PdfOpenError.InvalidFormat);
+                }
+
+                if (!IsValidPageSize(size.Width, size.Height))
                 {
                     throw new PdfOpenException(PdfOpenError.InvalidFormat);
                 }

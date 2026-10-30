@@ -147,4 +147,35 @@ public sealed class PdfRendererTests : IDisposable
         int i = (y * page.Stride) + (x * 4);
         return (page.Bgra[i], page.Bgra[i + 1], page.Bgra[i + 2]);
     }
+
+    [Fact]
+    public async Task Page_with_empty_media_box_is_rejected_or_has_a_usable_size() // NFR-11
+    {
+        string path = Path.Combine(_dir, "empty-box.pdf");
+        TestPdfFactory.Write(path, (0, 0));
+
+        try
+        {
+            await using var renderer = await PdfRenderer.OpenAsync(path);
+            var size = renderer.GetPageSize(0);
+            Assert.True(double.IsFinite(size.WidthPt) && size.WidthPt > 0);
+            Assert.True(double.IsFinite(size.HeightPt) && size.HeightPt > 0);
+        }
+        catch (PdfOpenException ex)
+        {
+            Assert.Equal(PdfOpenError.InvalidFormat, ex.Error);
+        }
+    }
+
+    [Theory]
+    [InlineData(0f, 100f)]
+    [InlineData(100f, 0f)]
+    [InlineData(-1f, 100f)]
+    [InlineData(float.NaN, 100f)]
+    [InlineData(100f, float.PositiveInfinity)]
+    public void Only_finite_positive_page_sizes_are_valid(float width, float height)
+    {
+        Assert.False(PdfRenderer.IsValidPageSize(width, height));
+        Assert.True(PdfRenderer.IsValidPageSize(595f, 842f));
+    }
 }

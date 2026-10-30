@@ -430,4 +430,41 @@ public sealed class MainViewModelTests : IDisposable
         TestPdfFactory.Write(path, pages);
         return path;
     }
+
+    [Fact]
+    public async Task Unexpected_open_failure_shows_unknown_error_and_keeps_previous_document() // NFR-11
+    {
+        _dialogs.NextPath = WritePdf("a.pdf", (612, 792));
+        var vm = new MainViewModel(_dialogs);
+        try
+        {
+            await vm.OpenPdfCommand.ExecuteAsync(null);
+            var renderer = vm.Renderer;
+            var editor = vm.Editor;
+            vm.OpenRenderer = (_, _) => throw new InvalidOperationException("boom");
+
+            await vm.OpenPdfCommand.ExecuteAsync(null); // must not throw
+
+            Assert.Equal(Strings.ErrorUnknown, vm.ErrorMessage);
+            Assert.Same(renderer, vm.Renderer);
+            Assert.Same(editor, vm.Editor);
+            Assert.Equal(1, vm.PageNumber);
+        }
+        finally
+        {
+            await CleanUpAsync(vm);
+        }
+    }
+
+    [Fact]
+    public async Task Cancelled_open_shows_no_error()
+    {
+        _dialogs.NextPath = WritePdf("a.pdf", (612, 792));
+        var vm = new MainViewModel(_dialogs);
+        vm.OpenRenderer = (_, _) => throw new OperationCanceledException();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.OpenPdfCommand.ExecuteAsync(null));
+
+        Assert.Null(vm.ErrorMessage);
+    }
 }

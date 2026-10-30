@@ -204,21 +204,34 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
-        PdfRenderer renderer;
+        PdfRenderer? renderer = null;
         try
         {
             renderer = await OpenRenderer(path, ct);
+            if (renderer.PageCount == 0)
+            {
+                throw new PdfOpenException(PdfOpenError.InvalidFormat);
+            }
+
+            // Fails here, before anything is swapped, if the first page cannot be shown (NFR-11).
+            _ = PreparePage(renderer, 1);
+        }
+        catch (OperationCanceledException)
+        {
+            await DisposeQuietlyAsync(renderer);
+            throw;
         }
         catch (PdfOpenException ex)
         {
+            await DisposeQuietlyAsync(renderer);
             ErrorMessage = MessageFor(ex.Error);
             return;
         }
-
-        if (renderer.PageCount == 0)
+        catch (Exception)
         {
-            await renderer.DisposeAsync();
-            ErrorMessage = MessageFor(PdfOpenError.InvalidFormat);
+            // Never include the exception text: it may carry file paths or document content (NFR-12).
+            await DisposeQuietlyAsync(renderer);
+            ErrorMessage = Strings.ErrorUnknown;
             return;
         }
 
@@ -233,6 +246,23 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    private static async Task DisposeQuietlyAsync(PdfRenderer? renderer)
+    {
+        if (renderer is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await renderer.DisposeAsync();
+        }
+        catch (Exception)
+        {
+            // Best effort: the original failure is what the user needs to hear about.
+        }
+    }
+
     private Task GoToPageAsync(int pageNumber)
     {
         if (Renderer is null || pageNumber < 1 || pageNumber > PageCount || pageNumber == PageNumber)
@@ -242,18 +272,32 @@ public sealed class MainViewModel : ObservableObject
 
         if (ConfirmDiscard())
         {
-            ShowPage(pageNumber);
+            try
+            {
+                ShowPage(pageNumber);
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or ObjectDisposedException)
+            {
+                // ShowPage validates the page before touching any state, so the current page stays intact.
+                ErrorMessage = Strings.ErrorUnknown;
+            }
         }
 
         return Task.CompletedTask;
     }
 
+    private static (PageSize Size, CorePage Page) PreparePage(PdfRenderer renderer, int pageNumber)
+    {
+        var size = renderer.GetPageSize(pageNumber - 1);
+        return (size, new CorePage(pageNumber - 1, size.WidthPt, size.HeightPt));
+    }
+
     private void ShowPage(int pageNumber)
     {
-        var size = Renderer!.GetPageSize(pageNumber - 1);
+        var (size, page) = PreparePage(Renderer!, pageNumber);
         CancelErase();
         Undo.Clear();
-        Editor = new PageEditor(new CorePage(pageNumber - 1, size.WidthPt, size.HeightPt), Undo);
+        Editor = new PageEditor(page, Undo);
         PageSize = size;
         PageNumber = pageNumber;
         PageChanged?.Invoke(this, EventArgs.Empty);
