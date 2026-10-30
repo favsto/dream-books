@@ -24,7 +24,7 @@ public static class StrokeClipper
         {
             var a = points[i - 1];
             var b = points[i];
-            if (!TryClipSegment(a, b, widthPt, heightPt, out var t0, out var t1))
+            if (!TryClipSegment(a, b, widthPt, heightPt, out var t0, out var t1) || t1 <= t0)
             {
                 Close(pieces, ref run);
                 continue;
@@ -35,8 +35,8 @@ public static class StrokeClipper
                 Close(pieces, ref run);
             }
 
-            run ??= [t0 > 0 ? Lerp(a, b, t0) : a];
-            run.Add(t1 < 1 ? Lerp(a, b, t1) : b);
+            run ??= [t0 > 0 ? EdgePoint(a, b, t0, widthPt, heightPt) : a];
+            AddDistinct(run, t1 < 1 ? EdgePoint(a, b, t1, widthPt, heightPt) : b);
 
             if (t1 < 1)
             {
@@ -71,13 +71,13 @@ public static class StrokeClipper
         t1 = 1;
         var dx = b.X - a.X;
         var dy = b.Y - a.Y;
-        return Clip(-dx, a.X, ref t0, ref t1)
-            && Clip(dx, w - a.X, ref t0, ref t1)
-            && Clip(-dy, a.Y, ref t0, ref t1)
-            && Clip(dy, h - a.Y, ref t0, ref t1);
+        return Trim(-dx, a.X, ref t0, ref t1)
+            && Trim(dx, w - a.X, ref t0, ref t1)
+            && Trim(-dy, a.Y, ref t0, ref t1)
+            && Trim(dy, h - a.Y, ref t0, ref t1);
     }
 
-    private static bool Clip(double p, double q, ref double t0, ref double t1)
+    private static bool Trim(double p, double q, ref double t0, ref double t1)
     {
         if (p == 0)
         {
@@ -118,4 +118,19 @@ public static class StrokeClipper
 
     private static float? Lerp(float? a, float? b, double t)
         => a is { } x && b is { } y ? (float)(x + ((y - x) * t)) : null;
+
+    private static void AddDistinct(List<InkPoint> run, InkPoint point)
+    {
+        if (run[^1].Position != point.Position)
+        {
+            run.Add(point);
+        }
+    }
+
+    // Interpolated point, clamped so floating-point error cannot leave it outside the page.
+    private static InkPoint EdgePoint(InkPoint a, InkPoint b, double t, double w, double h)
+    {
+        var p = Lerp(a, b, t);
+        return p with { X = Math.Clamp(p.X, 0, w), Y = Math.Clamp(p.Y, 0, h) };
+    }
 }

@@ -30,6 +30,12 @@ public class PageEditorTests
             Assert.Equal(12, s.BaseWidthPt);
         });
 
+        Assert.All(page.Strokes.SelectMany(s => s.Points), p =>
+        {
+            Assert.InRange(p.X, 0, 100);
+            Assert.InRange(p.Y, 0, 100);
+        });
+
         Assert.True(undo.Undo());
         Assert.Empty(page.Strokes);
         Assert.False(undo.CanUndo);
