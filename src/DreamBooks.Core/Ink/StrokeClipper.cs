@@ -121,7 +121,11 @@ public static class StrokeClipper
 
     private static void AddDistinct(List<InkPoint> run, InkPoint point)
     {
-        if (run[^1].Position != point.Position)
+        if (run[^1].Position == point.Position)
+        {
+            run[^1] = InkPointMerge.Merge(run[^1], point);
+        }
+        else
         {
             run.Add(point);
         }

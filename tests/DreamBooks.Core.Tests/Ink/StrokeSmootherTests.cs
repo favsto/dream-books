@@ -158,4 +158,42 @@ public class StrokeSmootherTests
         var output = StrokeSmoother.Smooth(input, SmoothingLevel.Strong);
         Assert.True(output.Count >= input.Count);
     }
+
+    [Theory]
+    [InlineData(SmoothingLevel.Off)]
+    [InlineData(SmoothingLevel.Light)]
+    [InlineData(SmoothingLevel.Strong)]
+    public void Dot_keeps_max_pressure(SmoothingLevel level)
+    {
+        var output = StrokeSmoother.Smooth([P(5, 5, 0.1f, 0), P(5, 5, 0.5f, 8), P(5, 5, 0.9f, 16)], level);
+
+        var point = Assert.Single(output);
+        Assert.Equal(0.9f, point.Pressure);
+        Assert.Equal(16, point.TimestampMs);
+    }
+
+    [Fact]
+    public void Duplicate_cluster_inside_stroke_keeps_max_pressure()
+    {
+        var output = StrokeSmoother.Smooth([P(0, 0, 0.1f), P(0, 0, 0.9f), P(0, 0.001, 0.5f), P(5, 0, 0.3f)], SmoothingLevel.Off);
+
+        Assert.Equal(0.9f, output[0].Pressure);
+    }
+
+    [Fact]
+    public void Trailing_duplicate_cluster_carries_max_pressure()
+    {
+        var output = StrokeSmoother.Smooth([P(0, 0, 0.2f), P(5, 0, 0.1f, 0), P(5, 0, 0.8f, 9)], SmoothingLevel.Off);
+
+        Assert.Equal(0.8f, output[^1].Pressure);
+        Assert.Equal(9, output[^1].TimestampMs);
+    }
+
+    [Fact]
+    public void Null_pressure_cluster_stays_null()
+    {
+        var output = StrokeSmoother.Smooth([P(5, 5, null), P(5, 5, null)], SmoothingLevel.Off);
+
+        Assert.Null(Assert.Single(output).Pressure);
+    }
 }

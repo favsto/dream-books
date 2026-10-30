@@ -41,6 +41,10 @@ public static class StrokeSmoother
             {
                 result.Add(p);
             }
+            else
+            {
+                result[^1] = InkPointMerge.Merge(result[^1], p);
+            }
         }
 
         return result;

@@ -171,4 +171,44 @@ public class StrokeClipperTests
             Assert.InRange(p.Y, 0, 100);
         });
     }
+
+    [Fact]
+    public void Duplicate_cluster_keeps_max_pressure_and_latest_timestamp()
+    {
+        var pieces = Clip([P(10, 10, 0.1f, 0), P(10, 10, 0.5f, 8), P(10, 10, 0.9f, 16), P(20, 10, 0.4f, 24)], 100, 100);
+
+        var piece = Assert.Single(pieces);
+        Assert.Equal(2, piece.Count);
+        Assert.Equal(0.9f, piece[0].Pressure);
+        Assert.Equal(16, piece[0].TimestampMs);
+    }
+
+    [Fact]
+    public void Trailing_duplicate_cluster_carries_max_pressure()
+    {
+        var pieces = Clip([P(10, 10, 0.3f, 0), P(20, 10, 0.1f, 8), P(20, 10, 0.5f, 16), P(20, 10, 0.9f, 24)], 100, 100);
+
+        var piece = Assert.Single(pieces);
+        Assert.Equal(2, piece.Count);
+        Assert.Equal(0.9f, piece[^1].Pressure);
+        Assert.Equal(24, piece[^1].TimestampMs);
+    }
+
+    [Fact]
+    public void Dot_keeps_max_pressure()
+    {
+        var pieces = Clip([P(10, 10, 0.1f, 0), P(10, 10, 0.5f, 8), P(10, 10, 0.9f, 16)], 100, 100);
+
+        var point = Assert.Single(Assert.Single(pieces));
+        Assert.Equal(0.9f, point.Pressure);
+    }
+
+    [Fact]
+    public void Null_pressure_cluster_stays_null()
+    {
+        var pieces = Clip([P(10, 10, null, 0), P(10, 10, null, 8)], 100, 100);
+
+        var point = Assert.Single(Assert.Single(pieces));
+        Assert.Null(point.Pressure);
+    }
 }
