@@ -73,6 +73,8 @@ Run from the repository root.
 | `dotnet test` | Run all tests |
 | `dotnet format --verify-no-changes` | Check formatting |
 | `dotnet run --project src/DreamBooks.App` | Launch the app (opens a window: only when Fausto asks) |
+| `dotnet publish src/DreamBooks.App -c Release -r win-x64 --self-contained` | Release build for on-device testing; Fausto runs `src/DreamBooks.App/bin/Release/net10.0-windows/win-x64/publish/DreamBooks.App.exe` |
+| `dotnet publish src/DreamBooks.App -c Release -r win-arm64 --self-contained` | Release build for on-device testing: build check only (NFR-21); delete the output afterwards |
 
 Before declaring any task done: `dotnet build` with no new warnings and
 `dotnet test` green. Keep this table current: if a command changes, update it.
