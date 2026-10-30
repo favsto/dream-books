@@ -1,0 +1,7 @@
+{
+  "//": "Copia questo file in .claude/settings.local.json e personalizzalo. Non viene committato (vedi .gitignore).",
+  "permissions": {
+    "allow": []
+  },
+  "env": {}
+}
