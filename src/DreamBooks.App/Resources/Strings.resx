@@ -58,4 +58,5 @@
   <data name="ErrorUnsupported" xml:space="preserve"><value>Il PDF usa una protezione non supportata.</value></data>
   <data name="ErrorUnknown" xml:space="preserve"><value>Impossibile aprire il PDF.</value></data>
   <data name="NoDocument" xml:space="preserve"><value>Apri un PDF per iniziare</value></data>
+  <data name="PdfFileFilter" xml:space="preserve"><value>File PDF (*.pdf)|*.pdf</value></data>
 </root>

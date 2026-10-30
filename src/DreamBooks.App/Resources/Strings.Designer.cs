@@ -8,6 +8,8 @@ internal static class Strings
 
     public static string OpenPdf => Get(nameof(OpenPdf));
 
+    public static string PdfFileFilter => Get(nameof(PdfFileFilter));
+
     public static string Page => Get(nameof(Page));
 
     public static string Renderer => Get(nameof(Renderer));

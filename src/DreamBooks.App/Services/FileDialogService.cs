@@ -10,7 +10,7 @@ public sealed class FileDialogService : IFileDialogService
     {
         var dialog = new OpenFileDialog
         {
-            Filter = "PDF (*.pdf)|*.pdf",
+            Filter = Strings.PdfFileFilter,
             CheckFileExists = true,
         };
         return dialog.ShowDialog() == true ? dialog.FileName : null;
