@@ -251,6 +251,26 @@ public sealed class ViewSmokeTests : IDisposable
         });
     }
 
+
+    [Fact]
+    public async Task Wet_renderer_gating_is_re_evaluated_after_pen_up()
+    {
+        await WithDocumentAsync(vm =>
+        {
+            var surface = CreateSurface(vm);
+            Assert.True(surface.ActiveRenderer.Enabled);
+
+            surface.BeginPenStroke(stylusId: 3, hasPressure: true);
+            vm.Tools.ActiveTool = AppTool.Eraser; // changed while the stroke is live: gating is deferred
+            Assert.True(surface.ActiveRenderer.Enabled);
+
+            surface.FinishPenStroke();
+            Assert.False(surface.ActiveRenderer.Enabled); // corrected right at the lift
+
+            vm.Tools.ActiveTool = AppTool.Pen;
+            Assert.True(surface.ActiveRenderer.Enabled);
+        });
+    }
     [Fact]
     public async Task Pen_tool_does_not_start_an_erase_unless_the_back_end_touches()
     {

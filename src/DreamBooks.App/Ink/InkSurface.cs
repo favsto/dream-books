@@ -301,11 +301,7 @@ public sealed class InkSurface : FrameworkElement
             return;
         }
 
-        _penStylusId = device.Id;
-        _penHasPressure = ReportsPressure(device.TabletDevice);
-        _penStyle = CurrentStyle();
-        _penPoints = [];
-        LockZoom(true);
+        BeginPenStroke(device.Id, ReportsPressure(device.TabletDevice));
         AppendStylusPoints(e);
         device.Capture(this);
     }
@@ -664,7 +660,17 @@ public sealed class InkSurface : FrameworkElement
     private void OnErasePreviewChanged(object? sender, EventArgs e) =>
         SetCurrentValue(DisplayStrokesProperty, CurrentStrokes());
 
-    private void FinishPenStroke()
+    /// <summary>Starts a pen stroke: state, zoom lock. Separate from the event handler so tests can drive it.</summary>
+    internal void BeginPenStroke(int stylusId, bool hasPressure)
+    {
+        _penStylusId = stylusId;
+        _penHasPressure = hasPressure;
+        _penStyle = CurrentStyle();
+        _penPoints = [];
+        LockZoom(true);
+    }
+
+    internal void FinishPenStroke()
     {
         var points = _penPoints!;
         _penPoints = null; // Before releasing capture: LostStylusCapture must not finish twice.
@@ -710,6 +716,7 @@ public sealed class InkSurface : FrameworkElement
             LockZoom(false);
         }
 
+        UpdateRendererEnabled(null);
     }
 
     /// <summary>No zoom while a stroke is live: the wet ink would stay at the old scale.</summary>
