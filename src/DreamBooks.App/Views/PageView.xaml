@@ -1,0 +1,26 @@
+<UserControl x:Class="DreamBooks.App.Views.PageView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="clr-namespace:DreamBooks.App.Resources"
+             xmlns:ink="clr-namespace:DreamBooks.App.Ink">
+    <!-- The viewport: fingers pan and pinch (manipulation), Ctrl+wheel zooms; the pen only inks (FR-06, FR-30). -->
+    <ScrollViewer x:Name="Viewport"
+                  HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                  PanningMode="None" IsManipulationEnabled="True" UseLayoutRounding="True"
+                  Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
+                  Stylus.IsPressAndHoldEnabled="False" Stylus.IsFlicksEnabled="False"
+                  Stylus.IsTapFeedbackEnabled="False" Stylus.IsTouchFeedbackEnabled="False"
+                  ManipulationStarting="OnManipulationStarting"
+                  ManipulationDelta="OnManipulationDelta"
+                  ManipulationBoundaryFeedback="OnManipulationBoundaryFeedback"
+                  PreviewMouseWheel="OnPreviewMouseWheel">
+        <ink:InkSurface x:Name="Surface"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        AutomationProperties.Name="{x:Static res:Strings.Page}"
+                        ViewModel="{Binding}"
+                        Page="{Binding Editor.Page}"
+                        Mode="{Binding Tools.Renderer}"
+                        Curve="{Binding Tools.Curve}"
+                        Smoothing="{Binding Tools.Smoothing}" />
+    </ScrollViewer>
+</UserControl>

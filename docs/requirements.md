@@ -322,7 +322,7 @@ Le frecce indicano le dipendenze: la View osserva i ViewModel, che usano i servi
 
 Lo sviluppo procede in cinque fasi; ognuna termina con una build installabile da provare sulla Surface prima di passare alla successiva.
 
-1. **Prototipo inchiostro.** Una pagina PDF renderizzata, penna con pressione, gomma col dorso, undo/redo in memoria. Serve a validare la sensazione di scrittura.
+1. **Prototipo inchiostro.** Una pagina PDF renderizzata, penna con pressione, gomma col dorso, undo/redo in memoria, zoom minimo (parte di FR-06) per verificare FR-26. Serve a validare la sensazione di scrittura.
 2. **Salvataggio e riapertura.** Salvataggio nel PDF con le due forme (visibile e modificabile), riapertura, salvataggio di sicurezza e recupero.
 3. **Documento completo.** Multipagina con rendering virtualizzato, zoom, navigazione, evidenziatori, segnalibri.
 4. **Interfaccia finale.** Toolbar flottante, pannelli a scomparsa, Mica/Acrylic, animazioni, temi, schermata iniziale, impostazioni.

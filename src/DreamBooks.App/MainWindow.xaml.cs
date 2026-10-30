@@ -15,5 +15,5 @@ public partial class MainWindow : Window
     }
 
     private void OnFitWidthClick(object sender, RoutedEventArgs e) =>
-        _viewModel.ZoomVm.FitWidth(PageHost.ActualWidth, _viewModel.PageSize.WidthPt);
+        _viewModel.ZoomVm.FitWidth(PageViewer.FitWidthViewport, _viewModel.PageSize.WidthPt);
 }

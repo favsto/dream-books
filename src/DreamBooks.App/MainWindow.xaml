@@ -4,6 +4,7 @@
         xmlns:res="clr-namespace:DreamBooks.App.Resources"
         xmlns:ink="clr-namespace:DreamBooks.App.Ink"
         xmlns:conv="clr-namespace:DreamBooks.App.Converters"
+        xmlns:views="clr-namespace:DreamBooks.App.Views"
         Title="{x:Static res:Strings.Panel}" Height="720" Width="1200">
     <Window.Resources>
         <conv:EnumMatchConverter x:Key="EnumMatch" />
@@ -144,12 +145,24 @@
             </ScrollViewer>
         </Expander>
 
-        <!-- Placeholder: Task 12 replaces this Border's child with PageView. Keep PageHost as the viewport. -->
-        <Border x:Name="PageHost">
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                <TextBlock Text="{x:Static res:Strings.NoDocument}" TextAlignment="Center" />
+        <Grid x:Name="PageHost">
+            <views:PageView x:Name="PageViewer" />
+            <!-- Shown until a document is open; the error line stays visible over the page. -->
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
+                <TextBlock Text="{x:Static res:Strings.NoDocument}" TextAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Editor}" Value="{x:Null}">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
                 <TextBlock Text="{Binding ErrorMessage}" TextAlignment="Center" Margin="{StaticResource Gap}" />
             </StackPanel>
-        </Border>
+        </Grid>
     </DockPanel>
 </Window>
