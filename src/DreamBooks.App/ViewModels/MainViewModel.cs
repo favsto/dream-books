@@ -2,7 +2,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DreamBooks.App.Resources;
 using DreamBooks.App.Services;
+using DreamBooks.Core.Geometry;
 using DreamBooks.Core.Ink;
+using DreamBooks.Core.Model;
 using DreamBooks.Core.Undo;
 using DreamBooks.Pdf;
 using CorePage = DreamBooks.Core.Model.Page;
@@ -19,6 +21,8 @@ public sealed class MainViewModel : ObservableObject
     private int _pageNumber;
     private int _pageCount;
     private string? _errorMessage;
+    private EraserSession? _activeErase;
+    private bool _completingErase;
 
     public MainViewModel(IFileDialogService dialogs)
     {
@@ -37,6 +41,13 @@ public sealed class MainViewModel : ObservableObject
         RedoCommand = new RelayCommand(() => Undo.Redo(), () => Undo.CanRedo);
         Undo.StateChanged += (_, _) =>
         {
+            if (!_completingErase)
+            {
+                // Undo or redo while the eraser is down: the gesture's snapshot is stale, so drop it
+                // rather than overwrite the page with it on EndErase.
+                CancelErase();
+            }
+
             UndoCommand.NotifyCanExecuteChanged();
             RedoCommand.NotifyCanExecuteChanged();
         };
@@ -44,6 +55,12 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>Raised after a different page (or document) became current.</summary>
     public event EventHandler? PageChanged;
+
+    /// <summary>
+    /// Raised when the strokes to draw change because of the eraser: a gesture started, its working copy
+    /// changed, or it ended (then the view goes back to the page strokes).
+    /// </summary>
+    public event EventHandler? ErasePreviewChanged;
 
     public ToolsViewModel Tools { get; }
 
@@ -88,6 +105,13 @@ public sealed class MainViewModel : ObservableObject
         private set => SetProperty(ref _errorMessage, value);
     }
 
+    /// <summary>The eraser gesture in progress, or null; its <see cref="EraserSession.Strokes"/> is the live preview.</summary>
+    public EraserSession? ActiveErase
+    {
+        get => _activeErase;
+        private set => SetProperty(ref _activeErase, value);
+    }
+
     public IAsyncRelayCommand OpenPdfCommand { get; }
 
     public IAsyncRelayCommand<int> GoToPageCommand { get; }
@@ -99,6 +123,72 @@ public sealed class MainViewModel : ObservableObject
     public IRelayCommand UndoCommand { get; }
 
     public IRelayCommand RedoCommand { get; }
+
+    /// <summary>
+    /// Starts an eraser gesture with the selected mode (FR-31). Zoom stays locked until it ends. No-op
+    /// without a page or while a gesture is already live.
+    /// </summary>
+    public void BeginErase()
+    {
+        if (ActiveErase is not null || Editor is not { } editor)
+        {
+            return;
+        }
+
+        ActiveErase = editor.BeginErase(Tools.EraserMode);
+        ZoomVm.IsLocked = true;
+        ErasePreviewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Moves the eraser to a page point; the circle has the selected diameter (FR-32).</summary>
+    public void EraseAt(PointD centerPt)
+    {
+        if (ActiveErase is { } session && session.MoveTo(centerPt, Units.MmToPt(Tools.EraserSizeMm) / 2))
+        {
+            ErasePreviewChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>Ends the gesture: one undo step if anything was erased, none otherwise (FR-33, FR-63).</summary>
+    public void EndErase()
+    {
+        if (ActiveErase is not { } session)
+        {
+            return;
+        }
+
+        // Complete first, then clear: the page already holds the working copy when the view switches back
+        // to it, so nothing erased reappears for a frame.
+        _completingErase = true;
+        try
+        {
+            session.Complete();
+        }
+        finally
+        {
+            _completingErase = false;
+            FinishErase();
+        }
+    }
+
+    /// <summary>Drops the gesture without touching the page (lost capture, page change, undo mid-gesture).</summary>
+    public void CancelErase()
+    {
+        if (ActiveErase is not { } session)
+        {
+            return;
+        }
+
+        session.Cancel();
+        FinishErase();
+    }
+
+    private void FinishErase()
+    {
+        ActiveErase = null;
+        ZoomVm.IsLocked = false;
+        ErasePreviewChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>Test seam: opens a renderer for a path.</summary>
     internal Func<string, CancellationToken, Task<PdfRenderer>> OpenRenderer { get; set; }
@@ -161,6 +251,7 @@ public sealed class MainViewModel : ObservableObject
     private void ShowPage(int pageNumber)
     {
         var size = Renderer!.GetPageSize(pageNumber - 1);
+        CancelErase();
         Undo.Clear();
         Editor = new PageEditor(new CorePage(pageNumber - 1, size.WidthPt, size.HeightPt), Undo);
         PageSize = size;

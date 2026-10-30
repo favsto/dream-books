@@ -1,6 +1,8 @@
 using DreamBooks.App.Ink;
 using DreamBooks.App.Resources;
 using DreamBooks.App.ViewModels;
+using DreamBooks.Core.Geometry;
+using DreamBooks.Core.Ink;
 using DreamBooks.Core.Model;
 using DreamBooks.Pdf.Tests;
 
@@ -190,6 +192,225 @@ public sealed class MainViewModelTests : IDisposable
         {
             await CleanUpAsync(vm);
         }
+    }
+
+    [Fact]
+    public async Task Erase_gesture_is_one_undo_step()
+    {
+        var vm = await OpenAsync();
+        try
+        {
+            var top = Line(vm, 100);
+            var middle = Line(vm, 200);
+            var bottom = Line(vm, 300);
+            vm.Tools.EraserMode = EraserMode.WholeStroke;
+            vm.Undo.Clear();
+
+            vm.BeginErase();
+            Assert.NotNull(vm.ActiveErase);
+            vm.EraseAt(new PointD(100, 90));
+            vm.EraseAt(new PointD(100, 210)); // the sweep crosses the top and middle lines
+            Assert.Equal([bottom], vm.ActiveErase!.Strokes);
+            Assert.Equal(3, vm.Editor!.Page.Strokes.Count); // the page changes only on EndErase
+            vm.EndErase();
+
+            Assert.Null(vm.ActiveErase);
+            Assert.Equal([bottom], vm.Editor.Page.Strokes);
+            Assert.True(vm.Undo.Undo());
+            Assert.Equal([top, middle, bottom], vm.Editor.Page.Strokes);
+            Assert.False(vm.Undo.CanUndo);
+        }
+        finally
+        {
+            await CleanUpAsync(vm);
+        }
+    }
+
+    [Fact]
+    public async Task Erase_uses_selected_size_and_mode()
+    {
+        var vm = await OpenAsync();
+        try
+        {
+            var line = Line(vm, 100);
+
+            // 2 mm eraser (radius 2.83 pt) 8 pt from the line: no hit.
+            vm.Tools.EraserMode = EraserMode.Partial;
+            vm.Tools.EraserSizeMm = 2;
+            vm.BeginErase();
+            vm.EraseAt(new PointD(100, 108));
+            Assert.Equal([line], vm.ActiveErase!.Strokes);
+            vm.EndErase();
+
+            // 10 mm eraser (radius 14.2 pt) at the same spot: partial mode splits the line in two.
+            vm.Tools.EraserSizeMm = 10;
+            vm.BeginErase();
+            vm.EraseAt(new PointD(100, 108));
+            vm.EndErase();
+
+            var pieces = vm.Editor!.Page.Strokes;
+            Assert.Equal(2, pieces.Count);
+            Assert.DoesNotContain(line, pieces);
+            var radius = Units.MmToPt(10) / 2;
+            var halfChord = Math.Sqrt((radius * radius) - (8 * 8));
+            Assert.Equal(100 - halfChord, pieces[0].Points[^1].X, 0);
+            Assert.Equal(100 + halfChord, pieces[1].Points[0].X, 0);
+        }
+        finally
+        {
+            await CleanUpAsync(vm);
+        }
+    }
+
+    [Fact]
+    public async Task EndErase_without_hits_adds_no_undo_step()
+    {
+        var vm = await OpenAsync();
+        try
+        {
+            Line(vm, 100);
+            vm.Undo.Clear();
+            var notifications = 0;
+            vm.ErasePreviewChanged += (_, _) => notifications++;
+
+            vm.BeginErase();
+            vm.EraseAt(new PointD(300, 500));
+            vm.EndErase();
+
+            Assert.Null(vm.ActiveErase);
+            Assert.False(vm.Undo.CanUndo);
+            Assert.Single(vm.Editor!.Page.Strokes);
+            Assert.Equal(2, notifications); // begin and end: the view goes back to the page strokes
+        }
+        finally
+        {
+            await CleanUpAsync(vm);
+        }
+    }
+
+    [Fact]
+    public async Task Erase_gesture_locks_zoom_and_unlocks_it_on_end_and_cancel()
+    {
+        var vm = await OpenAsync();
+        try
+        {
+            Line(vm, 100);
+
+            vm.BeginErase();
+            Assert.True(vm.ZoomVm.IsLocked);
+            vm.EndErase();
+            Assert.False(vm.ZoomVm.IsLocked);
+
+            vm.BeginErase();
+            vm.EraseAt(new PointD(100, 100));
+            vm.CancelErase();
+            Assert.False(vm.ZoomVm.IsLocked);
+            Assert.Null(vm.ActiveErase);
+            Assert.Single(vm.Editor!.Page.Strokes); // cancel commits nothing
+
+            vm.EndErase(); // no live gesture: no-op
+            vm.CancelErase();
+            vm.EraseAt(new PointD(100, 100));
+            Assert.Single(vm.Editor.Page.Strokes);
+        }
+        finally
+        {
+            await CleanUpAsync(vm);
+        }
+    }
+
+    [Fact]
+    public async Task BeginErase_twice_keeps_the_live_session()
+    {
+        var vm = await OpenAsync();
+        try
+        {
+            Line(vm, 100);
+            vm.BeginErase();
+            var session = vm.ActiveErase;
+            vm.BeginErase();
+            Assert.Same(session, vm.ActiveErase);
+            vm.EndErase();
+        }
+        finally
+        {
+            await CleanUpAsync(vm);
+        }
+    }
+
+    [Fact]
+    public async Task Page_change_cancels_a_live_erase()
+    {
+        _dialogs.NextPath = WritePdf("a.pdf", (612, 792), (300, 400));
+        var vm = new MainViewModel(_dialogs);
+        try
+        {
+            await vm.OpenPdfCommand.ExecuteAsync(null);
+            vm.BeginErase();
+
+            await vm.GoToPageCommand.ExecuteAsync(2);
+
+            Assert.Null(vm.ActiveErase);
+            Assert.False(vm.ZoomVm.IsLocked);
+            vm.EndErase();
+            Assert.False(vm.Undo.CanUndo);
+        }
+        finally
+        {
+            await CleanUpAsync(vm);
+        }
+    }
+
+    [Fact]
+    public async Task Undo_during_an_erase_cancels_it_instead_of_overwriting_the_page()
+    {
+        var vm = await OpenAsync();
+        try
+        {
+            var first = Line(vm, 100);
+            Line(vm, 200);
+            vm.BeginErase();
+            vm.EraseAt(new PointD(100, 100));
+
+            vm.UndoCommand.Execute(null); // keyboard Ctrl+Z while the pen is down
+
+            Assert.Null(vm.ActiveErase);
+            vm.EndErase();
+            Assert.Equal([first], vm.Editor!.Page.Strokes);
+            Assert.False(vm.ZoomVm.IsLocked);
+        }
+        finally
+        {
+            await CleanUpAsync(vm);
+        }
+    }
+
+    [Fact]
+    public void Erase_without_a_document_does_nothing()
+    {
+        var vm = new MainViewModel(_dialogs);
+        vm.BeginErase();
+        vm.EraseAt(new PointD(1, 1));
+        vm.EndErase();
+        Assert.Null(vm.ActiveErase);
+        Assert.False(vm.ZoomVm.IsLocked);
+    }
+
+    private async Task<MainViewModel> OpenAsync()
+    {
+        _dialogs.NextPath = WritePdf("a.pdf", (612, 792));
+        var vm = new MainViewModel(_dialogs);
+        await vm.OpenPdfCommand.ExecuteAsync(null);
+        Assert.NotNull(vm.Editor);
+        return vm;
+    }
+
+    /// <summary>Commits a 1 pt horizontal line from x = 50 to x = 150 at <paramref name="y"/>.</summary>
+    private static InkStroke Line(MainViewModel vm, double y)
+    {
+        InkPoint[] points = [new(50, y, 0.5f, null, null, null, 0), new(150, y, 0.5f, null, null, null, 10)];
+        Assert.True(vm.Editor!.CommitStroke(points, InkTool.Pen, Palette.Colors[0], 1));
+        return vm.Editor.Page.Strokes[^1];
     }
 
     private static void Draw(MainViewModel vm) =>

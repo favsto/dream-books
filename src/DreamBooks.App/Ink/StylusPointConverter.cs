@@ -36,6 +36,13 @@ internal static class StylusPointConverter
         return new InkPoint(p.X / scale, p.Y / scale, null, null, null, null, timestampMs);
     }
 
+    /// <summary>A surface DIP position (eraser centre) in page points.</summary>
+    public static PointD ToPage(Point viewDip, double scale)
+    {
+        RequireScale(scale);
+        return new PointD(viewDip.X / scale, viewDip.Y / scale);
+    }
+
     public static Point ToView(PointD pagePt, double scale)
     {
         RequireScale(scale);

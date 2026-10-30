@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using DreamBooks.App.Ink;
@@ -8,6 +9,7 @@ using DreamBooks.Core.Ink;
 using DreamBooks.Core.Model;
 using DreamBooks.Pdf;
 using DreamBooks.Pdf.Tests;
+using Ellipse = System.Windows.Shapes.Ellipse;
 
 namespace DreamBooks.App.Tests;
 
@@ -219,6 +221,143 @@ public sealed class ViewSmokeTests : IDisposable
             Assert.NotEqual(zoom, vm.ZoomVm.Zoom);
         });
     }
+
+    [Fact]
+    public async Task Mouse_erase_with_the_eraser_tool_previews_then_returns_to_the_page_strokes()
+    {
+        await WithDocumentAsync(vm =>
+        {
+            var surface = CreateSurface(vm);
+            surface.Scale = 1;
+            LayOut(surface, 1000, 1000);
+            vm.Editor!.CommitStroke(_line, InkTool.Pen, vm.Tools.Color, 1);
+            vm.Tools.ActiveTool = AppTool.Eraser;
+            vm.Undo.Clear();
+
+            surface.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+            {
+                RoutedEvent = Mouse.MouseDownEvent,
+            });
+            Assert.True(surface.IsInking);
+            Assert.NotNull(vm.ActiveErase);
+            Assert.True(vm.ZoomVm.IsLocked);
+            Assert.Same(vm.ActiveErase!.Strokes, surface.DisplayStrokes);
+
+            surface.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+            {
+                RoutedEvent = Mouse.MouseUpEvent,
+            });
+            Assert.False(surface.IsInking);
+            Assert.Null(vm.ActiveErase);
+            Assert.False(vm.ZoomVm.IsLocked);
+            Assert.Same(vm.Editor.Page.Strokes, surface.DisplayStrokes);
+            Assert.Empty(surface.StockStrokes); // no ink was drawn by the mouse
+            Assert.Single(vm.Editor.Page.Strokes);
+        });
+    }
+
+    [Theory]
+    [InlineData(RendererMode.StockWpf)]
+    [InlineData(RendererMode.Custom)]
+    public async Task Back_end_erase_is_one_undo_step_and_gives_the_previous_tool_back(RendererMode mode)
+    {
+        await WithDocumentAsync(vm =>
+        {
+            var surface = CreateSurface(vm);
+            surface.Mode = mode;
+            surface.Scale = 2;
+            vm.Editor!.CommitStroke(_line, InkTool.Pen, vm.Tools.Color, 1); // (10,10)-(60,40) pt
+            vm.Editor.CommitStroke(_otherLine, InkTool.Pen, vm.Tools.Color, 1);
+            var kept = vm.Editor.Page.Strokes[1];
+            var keptWpf = mode == RendererMode.StockWpf ? surface.StockStrokes[1] : null;
+            vm.Undo.Clear();
+
+            Assert.True(surface.BeginEraseGesture(inverted: true, stylusId: 7));
+            Assert.Equal(AppTool.Eraser, vm.Tools.EffectiveTool);
+            Assert.False(surface.ActiveRenderer.Enabled);
+            surface.EraseAtView(new Point(20, 20)); // page point (10,10): start of the first line
+
+            // Live preview: the first line is gone from the view, the page is untouched.
+            Assert.Equal([kept], surface.DisplayStrokes);
+            Assert.Equal(2, vm.Editor.Page.Strokes.Count);
+            Assert.Equal(1, ShownStrokeCount(surface, mode));
+            Assert.Equal(Visibility.Visible, surface.EraserCursor.Visibility);
+
+            surface.EndEraseGesture();
+            surface.EndEraseGesture(); // a late lost-capture: no second finish
+
+            Assert.Equal([kept], vm.Editor.Page.Strokes);
+            Assert.Same(vm.Editor.Page.Strokes, surface.DisplayStrokes);
+            Assert.False(vm.Tools.IsInverted);
+            Assert.Equal(AppTool.Pen, vm.Tools.EffectiveTool);
+            Assert.True(surface.ActiveRenderer.Enabled);
+            Assert.False(vm.ZoomVm.IsLocked);
+            Assert.True(vm.Undo.Undo());
+            Assert.False(vm.Undo.CanUndo); // exactly one step
+
+            Assert.Equal(2, ShownStrokeCount(surface, mode));
+            if (keptWpf is not null)
+            {
+                Assert.Same(keptWpf, surface.StockStrokes[1]); // the surviving stroke was never rebuilt
+            }
+        });
+    }
+
+    [Fact]
+    public async Task Pen_tool_does_not_start_an_erase_unless_the_back_end_touches()
+    {
+        await WithDocumentAsync(vm =>
+        {
+            var surface = CreateSurface(vm);
+            Assert.False(surface.BeginEraseGesture(inverted: false, stylusId: 1));
+            Assert.Null(vm.ActiveErase);
+            Assert.False(surface.IsInking);
+        });
+    }
+
+    [Fact]
+    public async Task Eraser_cursor_follows_tool_size_and_zoom()
+    {
+        await WithDocumentAsync(vm =>
+        {
+            var surface = CreateSurface(vm);
+            surface.Scale = 2;
+            var cursor = surface.EraserCursor;
+
+            surface.UpdateEraserCursor(new Point(100, 100), inverted: false);
+            Assert.Equal(Visibility.Collapsed, cursor.Visibility); // pen tool, tip side
+
+            surface.UpdateEraserCursor(new Point(100, 100), inverted: true); // back end hovering
+            Assert.Equal(Visibility.Visible, cursor.Visibility);
+            var diameter = Units.MmToPt(vm.Tools.EraserSizeMm) * 2;
+            Assert.Equal(diameter, cursor.Width, 9);
+            Assert.Equal(100 - (diameter / 2), Canvas.GetLeft(cursor), 9);
+
+            vm.Tools.EraserSizeMm = 10;
+            Assert.Equal(Units.MmToPt(10) * 2, cursor.Width, 9);
+
+            surface.Scale = 4; // same page point, twice as far in DIPs
+            Assert.Equal(Units.MmToPt(10) * 4, cursor.Width, 9);
+            Assert.Equal(200 - (cursor.Width / 2), Canvas.GetLeft(cursor), 9);
+
+            var fill = Assert.IsAssignableFrom<SolidColorBrush>(((Ellipse)cursor).Fill);
+            Assert.Equal(0.2, fill.Opacity, 9);
+            Assert.Equal(1, ((Ellipse)cursor).StrokeThickness, 9);
+
+            surface.HideEraserCursor(); // StylusOutOfRange
+            Assert.Equal(Visibility.Collapsed, cursor.Visibility);
+
+            vm.Tools.ActiveTool = AppTool.Eraser;
+            surface.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.MouseMoveEvent });
+            Assert.Equal(Visibility.Visible, cursor.Visibility); // mouse hover with the eraser tool
+
+            vm.Tools.ActiveTool = AppTool.Pen;
+            Assert.Equal(Visibility.Collapsed, cursor.Visibility);
+        });
+    }
+
+    private static int ShownStrokeCount(InkSurface surface, RendererMode mode) =>
+        mode == RendererMode.StockWpf ? surface.StockStrokes.Count : surface.CustomLayer.Strokes.Count;
 
     [Fact]
     public async Task Failed_page_render_yields_no_bitmap_instead_of_throwing()

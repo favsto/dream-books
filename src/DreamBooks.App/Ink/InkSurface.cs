@@ -5,7 +5,9 @@ using System.Windows.Ink;
 using System.Windows.Input;
 using System.Windows.Input.StylusPlugIns;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using DreamBooks.App.ViewModels;
+using DreamBooks.Core.Geometry;
 using DreamBooks.Core.Ink;
 using DreamBooks.Core.Model;
 using CorePage = DreamBooks.Core.Model.Page;
@@ -18,6 +20,9 @@ namespace DreamBooks.App.Ink;
 /// draw (FR-26). Pen ink is drawn live by a <see cref="DynamicRenderer"/> on the real-time stylus thread
 /// (FR-24, NFR-04); on pen-up one stroke is committed through <see cref="PageEditor.CommitStroke"/>.
 /// Fingers never ink (they reach the viewport for pan and zoom); the mouse inks like the pen (NFR-23).
+/// The pen's back end erases whatever tool is active, and the tip or the mouse erase with the eraser tool
+/// (FR-30, FR-34): the gesture runs through <see cref="MainViewModel.BeginErase"/>, and the working copy
+/// is drawn as committed ink until it ends. A circle shows the eraser area while hovering (FR-32).
 /// </summary>
 public sealed class InkSurface : FrameworkElement
 {
@@ -73,6 +78,8 @@ public sealed class InkSurface : FrameworkElement
     private readonly InkPresenter _stockPresenter;
     private readonly ScaleTransform _stockTransform = new(1, 1);
     private readonly InkPresenter _presenter;
+    private readonly Canvas _overlay;
+    private readonly Ellipse _eraserCursor;
     private readonly Visual[] _children;
 
     private readonly PenDynamicRenderer _stockRenderer = new();
@@ -95,6 +102,13 @@ public sealed class InkSurface : FrameworkElement
     private Stroke? _mouseWet;
     private StrokeStyle _mouseStyle;
 
+    // Eraser gesture in progress (pen tip, back end or mouse); the session itself lives in the view model.
+    private EraseGesture? _erase;
+
+    // Eraser cursor centre in page points (null: hidden), and whether the hovering pen shows its back end.
+    private PointD? _cursorCenterPt;
+    private bool _hoverInverted;
+
     public InkSurface()
     {
         _image = new Image { Stretch = Stretch.Fill, IsHitTestVisible = false };
@@ -102,7 +116,13 @@ public sealed class InkSurface : FrameworkElement
         _customLayer = new CustomInkLayer();
         _stockPresenter = new InkPresenter { IsHitTestVisible = false, RenderTransform = _stockTransform };
         _presenter = new InkPresenter { IsHitTestVisible = false };
-        _children = [_image, _customLayer, _stockPresenter, _presenter];
+        _eraserCursor = new Ellipse { IsHitTestVisible = false, Visibility = Visibility.Collapsed };
+        _eraserCursor.SetResourceReference(Shape.FillProperty, "EraserCursorFill");
+        _eraserCursor.SetResourceReference(Shape.StrokeProperty, "EraserCursorOutline");
+        _eraserCursor.SetResourceReference(Shape.StrokeThicknessProperty, "EraserCursorOutlineThickness");
+        _overlay = new Canvas { IsHitTestVisible = false };
+        _overlay.Children.Add(_eraserCursor);
+        _children = [_image, _customLayer, _stockPresenter, _presenter, _overlay];
         foreach (var child in _children)
         {
             AddVisualChild(child);
@@ -173,8 +193,11 @@ public sealed class InkSurface : FrameworkElement
         set => SetValue(PageImageProperty, value);
     }
 
-    /// <summary>True while a pen or mouse stroke is being drawn; the viewport must not pan or zoom then.</summary>
-    public bool IsInking => _penPoints is not null || _mousePoints is not null;
+    /// <summary>True while a pen or mouse stroke or an eraser gesture is live; the viewport must not pan or zoom then.</summary>
+    public bool IsInking => _penPoints is not null || _mousePoints is not null || _erase is not null;
+
+    /// <summary>The eraser area circle (FR-32); exposed for tests.</summary>
+    internal FrameworkElement EraserCursor => _eraserCursor;
 
     /// <summary>The wet-ink renderer currently plugged in; exposed for tests.</summary>
     internal PenDynamicRenderer ActiveRenderer => _activeRenderer!;
@@ -234,6 +257,7 @@ public sealed class InkSurface : FrameworkElement
             _hasPressure = ReportsPressure(e.StylusDevice.TabletDevice);
             UpdateRendererSettings();
             UpdateRendererEnabled(e.StylusDevice);
+            _hoverInverted = e.StylusDevice.Inverted;
         }
     }
 
@@ -244,6 +268,18 @@ public sealed class InkSurface : FrameworkElement
         if (IsPen(e.StylusDevice))
         {
             UpdateRendererEnabled(e.StylusDevice);
+            UpdateEraserCursor(e.GetPosition(this), e.StylusDevice.Inverted);
+        }
+    }
+
+    protected override void OnStylusOutOfRange(StylusEventArgs e)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        base.OnStylusOutOfRange(e);
+        if (IsPen(e.StylusDevice))
+        {
+            _hoverInverted = false;
+            HideEraserCursor();
         }
     }
 
@@ -254,15 +290,27 @@ public sealed class InkSurface : FrameworkElement
         var device = e.StylusDevice;
         if (!IsPen(device))
         {
-            return; // Fingers never ink: touch goes on to the viewport for pan and pinch.
+            return; // Fingers never ink nor erase: touch goes on to the viewport for pan and pinch.
         }
 
         e.Handled = true; // The pen never scrolls.
         RefreshIgnoredDevices(device);
         UpdateRendererEnabled(device);
-        if (_penPoints is not null || _mousePoints is not null || !CanInk(device))
+        if (IsInking)
         {
-            return; // Back end or eraser tool: erasing arrives in Task 13; no ink here.
+            return;
+        }
+
+        if (BeginEraseGesture(device.Inverted, device.Id))
+        {
+            EraseStylusPoints(e);
+            device.Capture(this);
+            return;
+        }
+
+        if (!CanInk(device))
+        {
+            return;
         }
 
         _penStylusId = device.Id;
@@ -283,6 +331,15 @@ public sealed class InkSurface : FrameworkElement
             AppendStylusPoints(e);
             e.Handled = true;
         }
+        else if (_erase is { StylusId: { } id } && e.StylusDevice.Id == id)
+        {
+            EraseStylusPoints(e);
+            e.Handled = true;
+        }
+        else if (!IsInking && IsPen(e.StylusDevice))
+        {
+            UpdateEraserCursor(e.GetPosition(this), e.StylusDevice.Inverted);
+        }
     }
 
     protected override void OnStylusUp(StylusEventArgs e)
@@ -295,6 +352,13 @@ public sealed class InkSurface : FrameworkElement
             e.Handled = true;
             FinishPenStroke();
         }
+        else if (_erase is { StylusId: { } id } && e.StylusDevice.Id == id)
+        {
+            EraseStylusPoints(e);
+            e.Handled = true;
+            EndEraseGesture();
+            UpdateEraserCursor(e.GetPosition(this), e.StylusDevice.Inverted); // still hovering
+        }
     }
 
     protected override void OnLostStylusCapture(StylusEventArgs e)
@@ -304,15 +368,33 @@ public sealed class InkSurface : FrameworkElement
         {
             FinishPenStroke();
         }
+        else if (_erase is { StylusId: not null })
+        {
+            EndEraseGesture();
+            HideEraserCursor(); // shown again by the next hover move
+        }
     }
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         ArgumentNullException.ThrowIfNull(e);
         base.OnMouseLeftButtonDown(e);
-        if (e.StylusDevice is not null || _penPoints is not null || _mousePoints is not null || !CanInk(null))
+        if (e.StylusDevice is not null || IsInking)
         {
             return; // Promoted from pen or touch: already handled (or deliberately ignored) as stylus input.
+        }
+
+        if (BeginEraseGesture(inverted: false, stylusId: null))
+        {
+            EraseAtView(e.GetPosition(this));
+            CaptureMouse();
+            e.Handled = true;
+            return;
+        }
+
+        if (!CanInk(null))
+        {
+            return;
         }
 
         _mouseStyle = CurrentStyle();
@@ -331,12 +413,28 @@ public sealed class InkSurface : FrameworkElement
     {
         ArgumentNullException.ThrowIfNull(e);
         base.OnMouseMove(e);
-        if (_mousePoints is null || e.StylusDevice is not null)
+        if (e.StylusDevice is not null)
         {
             return;
         }
 
         var position = e.GetPosition(this);
+        if (_erase is { StylusId: null })
+        {
+            EraseAtView(position);
+            return;
+        }
+
+        if (_mousePoints is null)
+        {
+            if (!IsInking)
+            {
+                UpdateEraserCursor(position, inverted: false);
+            }
+
+            return;
+        }
+
         _mousePoints.Add(StylusPointConverter.FromMouse(position, Scale, e.Timestamp));
         _mouseWet?.StylusPoints.Add(new StylusPoint(position.X, position.Y));
     }
@@ -351,6 +449,12 @@ public sealed class InkSurface : FrameworkElement
             e.Handled = true;
             FinishMouseStroke();
         }
+        else if (_erase is { StylusId: null } && e.StylusDevice is null)
+        {
+            EraseAtView(e.GetPosition(this));
+            e.Handled = true;
+            EndEraseGesture();
+        }
     }
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
@@ -360,6 +464,132 @@ public sealed class InkSurface : FrameworkElement
         {
             FinishMouseStroke();
         }
+        else if (_erase is { StylusId: null })
+        {
+            EndEraseGesture();
+        }
+    }
+
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        base.OnMouseLeave(e);
+        if (e.StylusDevice is null && _erase is null)
+        {
+            HideEraserCursor();
+        }
+    }
+
+    /// <summary>
+    /// Starts an eraser gesture if the back end touched (<paramref name="inverted"/>, FR-30) or the effective
+    /// tool is the eraser (FR-34). The back end switches the tool to the eraser until <see cref="EndEraseGesture"/>.
+    /// </summary>
+    /// <param name="stylusId">The pen's stylus device Id, or null for the mouse.</param>
+    internal bool BeginEraseGesture(bool inverted, int? stylusId)
+    {
+        if (IsInking || ViewModel is not { Editor: { } editor } vm || !ReferenceEquals(editor.Page, Page))
+        {
+            return false;
+        }
+
+        if (!inverted && vm.Tools.EffectiveTool != AppTool.Eraser)
+        {
+            return false;
+        }
+
+        if (inverted)
+        {
+            vm.Tools.BeginInvertedEraser();
+        }
+
+        vm.BeginErase();
+        if (vm.ActiveErase is null)
+        {
+            if (inverted)
+            {
+                vm.Tools.EndInvertedEraser();
+            }
+
+            return false;
+        }
+
+        _erase = new EraseGesture(stylusId, inverted);
+        return true;
+    }
+
+    /// <summary>Moves the live eraser to a surface position (DIPs) and the cursor with it.</summary>
+    internal void EraseAtView(Point position)
+    {
+        if (_erase is null || ViewModel is not { } vm)
+        {
+            return;
+        }
+
+        vm.EraseAt(StylusPointConverter.ToPage(position, Scale));
+        ShowEraserCursorAt(position);
+    }
+
+    /// <summary>
+    /// Ends the gesture exactly once on every path (up, lost capture): one undo step at most, zoom unlocked by
+    /// the view model, the back end's eraser handed back to the previous tool (FR-30).
+    /// </summary>
+    internal void EndEraseGesture()
+    {
+        if (_erase is not { } gesture)
+        {
+            return;
+        }
+
+        _erase = null; // Before releasing capture: the lost-capture handler must not finish twice.
+        if (gesture.StylusId is not null)
+        {
+            if (Stylus.Captured == this)
+            {
+                Stylus.Capture(null);
+            }
+        }
+        else if (IsMouseCaptured)
+        {
+            ReleaseMouseCapture();
+        }
+
+        var vm = ViewModel;
+        try
+        {
+            vm?.EndErase();
+        }
+        finally
+        {
+            if (gesture.Inverted)
+            {
+                vm?.Tools.EndInvertedEraser();
+            }
+
+            UpdateRendererEnabled(null);
+        }
+    }
+
+    /// <summary>
+    /// Shows the eraser circle at a surface position while the effective tool is the eraser or the pen's
+    /// back end hovers (FR-32); hides it otherwise.
+    /// </summary>
+    internal void UpdateEraserCursor(Point position, bool inverted)
+    {
+        _hoverInverted = inverted;
+        if (ShowsEraserCursor())
+        {
+            ShowEraserCursorAt(position);
+        }
+        else
+        {
+            HideEraserCursor();
+        }
+    }
+
+    internal void HideEraserCursor()
+    {
+        _cursorCenterPt = null;
+        _eraserCursor.Visibility = Visibility.Collapsed;
     }
 
     private static bool IsPen(StylusDevice? device) => device?.TabletDevice?.Type == TabletDeviceType.Stylus;
@@ -392,6 +622,51 @@ public sealed class InkSurface : FrameworkElement
             _penPoints!.Add(StylusPointConverter.ToInkPoint(sp, scale, e.Timestamp, _penHasPressure));
         }
     }
+
+    /// <summary>Every sample of the batch, not only the last: the swept capsule must see each one (FR-31).</summary>
+    private void EraseStylusPoints(StylusEventArgs e)
+    {
+        var points = e.GetStylusPoints(this);
+        for (var i = 0; i < points.Count; i++)
+        {
+            EraseAtView(new Point(points[i].X, points[i].Y));
+        }
+    }
+
+    private bool ShowsEraserCursor() =>
+        ViewModel is { } vm && (_hoverInverted || vm.Tools.EffectiveTool == AppTool.Eraser);
+
+    private void ShowEraserCursorAt(Point position)
+    {
+        _cursorCenterPt = StylusPointConverter.ToPage(position, Scale);
+        PlaceEraserCursor();
+        _eraserCursor.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>Sizes and centres the circle: eraser diameter in page points × scale, in surface DIPs.</summary>
+    private void PlaceEraserCursor()
+    {
+        if (_cursorCenterPt is not { } center || ViewModel is not { } vm)
+        {
+            return;
+        }
+
+        var diameter = Units.MmToPt(vm.Tools.EraserSizeMm) * Scale;
+        var view = StylusPointConverter.ToView(center, Scale);
+        _eraserCursor.Width = diameter;
+        _eraserCursor.Height = diameter;
+        Canvas.SetLeft(_eraserCursor, view.X - (diameter / 2));
+        Canvas.SetTop(_eraserCursor, view.Y - (diameter / 2));
+    }
+
+    /// <summary>The working copy while an eraser gesture is live on this page, the page strokes otherwise.</summary>
+    private IReadOnlyList<InkStroke> CurrentStrokes() =>
+        ViewModel is { ActiveErase: { } erase, Editor: { } editor } && ReferenceEquals(editor.Page, Page)
+            ? erase.Strokes
+            : Page?.Strokes ?? Array.Empty<InkStroke>();
+
+    private void OnErasePreviewChanged(object? sender, EventArgs e) =>
+        SetCurrentValue(DisplayStrokesProperty, CurrentStrokes());
 
     private void FinishPenStroke()
     {
@@ -456,27 +731,52 @@ public sealed class InkSurface : FrameworkElement
     {
         if (oldValue is not null)
         {
+            if (_erase is { } gesture)
+            {
+                _erase = null;
+                oldValue.CancelErase();
+                if (gesture.Inverted)
+                {
+                    oldValue.Tools.EndInvertedEraser();
+                }
+            }
+
             if (IsInking)
             {
                 oldValue.ZoomVm.IsLocked = false;
             }
 
             oldValue.Tools.PropertyChanged -= OnToolsChanged;
+            oldValue.ErasePreviewChanged -= OnErasePreviewChanged;
         }
 
         if (newValue is not null)
         {
             newValue.Tools.PropertyChanged += OnToolsChanged;
+            newValue.ErasePreviewChanged += OnErasePreviewChanged;
         }
 
         UpdateRendererSettings();
         UpdateRendererEnabled(null);
+        HideEraserCursor();
+        SetCurrentValue(DisplayStrokesProperty, CurrentStrokes());
     }
 
     private void OnToolsChanged(object? sender, PropertyChangedEventArgs e)
     {
         UpdateRendererSettings();
         UpdateRendererEnabled(null);
+        if (_cursorCenterPt is not null)
+        {
+            if (ShowsEraserCursor())
+            {
+                PlaceEraserCursor(); // eraser size changed
+            }
+            else
+            {
+                HideEraserCursor();
+            }
+        }
     }
 
     private void OnPageChanged(CorePage? oldValue, CorePage? newValue)
@@ -491,7 +791,7 @@ public sealed class InkSurface : FrameworkElement
             newValue.StrokesChanged += OnStrokesChanged;
         }
 
-        SetCurrentValue(DisplayStrokesProperty, newValue?.Strokes ?? Array.Empty<InkStroke>());
+        SetCurrentValue(DisplayStrokesProperty, CurrentStrokes());
         UpdateRendererEnabled(null);
     }
 
@@ -499,7 +799,7 @@ public sealed class InkSurface : FrameworkElement
     {
         if (sender is CorePage page && ReferenceEquals(page, Page))
         {
-            SetCurrentValue(DisplayStrokesProperty, page.Strokes);
+            SetCurrentValue(DisplayStrokesProperty, CurrentStrokes());
         }
     }
 
@@ -508,6 +808,7 @@ public sealed class InkSurface : FrameworkElement
         _customLayer.Scale = Scale;
         UpdateStockTransform();
         UpdateRendererSettings();
+        PlaceEraserCursor();
     }
 
     /// <summary>Zoom only changes the transform of the mode A strokes: no stroke is rebuilt (FR-26).</summary>
@@ -688,4 +989,8 @@ public sealed class InkSurface : FrameworkElement
     }
 
     private readonly record struct StrokeStyle(InkColor Color, double WidthPt);
+
+    /// <param name="StylusId">The erasing pen's stylus device Id, or null for the mouse.</param>
+    /// <param name="Inverted">True for the pen's back end: the previous tool comes back on lift (FR-30).</param>
+    private readonly record struct EraseGesture(int? StylusId, bool Inverted);
 }

@@ -7,6 +7,11 @@
     <Thickness x:Key="Gap">0,4,0,0</Thickness>
     <Thickness x:Key="SectionGap">0,12,0,0</Thickness>
 
+    <!-- Eraser cursor (FR-32): system accent colour, fill at 20% opacity, 1 DIP outline. -->
+    <SolidColorBrush x:Key="EraserCursorFill" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" Opacity="0.2" />
+    <SolidColorBrush x:Key="EraserCursorOutline" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" />
+    <sys:Double x:Key="EraserCursorOutlineThickness">1</sys:Double>
+
     <Style TargetType="Button">
         <Setter Property="MinWidth" Value="{StaticResource TouchTarget}" />
         <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />

@@ -61,6 +61,16 @@ public class StylusPointConverterTests
     }
 
     [Fact]
+    public void Eraser_center_is_converted_to_page_points()
+    {
+        var p = StylusPointConverter.ToPage(new Point(30, 60), scale: 3);
+
+        Assert.Equal(10, p.X, 9);
+        Assert.Equal(20, p.Y, 9);
+        Assert.Throws<ArgumentOutOfRangeException>(() => StylusPointConverter.ToPage(new Point(1, 1), 0));
+    }
+
+    [Fact]
     public void Mouse_point_has_null_pressure()
     {
         var p = StylusPointConverter.FromMouse(new Point(30, 60), scale: 3, timestampMs: 7);
