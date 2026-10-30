@@ -25,10 +25,22 @@ public sealed class ZoomViewModel : ObservableObject
 
     public IRelayCommand ZoomOutCommand { get; }
 
+    /// <summary>
+    /// True while a stroke is being drawn: every zoom request is ignored, so the live (wet) ink is never
+    /// left at a scale different from the page under it.
+    /// </summary>
+    public bool IsLocked { get; set; }
+
     public double Zoom
     {
         get => _zoom;
-        set => SetProperty(ref _zoom, Math.Clamp(value, _min, _max));
+        set
+        {
+            if (!IsLocked)
+            {
+                SetProperty(ref _zoom, Math.Clamp(value, _min, _max));
+            }
+        }
     }
 
     /// <summary>Pinch or wheel: multiplies the current zoom by <paramref name="factor"/>.</summary>

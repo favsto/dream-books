@@ -21,6 +21,12 @@ namespace DreamBooks.App.Ink;
 /// </summary>
 public sealed class InkSurface : FrameworkElement
 {
+    /// <summary>
+    /// DIPs per page point at which mode A strokes are built (zoom 400%). Coarser than that, WPF's curve
+    /// fitting and tessellation tolerances would show when zoomed in; the transform scales the result.
+    /// </summary>
+    internal const double StockReferenceScale = 4 * Units.DipPerPt;
+
     public static readonly DependencyProperty ViewModelProperty = DependencyProperty.Register(
         nameof(ViewModel), typeof(MainViewModel), typeof(InkSurface),
         new PropertyMetadata(null, (d, e) => ((InkSurface)d).OnViewModelChanged((MainViewModel?)e.OldValue, (MainViewModel?)e.NewValue)));
@@ -62,6 +68,10 @@ public sealed class InkSurface : FrameworkElement
 
     private readonly Image _image;
     private readonly CustomInkLayer _customLayer;
+    // Mode A committed strokes live in their own presenter, built once at StockReferenceScale and zoomed by
+    // a transform; the wet presenter (_presenter) stays untransformed, in surface DIPs like the stylus input.
+    private readonly InkPresenter _stockPresenter;
+    private readonly ScaleTransform _stockTransform = new(1, 1);
     private readonly InkPresenter _presenter;
     private readonly Visual[] _children;
 
@@ -71,9 +81,8 @@ public sealed class InkSurface : FrameworkElement
     private bool _hasPressure = true;
     private (InkColor Color, double WidthPt, double Scale, PressureCurve Curve, bool HasPressure)? _rendererSettings;
 
-    // Mode A committed strokes, cached by stroke Id at _stockCacheScale.
+    // Mode A committed strokes by model stroke Id; the same instances stay in _stockPresenter.Strokes.
     private readonly Dictionary<Guid, Stroke> _stockCache = [];
-    private double _stockCacheScale;
 
     // Pen stroke in progress (UI thread copy of the points; the wet ink comes from the renderer).
     private List<InkPoint>? _penPoints;
@@ -91,8 +100,9 @@ public sealed class InkSurface : FrameworkElement
         _image = new Image { Stretch = Stretch.Fill, IsHitTestVisible = false };
         RenderOptions.SetBitmapScalingMode(_image, BitmapScalingMode.HighQuality);
         _customLayer = new CustomInkLayer();
+        _stockPresenter = new InkPresenter { IsHitTestVisible = false, RenderTransform = _stockTransform };
         _presenter = new InkPresenter { IsHitTestVisible = false };
-        _children = [_image, _customLayer, _presenter];
+        _children = [_image, _customLayer, _stockPresenter, _presenter];
         foreach (var child in _children)
         {
             AddVisualChild(child);
@@ -105,6 +115,7 @@ public sealed class InkSurface : FrameworkElement
         Stylus.SetIsTouchFeedbackEnabled(this, false);
 
         _customLayer.Scale = Scale;
+        UpdateStockTransform();
         _customLayer.Curve = Curve;
         _customLayer.Smoothing = Smoothing;
         OnModeChanged();
@@ -168,13 +179,16 @@ public sealed class InkSurface : FrameworkElement
     /// <summary>The wet-ink renderer currently plugged in; exposed for tests.</summary>
     internal PenDynamicRenderer ActiveRenderer => _activeRenderer!;
 
-    /// <summary>Strokes currently held by the mode A presenter; exposed for tests.</summary>
-    internal StrokeCollection StockStrokes => _presenter.Strokes;
+    /// <summary>Mode A committed strokes; exposed for tests.</summary>
+    internal StrokeCollection StockStrokes => _stockPresenter.Strokes;
 
     internal CustomInkLayer CustomLayer => _customLayer;
 
     /// <summary>Number of stylus plug-ins installed; exposed for tests (only one wet renderer at a time).</summary>
     internal int PlugInCount => StylusPlugIns.Count;
+
+    /// <summary>Zoom applied to the mode A strokes (built at <see cref="StockReferenceScale"/>); for tests.</summary>
+    internal double StockStrokeScale => _stockTransform.ScaleX;
 
     protected override int VisualChildrenCount => _children.Length;
 
@@ -185,7 +199,7 @@ public sealed class InkSurface : FrameworkElement
         var size = PageSizeDip();
         foreach (var child in _children)
         {
-            ((UIElement)child).Measure(size);
+            ((UIElement)child).Measure(ReferenceEquals(child, _stockPresenter) ? StockPresenterSize() : size);
         }
 
         return size;
@@ -196,7 +210,7 @@ public sealed class InkSurface : FrameworkElement
         var rect = new Rect(PageSizeDip());
         foreach (var child in _children)
         {
-            ((UIElement)child).Arrange(rect);
+            ((UIElement)child).Arrange(ReferenceEquals(child, _stockPresenter) ? new Rect(StockPresenterSize()) : rect);
         }
 
         return finalSize;
@@ -255,6 +269,7 @@ public sealed class InkSurface : FrameworkElement
         _penHasPressure = ReportsPressure(device.TabletDevice);
         _penStyle = CurrentStyle();
         _penPoints = [];
+        LockZoom(true);
         AppendStylusPoints(e);
         device.Capture(this);
     }
@@ -303,6 +318,7 @@ public sealed class InkSurface : FrameworkElement
         _mouseStyle = CurrentStyle();
         var position = e.GetPosition(this);
         _mousePoints = [StylusPointConverter.FromMouse(position, Scale, e.Timestamp)];
+        LockZoom(true);
         _mouseWet = new Stroke(
             new StylusPointCollection { new StylusPoint(position.X, position.Y) },
             StockStrokeConverter.CreateAttributes(_mouseStyle.Color, _mouseStyle.WidthPt * Scale, ignorePressure: true));
@@ -352,6 +368,9 @@ public sealed class InkSurface : FrameworkElement
         tablet is not null && tablet.SupportedStylusPointProperties.Any(p => p.Id == StylusPointProperties.NormalPressure.Id);
 
     private Size PageSizeDip() => Page is { } page ? new Size(page.WidthPt * Scale, page.HeightPt * Scale) : default;
+
+    private Size StockPresenterSize() =>
+        Page is { } page ? new Size(page.WidthPt * StockReferenceScale, page.HeightPt * StockReferenceScale) : default;
 
     private bool CanInk(StylusDevice? device) =>
         ViewModel is { Editor: not null } vm
@@ -408,19 +427,40 @@ public sealed class InkSurface : FrameworkElement
     {
         // Committing raises Page.StrokesChanged, which redraws the committed ink synchronously, before the
         // dynamic renderer drops its wet visual: no gap between wet and committed ink.
-        if (points.Count > 0 && ViewModel?.Editor is { } editor && ReferenceEquals(editor.Page, Page))
+        try
         {
-            editor.CommitStroke(points, InkTool.Pen, style.Color, style.WidthPt);
+            if (points.Count > 0 && ViewModel?.Editor is { } editor && ReferenceEquals(editor.Page, Page))
+            {
+                editor.CommitStroke(points, InkTool.Pen, style.Color, style.WidthPt);
+            }
+        }
+        finally
+        {
+            LockZoom(false);
         }
 
         ApplyMode();
         UpdateRendererEnabled(null);
     }
 
+    /// <summary>No zoom while a stroke is live: the wet ink would stay at the old scale.</summary>
+    private void LockZoom(bool locked)
+    {
+        if (ViewModel is { } vm)
+        {
+            vm.ZoomVm.IsLocked = locked;
+        }
+    }
+
     private void OnViewModelChanged(MainViewModel? oldValue, MainViewModel? newValue)
     {
         if (oldValue is not null)
         {
+            if (IsInking)
+            {
+                oldValue.ZoomVm.IsLocked = false;
+            }
+
             oldValue.Tools.PropertyChanged -= OnToolsChanged;
         }
 
@@ -466,11 +506,15 @@ public sealed class InkSurface : FrameworkElement
     private void OnScaleChanged()
     {
         _customLayer.Scale = Scale;
+        UpdateStockTransform();
         UpdateRendererSettings();
-        if (Mode == RendererMode.StockWpf)
-        {
-            RefreshInk();
-        }
+    }
+
+    /// <summary>Zoom only changes the transform of the mode A strokes: no stroke is rebuilt (FR-26).</summary>
+    private void UpdateStockTransform()
+    {
+        _stockTransform.ScaleX = Scale / StockReferenceScale;
+        _stockTransform.ScaleY = Scale / StockReferenceScale;
     }
 
     private void OnOutlineSettingsChanged()
@@ -508,53 +552,68 @@ public sealed class InkSurface : FrameworkElement
         }
     }
 
-    /// <summary>Redraws committed ink from <see cref="DisplayStrokes"/> in the current mode.</summary>
+    /// <summary>
+    /// Brings committed ink in line with <see cref="DisplayStrokes"/> in the current mode. Mode A applies a
+    /// diff to one persistent collection (only added or removed strokes change), so a pen lift or an undo
+    /// never re-creates the other stroke visuals.
+    /// </summary>
     private void RefreshInk()
     {
         var strokes = DisplayStrokes;
         var custom = Mode == RendererMode.Custom;
         _customLayer.Visibility = custom ? Visibility.Visible : Visibility.Collapsed;
         _customLayer.Strokes = custom ? strokes : Array.Empty<InkStroke>();
+        _stockPresenter.Visibility = custom ? Visibility.Collapsed : Visibility.Visible;
 
-        var collection = new StrokeCollection();
+        var collection = _stockPresenter.Strokes;
         if (custom)
         {
             _stockCache.Clear();
+            collection.Clear();
+            return;
         }
-        else
+
+        var wanted = new Dictionary<Stroke, int>(strokes.Count);
+        var alive = new HashSet<Guid>(strokes.Count);
+        var ordered = new Stroke[strokes.Count];
+        for (var i = 0; i < strokes.Count; i++)
         {
-            var scale = Scale;
-            if (_stockCacheScale != scale)
+            var stroke = strokes[i];
+            if (!_stockCache.TryGetValue(stroke.Id, out var wpf))
             {
-                _stockCache.Clear();
-                _stockCacheScale = scale;
+                wpf = StockStrokeConverter.ToWpfStroke(stroke, StockReferenceScale);
+                _stockCache[stroke.Id] = wpf;
             }
 
-            var alive = new HashSet<Guid>();
-            foreach (var stroke in strokes)
-            {
-                if (!_stockCache.TryGetValue(stroke.Id, out var wpf))
-                {
-                    wpf = StockStrokeConverter.ToWpfStroke(stroke, scale);
-                    _stockCache[stroke.Id] = wpf;
-                }
-
-                alive.Add(stroke.Id);
-                collection.Add(wpf);
-            }
-
-            foreach (var id in _stockCache.Keys.Where(id => !alive.Contains(id)).ToArray())
-            {
-                _stockCache.Remove(id);
-            }
+            alive.Add(stroke.Id);
+            ordered[i] = wpf;
+            wanted[wpf] = i;
         }
 
-        if (_mouseWet is not null)
+        foreach (var id in _stockCache.Keys.Where(id => !alive.Contains(id)).ToArray())
         {
-            collection.Add(_mouseWet);
+            _stockCache.Remove(id);
         }
 
-        _presenter.Strokes = collection;
+        for (var i = collection.Count - 1; i >= 0; i--)
+        {
+            if (!wanted.ContainsKey(collection[i]))
+            {
+                collection.RemoveAt(i);
+            }
+        }
+
+        // Insert new strokes at their model position (z-order follows the page's stroke order).
+        for (var i = 0; i < ordered.Length; i++)
+        {
+            if (i < collection.Count && ReferenceEquals(collection[i], ordered[i]))
+            {
+                continue;
+            }
+
+            collection.Remove(ordered[i]); // no-op unless it moved
+            collection.Insert(Math.Min(i, collection.Count), ordered[i]);
+        }
     }
 
     /// <summary>Pushes colour, width, scale and curve to both wet renderers, only when something changed.</summary>

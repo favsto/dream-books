@@ -17,4 +17,26 @@ internal static class PageBitmap
         bitmap.Freeze();
         return bitmap;
     }
+
+    /// <summary>
+    /// Runs <paramref name="render"/> and converts the result off the UI thread. Any failure (cancelled,
+    /// superseded, document closed, PDFium error, bad size) yields null so the caller keeps the bitmap it
+    /// shows: a page that cannot be rendered must never take the app down (NFR-11). Nothing is logged.
+    /// </summary>
+    public static async Task<BitmapSource?> TryRenderAsync(
+        Func<CancellationToken, Task<RenderedPage>> render, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(render);
+        try
+        {
+            var rendered = await render(ct).ConfigureAwait(false);
+            return await Task.Run(() => FromRendered(rendered), ct).ConfigureAwait(false);
+        }
+#pragma warning disable CA1031 // Deliberately broad: see the summary.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            return null;
+        }
+    }
 }

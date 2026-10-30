@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 using DreamBooks.App.Ink;
 using DreamBooks.App.ViewModels;
@@ -79,11 +80,13 @@ public sealed class ViewSmokeTests : IDisposable
             Assert.IsNotType<CustomDynamicRenderer>(surface.ActiveRenderer);
             Assert.Equal(1, surface.PlugInCount);
             Assert.Single(surface.StockStrokes);
-            Assert.Equal(20, surface.StockStrokes[0].StylusPoints[0].X, 9);
+            Assert.Equal(10 * InkSurface.StockReferenceScale, surface.StockStrokes[0].StylusPoints[0].X, 9);
+            Assert.Equal(2 / InkSurface.StockReferenceScale, surface.StockStrokeScale, 9);
             Assert.Equal(Visibility.Collapsed, surface.CustomLayer.Visibility);
 
-            surface.Scale = 4; // zoom rescales mode A strokes from the page points (FR-26)
-            Assert.Equal(40, surface.StockStrokes[0].StylusPoints[0].X, 9);
+            surface.Scale = 4; // zoom rescales mode A strokes by transform only (FR-26)
+            Assert.Equal(10 * InkSurface.StockReferenceScale, surface.StockStrokes[0].StylusPoints[0].X, 9);
+            Assert.Equal(4 / InkSurface.StockReferenceScale, surface.StockStrokeScale, 9);
 
             surface.Mode = RendererMode.Custom;
             Assert.IsType<CustomDynamicRenderer>(surface.ActiveRenderer);
@@ -115,6 +118,119 @@ public sealed class ViewSmokeTests : IDisposable
             vm.Tools.EndInvertedEraser();
             Assert.True(surface.ActiveRenderer.Enabled);
         });
+    }
+
+    private static readonly InkPoint[] _otherLine =
+    [
+        new(100, 100, 0.5f, null, null, null, 0),
+        new(150, 200, 0.6f, null, null, null, 10),
+    ];
+
+    [Fact]
+    public async Task Mode_a_commit_adds_one_stroke_to_the_existing_collection()
+    {
+        await WithDocumentAsync(vm =>
+        {
+            var surface = CreateSurface(vm);
+            surface.Mode = RendererMode.StockWpf;
+            vm.Editor!.CommitStroke(_line, InkTool.Pen, vm.Tools.Color, 1);
+            var collection = surface.StockStrokes;
+            var first = collection[0];
+
+            vm.Editor.CommitStroke(_otherLine, InkTool.Pen, vm.Tools.Color, 1);
+
+            Assert.Same(collection, surface.StockStrokes);
+            Assert.Equal(2, collection.Count);
+            Assert.Same(first, collection[0]);
+        });
+    }
+
+    [Fact]
+    public async Task Mode_a_zoom_keeps_the_stroke_instances_and_changes_only_the_scale()
+    {
+        await WithDocumentAsync(vm =>
+        {
+            var surface = CreateSurface(vm);
+            surface.Mode = RendererMode.StockWpf;
+            vm.Editor!.CommitStroke(_line, InkTool.Pen, vm.Tools.Color, 1);
+            var collection = surface.StockStrokes;
+            var stroke = collection[0];
+            var x = stroke.StylusPoints[0].X;
+
+            surface.Scale = 8 * Units.DipPerPt;
+
+            Assert.Same(collection, surface.StockStrokes);
+            Assert.Same(stroke, surface.StockStrokes[0]);
+            Assert.Equal(x, stroke.StylusPoints[0].X, 9);
+
+            // Screen position of the first point = page point × Scale (FR-26).
+            Assert.Equal(10 * 8 * Units.DipPerPt, x * surface.StockStrokeScale, 9);
+        });
+    }
+
+    [Fact]
+    public async Task Mode_a_undo_removes_only_the_matching_stroke()
+    {
+        await WithDocumentAsync(vm =>
+        {
+            var surface = CreateSurface(vm);
+            surface.Mode = RendererMode.StockWpf;
+            vm.Editor!.CommitStroke(_line, InkTool.Pen, vm.Tools.Color, 1);
+            var collection = surface.StockStrokes;
+            var first = collection[0];
+            vm.Editor.CommitStroke(_otherLine, InkTool.Pen, vm.Tools.Color, 1);
+
+            vm.Undo.Undo();
+
+            Assert.Same(collection, surface.StockStrokes);
+            Assert.Same(first, Assert.Single(collection));
+        });
+    }
+
+    [Fact]
+    public async Task Zoom_is_locked_while_a_mouse_stroke_is_live_and_the_stroke_commits_on_release()
+    {
+        await WithDocumentAsync(vm =>
+        {
+            var surface = CreateSurface(vm);
+            surface.Scale = 1;
+            LayOut(surface, 1000, 1000);
+            var zoom = vm.ZoomVm.Zoom;
+
+            surface.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+            {
+                RoutedEvent = Mouse.MouseDownEvent,
+            });
+            Assert.True(surface.IsInking);
+
+            vm.ZoomVm.ZoomInCommand.Execute(null); // panel +
+            vm.ZoomVm.ZoomAt(2); // Ctrl+wheel and pinch
+            vm.ZoomVm.FitWidth(1000, 200);
+            Assert.Equal(zoom, vm.ZoomVm.Zoom);
+
+            surface.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+            {
+                RoutedEvent = Mouse.MouseUpEvent,
+            });
+            Assert.False(surface.IsInking);
+            Assert.Single(vm.Editor!.Page.Strokes);
+
+            vm.ZoomVm.ZoomInCommand.Execute(null);
+            Assert.NotEqual(zoom, vm.ZoomVm.Zoom);
+        });
+    }
+
+    [Fact]
+    public async Task Failed_page_render_yields_no_bitmap_instead_of_throwing()
+    {
+        Assert.Null(await PageBitmap.TryRenderAsync(_ => throw new ArgumentException("bad size"), CancellationToken.None));
+        Assert.Null(await PageBitmap.TryRenderAsync(_ => Task.FromException<RenderedPage>(new IOException()), CancellationToken.None));
+        Assert.Null(await PageBitmap.TryRenderAsync(ct => Task.FromCanceled<RenderedPage>(ct), new CancellationToken(canceled: true)));
+
+        var ok = await PageBitmap.TryRenderAsync(
+            _ => Task.FromResult(new RenderedPage(1, 1, 4, [1, 2, 3, 255])), CancellationToken.None);
+        Assert.NotNull(ok);
+        Assert.True(ok.IsFrozen);
     }
 
     [Fact]

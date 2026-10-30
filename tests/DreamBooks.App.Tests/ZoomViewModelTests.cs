@@ -57,4 +57,21 @@ public class ZoomViewModelTests
         zoom.FitWidth(1000, 600);
         Assert.Equal(1.25, zoom.Zoom, 6);
     }
+
+    [Fact]
+    public void Locked_zoom_ignores_every_zoom_request()
+    {
+        var zoom = new ZoomViewModel { IsLocked = true };
+
+        zoom.ZoomInCommand.Execute(null);
+        zoom.ZoomOutCommand.Execute(null);
+        zoom.ZoomAt(2);
+        zoom.FitWidth(1000, 600);
+        zoom.Zoom = 3;
+        Assert.Equal(1.0, zoom.Zoom);
+
+        zoom.IsLocked = false;
+        zoom.ZoomAt(2);
+        Assert.Equal(2.0, zoom.Zoom);
+    }
 }

@@ -134,28 +134,24 @@ public partial class PageView : UserControl
 
         var cts = new CancellationTokenSource();
         _renderCts = cts;
-        var (width, height) = RenderSizePolicy.Compute(
-            vm.PageSize, vm.ZoomVm.Zoom, VisualTreeHelper.GetDpi(this).DpiScaleX);
+        var pageSize = vm.PageSize;
+        var zoom = vm.ZoomVm.Zoom;
+        var dpiScale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+        var pageIndex = editor.Page.Index;
         try
         {
-            var rendered = await renderer.RenderPageAsync(editor.Page.Index, width, height, cts.Token);
-            var bitmap = await Task.Run(() => PageBitmap.FromRendered(rendered), cts.Token);
-            if (!cts.IsCancellationRequested && ReferenceEquals(vm.Editor, editor))
+            // TryRenderAsync swallows every failure (NFR-11): this async void handler never throws.
+            var bitmap = await PageBitmap.TryRenderAsync(
+                ct =>
+                {
+                    var (width, height) = RenderSizePolicy.Compute(pageSize, zoom, dpiScale);
+                    return renderer.RenderPageAsync(pageIndex, width, height, ct);
+                },
+                cts.Token);
+            if (bitmap is not null && !cts.IsCancellationRequested && ReferenceEquals(vm.Editor, editor))
             {
                 Surface.PageImage = bitmap;
             }
-        }
-        catch (OperationCanceledException)
-        {
-            // Superseded by a newer render.
-        }
-        catch (ObjectDisposedException)
-        {
-            // The document was replaced while rendering.
-        }
-        catch (InvalidOperationException)
-        {
-            // PDFium could not render this page: keep what is shown rather than crash (NFR-11).
         }
         finally
         {
@@ -209,6 +205,11 @@ public partial class PageView : UserControl
         }
 
         e.Handled = true;
+        if (Surface.IsInking)
+        {
+            return; // ZoomVm is locked during a stroke too; this just skips the anchor bookkeeping.
+        }
+
         _zoomAnchor = e.GetPosition(Viewport);
         _viewModel.ZoomVm.ZoomAt(Math.Pow(_wheelStepFactor, e.Delta / _wheelNotch));
         _zoomAnchor = null;
