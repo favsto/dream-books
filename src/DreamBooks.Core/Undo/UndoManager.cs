@@ -48,12 +48,13 @@ public sealed class UndoManager
 
     public bool Redo()
     {
-        if (!_redo.TryPop(out var command))
+        if (!_redo.TryPeek(out var command))
         {
             return false;
         }
 
         command.Do();
+        _redo.Pop();
         _undo.AddLast(command);
         StateChanged?.Invoke(this, EventArgs.Empty);
         return true;

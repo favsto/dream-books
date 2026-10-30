@@ -98,6 +98,79 @@ public class UndoManagerTests
     }
 
     [Fact]
+    public void Redo_with_throwing_Do_keeps_redo_stack_and_raises_no_event()
+    {
+        var manager = new UndoManager();
+        var command = new ThrowingCommand();
+        manager.Execute(command);
+        manager.Undo();
+        command.ThrowOnDo = true;
+        var count = 0;
+        manager.StateChanged += (_, _) => count++;
+
+        Assert.Throws<InvalidOperationException>(() => manager.Redo());
+
+        Assert.True(manager.CanRedo);
+        Assert.False(manager.CanUndo);
+        Assert.Equal(0, count);
+        command.ThrowOnDo = false;
+        Assert.True(manager.Redo());
+        Assert.True(manager.CanUndo);
+    }
+
+    [Fact]
+    public void Undo_with_throwing_Undo_keeps_state_and_raises_no_event()
+    {
+        var manager = new UndoManager();
+        var command = new ThrowingCommand();
+        manager.Execute(command);
+        command.ThrowOnUndo = true;
+        var count = 0;
+        manager.StateChanged += (_, _) => count++;
+
+        Assert.Throws<InvalidOperationException>(() => manager.Undo());
+
+        Assert.True(manager.CanUndo);
+        Assert.False(manager.CanRedo);
+        Assert.Equal(0, count);
+    }
+
+    [Fact]
+    public void Execute_with_throwing_Do_keeps_both_stacks_and_raises_no_event()
+    {
+        var manager = new UndoManager();
+        manager.Execute(Cmd("1"));
+        manager.Execute(Cmd("2"));
+        manager.Undo();
+        var count = 0;
+        manager.StateChanged += (_, _) => count++;
+
+        Assert.Throws<InvalidOperationException>(() => manager.Execute(new ThrowingCommand { ThrowOnDo = true }));
+
+        Assert.True(manager.CanUndo);
+        Assert.True(manager.CanRedo);
+        Assert.Equal(0, count);
+    }
+
+    [Fact]
+    public void Exactly_capacity_commands_are_all_undoable()
+    {
+        var manager = new UndoManager(500);
+        for (var i = 1; i <= 500; i++)
+        {
+            manager.Execute(Cmd(i.ToString()));
+        }
+
+        for (var i = 0; i < 500; i++)
+        {
+            Assert.True(manager.Undo());
+        }
+
+        Assert.False(manager.Undo());
+        Assert.Contains("undo1", _log);
+    }
+
+    [Fact]
     public void Capacity_must_be_positive()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new UndoManager(0));
