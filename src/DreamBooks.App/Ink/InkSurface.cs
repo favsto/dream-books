@@ -283,6 +283,25 @@ public sealed class InkSurface : FrameworkElement
         }
     }
 
+    protected override void OnStylusLeave(StylusEventArgs e)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        base.OnStylusLeave(e);
+        if (IsPen(e.StylusDevice))
+        {
+            OnPenLeft();
+        }
+    }
+
+    /// <summary>A hovering pen left the surface: hide the cursor unless an erase gesture is still live.</summary>
+    internal void OnPenLeft()
+    {
+        if (_erase is null)
+        {
+            HideEraserCursor();
+        }
+    }
+
     protected override void OnStylusDown(StylusDownEventArgs e)
     {
         ArgumentNullException.ThrowIfNull(e);

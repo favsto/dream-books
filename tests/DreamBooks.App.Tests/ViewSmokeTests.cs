@@ -342,9 +342,16 @@ public sealed class ViewSmokeTests : IDisposable
 
             var fill = Assert.IsAssignableFrom<SolidColorBrush>(((Ellipse)cursor).Fill);
             Assert.Equal(0.2, fill.Opacity, 9);
+            Assert.True(fill.Color.A > 0); // the accent colour resolved (not a transparent cursor)
             Assert.Equal(1, ((Ellipse)cursor).StrokeThickness, 9);
 
             surface.HideEraserCursor(); // StylusOutOfRange
+            Assert.Equal(Visibility.Collapsed, cursor.Visibility);
+
+            surface.UpdateEraserCursor(new Point(100, 100), inverted: true);
+            Assert.Equal(Visibility.Visible, cursor.Visibility);
+            surface.OnPenLeft(); // StylusLeave while hovering, no erase gesture live
+
             Assert.Equal(Visibility.Collapsed, cursor.Visibility);
 
             vm.Tools.ActiveTool = AppTool.Eraser;
