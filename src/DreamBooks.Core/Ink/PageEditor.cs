@@ -37,4 +37,7 @@ public sealed class PageEditor
         _undo.Execute(new AddStrokesCommand(Page, strokes));
         return true;
     }
+
+    /// <summary>Starts an eraser gesture; nothing changes until <see cref="EraserSession.Complete"/> (FR-31).</summary>
+    public EraserSession BeginErase(EraserMode mode) => new(Page, _undo, mode);
 }
