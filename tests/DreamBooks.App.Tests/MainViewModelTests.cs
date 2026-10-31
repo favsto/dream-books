@@ -44,7 +44,7 @@ public sealed class MainViewModelTests : IDisposable
             Assert.Null(vm.ErrorMessage);
             Assert.Equal(1, vm.PageNumber);
             Assert.Equal(2, vm.PageCount);
-            Assert.Equal(612, vm.PageSize.WidthPt);
+            Assert.Equal(612, vm.Editor!.Page.WidthPt);
             Assert.NotNull(vm.Editor);
 
             await vm.GoToPageCommand.ExecuteAsync(2);
@@ -113,7 +113,7 @@ public sealed class MainViewModelTests : IDisposable
             Assert.NotSame(editor, vm.Editor);
             Assert.NotSame(renderer, vm.Renderer);
             Assert.Empty(vm.Editor!.Page.Strokes);
-            Assert.Equal(300, vm.PageSize.WidthPt);
+            Assert.Equal(300, vm.Editor!.Page.WidthPt);
             Assert.False(vm.UndoCommand.CanExecute(null));
         }
         finally

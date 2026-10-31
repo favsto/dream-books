@@ -41,39 +41,27 @@ public class ZoomViewModelTests
     }
 
     [Fact]
-    public void ZoomAt_multiplies_and_clamps()
+    public void Manual_zoom_is_clamped()
     {
-        var zoom = new ZoomViewModel();
-        zoom.ZoomAt(2);
+        var zoom = new ZoomViewModel { Zoom = 2 };
         Assert.Equal(2.0, zoom.Zoom);
-        zoom.ZoomAt(100);
+        zoom.Zoom = 200;
         Assert.Equal(8.0, zoom.Zoom);
     }
 
     [Fact]
-    public void FitWidth_sets_zoom_from_viewport()
-    {
-        var zoom = new ZoomViewModel();
-        zoom.FitWidth(1000, 600);
-        Assert.Equal(1.25, zoom.Zoom, 6);
-    }
-
-    [Fact]
-    public void Fit_width_mode_is_on_after_FitWidth_and_off_after_any_manual_zoom()
+    public void Fit_width_mode_is_on_after_a_fit_zoom_and_off_after_any_manual_zoom()
     {
         var zoom = new ZoomViewModel();
         Assert.False(zoom.IsFitWidth);
 
-        zoom.FitWidth(1000, 600);
+        zoom.ApplyFitZoom(1.25);
         Assert.True(zoom.IsFitWidth);
+        Assert.Equal(1.25, zoom.Zoom, 6);
         zoom.ZoomInCommand.Execute(null);
         Assert.False(zoom.IsFitWidth);
 
-        zoom.FitWidth(1000, 600);
-        zoom.ZoomAt(1.1);
-        Assert.False(zoom.IsFitWidth);
-
-        zoom.FitWidth(1000, 600);
+        zoom.ApplyFitZoom(1.25);
         zoom.Zoom = zoom.Zoom; // even the same value is a manual choice
         Assert.False(zoom.IsFitWidth);
     }
@@ -85,13 +73,13 @@ public class ZoomViewModelTests
 
         zoom.ZoomInCommand.Execute(null);
         zoom.ZoomOutCommand.Execute(null);
-        zoom.ZoomAt(2);
-        zoom.FitWidth(1000, 600);
+        zoom.ApplyFitZoom(1.25);
         zoom.Zoom = 3;
         Assert.Equal(1.0, zoom.Zoom);
+        Assert.False(zoom.IsFitWidth);
 
         zoom.IsLocked = false;
-        zoom.ZoomAt(2);
+        zoom.Zoom = 2;
         Assert.Equal(2.0, zoom.Zoom);
     }
 }

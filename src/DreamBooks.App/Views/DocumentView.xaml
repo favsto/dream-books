@@ -3,8 +3,10 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:views="clr-namespace:DreamBooks.App.Views">
     <!-- The continuous document (FR-05): fingers pan and pinch (manipulation), Ctrl+wheel zooms, a one-finger double
-         tap toggles fit width / 200% (FR-06, FR-07); the pen only inks (FR-30). No layout rounding: the pages sit
-         exactly where DocumentLayout puts them, so zoom stays anchored to the sub-pixel. The scroll bars are hidden
+         tap toggles fit width / 200% (FR-06, FR-07); the pen only inks (FR-30). No layout rounding inside: the scroll
+         offsets and geometry stay exact (zoom anchored to the sub-pixel) and VirtualPagePanel snaps each page itself to
+         whole device pixels on screen, so the bitmap maps 1:1 (the window rounds its own layout, so this viewer's
+         origin is on a whole pixel too). The scroll bars are hidden
          (the thin rail of UI-07 replaces them); wheel and keyboard still scroll. -->
     <ScrollViewer x:Name="Viewport"
                   HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"

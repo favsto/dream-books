@@ -255,8 +255,8 @@ public sealed class ViewSmokeTests : IDisposable
             Assert.True(surface.IsInking);
 
             vm.ZoomVm.ZoomInCommand.Execute(null); // panel +
-            vm.ZoomVm.ZoomAt(2); // Ctrl+wheel and pinch
-            vm.ZoomVm.FitWidth(1000, 200);
+            vm.Viewport.ZoomAt(2, new Point(10, 10)); // Ctrl+wheel and pinch
+            vm.Viewport.ToggleFitWidth(null); // double tap and the Fit width button
             Assert.Equal(zoom, vm.ZoomVm.Zoom);
 
             surface.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)

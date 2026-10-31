@@ -41,10 +41,10 @@ public sealed class InkSurface : FrameworkElement
         nameof(PageSizePt), typeof(Size), typeof(InkSurface),
         new FrameworkPropertyMetadata(default(Size), FrameworkPropertyMetadataOptions.AffectsMeasure));
 
-    /// <summary>The paper under the bitmap: what a page shows before its bitmap arrives.</summary>
+    /// <summary>The paper under the bitmap (theme resource PagePlaceholderBrush): what a page shows before its bitmap.</summary>
     public static readonly DependencyProperty PlaceholderBrushProperty = DependencyProperty.Register(
         nameof(PlaceholderBrush), typeof(Brush), typeof(InkSurface),
-        new FrameworkPropertyMetadata(Brushes.White, FrameworkPropertyMetadataOptions.AffectsRender));
+        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
 
     public static readonly DependencyProperty PageProperty = DependencyProperty.Register(
         nameof(Page), typeof(CorePage), typeof(InkSurface),
@@ -222,6 +222,9 @@ public sealed class InkSurface : FrameworkElement
 
     internal CustomInkLayer CustomLayer => _customLayer;
 
+    /// <summary>The PDF bitmap layer; exposed for tests.</summary>
+    internal FrameworkElement BitmapLayer => _image;
+
     /// <summary>Number of stylus plug-ins installed; exposed for tests (only one wet renderer at a time).</summary>
     internal int PlugInCount => StylusPlugIns.Count;
     protected override int VisualChildrenCount => _children.Length;
@@ -230,21 +233,30 @@ public sealed class InkSurface : FrameworkElement
 
     protected override Size MeasureOverride(Size availableSize)
     {
+        // Never more than offered: the document panel offers the page size rounded to whole device pixels, which may be
+        // a fraction smaller, and a larger desired size would make WPF arrange (and stretch the bitmap) at it.
         var size = PageSizeDip();
+        var offered = new Size(Math.Min(size.Width, availableSize.Width), Math.Min(size.Height, availableSize.Height));
         foreach (var child in _children)
         {
-            ((UIElement)child).Measure(size);
+            ((UIElement)child).Measure(ReferenceEquals(child, _image) ? offered : size);
         }
 
-        return size;
+        return offered;
     }
 
     protected override Size ArrangeOverride(Size finalSize)
     {
-        var rect = new Rect(PageSizeDip());
+        // The bitmap fills the surface as placed (whole device pixels, see VirtualPagePanel.ArrangedRect), so it maps
+        // 1:1 onto screen pixels; the ink layers keep the exact page size x Scale, within half a pixel of it (FR-26).
+        _image.Arrange(new Rect(finalSize));
+        var exact = new Rect(PageSizeDip());
         foreach (var child in _children)
         {
-            ((UIElement)child).Arrange(rect);
+            if (!ReferenceEquals(child, _image))
+            {
+                ((UIElement)child).Arrange(exact);
+            }
         }
 
         return finalSize;

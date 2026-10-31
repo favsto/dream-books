@@ -1,6 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DreamBooks.Core.Model;
 
 namespace DreamBooks.App.ViewModels;
 
@@ -40,7 +39,7 @@ public sealed class ZoomViewModel : ObservableObject
 
     /// <summary>
     /// True while the zoom fits the widest page to the viewport width and follows resizes. Any manual zoom (setting
-    /// <see cref="Zoom"/>, a step, <see cref="ZoomAt"/>) turns it off; <see cref="DocumentViewportViewModel"/>
+    /// <see cref="Zoom"/>, a step, a pinch through the viewport) turns it off; <see cref="DocumentViewportViewModel"/>
     /// turns it on (double tap, a document opened without a remembered position).
     /// </summary>
     public bool IsFitWidth
@@ -61,23 +60,6 @@ public sealed class ZoomViewModel : ObservableObject
                 SetProperty(ref _zoom, Math.Clamp(value, _min, _max));
             }
         }
-    }
-
-    /// <summary>Pinch or wheel: multiplies the current zoom by <paramref name="factor"/>.</summary>
-    public void ZoomAt(double factor) => Zoom = _zoom * factor;
-
-    /// <summary>
-    /// Fits a page width to the viewport and turns fit-width mode on (the document view then fits the widest page of
-    /// the document instead).
-    /// </summary>
-    public void FitWidth(double viewportWidthDip, double pageWidthPt)
-    {
-        if (viewportWidthDip <= 0 || pageWidthPt <= 0)
-        {
-            return;
-        }
-
-        ApplyFitZoom(viewportWidthDip / (pageWidthPt * Units.DipPerPt));
     }
 
     /// <summary>Sets a zoom computed by fit width, keeping fit-width mode on. Ignored while locked.</summary>

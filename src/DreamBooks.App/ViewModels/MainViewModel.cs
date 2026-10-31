@@ -50,7 +50,6 @@ public sealed class MainViewModel : ObservableObject
     private PageEditor? _editor;
     private bool _isSaving;
     private Task<SaveOutcome>? _runningSave;
-    private PageSize _pageSize;
     private int _pageNumber;
     private int _pageCount;
     private string? _errorMessage;
@@ -103,12 +102,6 @@ public sealed class MainViewModel : ObservableObject
         SaveCommand = new AsyncRelayCommand(() => SaveCoreAsync(saveAs: false), CanSave);
         SaveAsCommand = new AsyncRelayCommand(() => SaveCoreAsync(saveAs: true), CanSave);
     }
-
-    /// <summary>
-    /// Raised after a different page (or document) became current, or the current page got its editor (the panel and
-    /// tests follow it; the document view follows <see cref="Viewport"/>).
-    /// </summary>
-    public event EventHandler? PageChanged;
 
     /// <summary>Raised after a successful Save or Save as (the session is already marked saved).</summary>
     public event EventHandler<DocumentSavedEventArgs>? Saved;
@@ -184,12 +177,6 @@ public sealed class MainViewModel : ObservableObject
             session.IsDirty ? Strings.WindowTitleDirtyFormat : Strings.WindowTitleFormat,
             System.IO.Path.GetFileName(session.Path),
             Strings.AppTitle);
-
-    public PageSize PageSize
-    {
-        get => _pageSize;
-        private set => SetProperty(ref _pageSize, value);
-    }
 
     /// <summary>Current page, 1-based; 0 when no document is open.</summary>
     public int PageNumber
@@ -1442,25 +1429,8 @@ public sealed class MainViewModel : ObservableObject
         var editor = session?.CurrentEditor;
         Editor = editor;
 
-        // Page sizes come from the source's single-source dimensions, so the view's page frame and the
-        // strokes use the same numbers (FR-26), with or without an editor.
-        PageSize = editor is not null ? new PageSize(editor.Page.WidthPt, editor.Page.HeightPt)
-            : session is { CurrentPageIndex: >= 0 } ? SizeOf(session.CurrentPageIndex)
-            : default;
         PageNumber = session is { CurrentPageIndex: >= 0 } ? session.CurrentPageIndex + 1 : 0;
         UpdateNotice();
-        PageChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    private PageSize SizeOf(int pageIndex)
-    {
-        if (_document is not { } document)
-        {
-            return default;
-        }
-
-        var dimensions = document.Source.GetPageDimensions(pageIndex);
-        return new PageSize(dimensions.WidthPt, dimensions.HeightPt);
     }
 
     private void UpdateNotice()

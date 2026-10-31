@@ -110,15 +110,25 @@ public partial class DocumentView : UserControl
     internal InkSurface? SurfaceFor(int pageIndex) => _slots.TryGetValue(pageIndex, out var slot) ? slot.Surface : null;
 
     /// <summary>
-    /// Asks every page of the window for a new bitmap; the one shown stays (stretched) until it arrives. Called when the
-    /// zoom settled, the DPI changed or the renderer was replaced (the hook the render scheduler takes over in Task 8).
+    /// Asks every visible page for a new bitmap; the one shown stays (stretched) until it arrives. The other pages of the
+    /// window drop theirs (stale, and memory) and ask again when they become visible. Called when the zoom settled, the
+    /// DPI changed or the renderer was replaced (the hook the render scheduler takes over in Task 8).
     /// </summary>
     internal void InvalidateBitmaps()
     {
         _renderTimer.Stop();
         foreach (var slot in _slots.Values.ToArray())
         {
-            RequestBitmap(slot);
+            if (IsPageVisible(slot.PageIndex))
+            {
+                RequestBitmap(slot);
+            }
+            else
+            {
+                slot.CancelRender();
+                slot.RequestedZoom = double.NaN;
+                slot.Surface.PageImage = null;
+            }
         }
     }
 
@@ -128,7 +138,7 @@ public partial class DocumentView : UserControl
         _editorTimer.Stop();
         foreach (var slot in _slots.Values.ToArray())
         {
-            if (slot.Surface.Editor is null && slot.EditorLoad is null)
+            if (slot.Surface.Editor is null && !slot.LoadingEditor)
             {
                 _ = LoadEditorAsync(slot);
             }
@@ -160,8 +170,13 @@ public partial class DocumentView : UserControl
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
     {
         base.OnDpiChanged(oldDpi, newDpi);
+        ApplyPosition(); // the pages snap to the new pixel grid
         InvalidateBitmaps(); // same DIPs, more or fewer pixels
     }
+
+    private double DeviceScale() => VisualTreeHelper.GetDpi(this).DpiScaleX;
+
+    private bool IsPageVisible(int pageIndex) => _viewModel?.Viewport.VisiblePages.Contains(pageIndex) == true;
 
     private PageSurfacePool NewPool(MainViewModel? viewModel) => new(() => CreateSurface(viewModel), DiscardSurface);
 
@@ -239,6 +254,25 @@ public partial class DocumentView : UserControl
         {
             UpdateSurfaces();
         }
+        else if (e.PropertyName == nameof(DocumentViewportViewModel.VisiblePages))
+        {
+            RequestNewlyVisibleBitmaps();
+        }
+    }
+
+    /// <summary>
+    /// Interim: a page of the window that became visible and has asked nothing since it was bound or invalidated asks
+    /// for its bitmap now (zoom changes go through the settle timer, not here, so a pinch does not flood PDFium).
+    /// </summary>
+    private void RequestNewlyVisibleBitmaps()
+    {
+        foreach (var slot in _slots.Values.ToArray())
+        {
+            if (double.IsNaN(slot.RequestedZoom) && IsPageVisible(slot.PageIndex))
+            {
+                RequestBitmap(slot);
+            }
+        }
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -265,8 +299,9 @@ public partial class DocumentView : UserControl
 
     private void OnSurfaceInkingEnded(object? sender, EventArgs e)
     {
-        // A surface kept for its live stroke may leave now; deferred so the commit finishes first.
-        Dispatcher.BeginInvoke(DispatcherPriority.Input, UpdateSurfaces);
+        // A surface kept for its live stroke may leave now. Deferred to ContextIdle (after the render that drops the
+        // dynamic renderer's wet visual), so the old stroke never flashes on the page the surface is rebound to.
+        Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, UpdateSurfaces);
     }
 
     /// <summary>
@@ -282,7 +317,7 @@ public partial class DocumentView : UserControl
         }
 
         var position = viewport.Position;
-        Pages.Configure(layout, position.Zoom, viewport.ViewportWidthDip);
+        Pages.Configure(layout, position.Zoom, viewport.ViewportWidthDip, DeviceScale());
         var scale = Pages.Scale;
         foreach (var slot in _slots.Values)
         {
@@ -352,6 +387,8 @@ public partial class DocumentView : UserControl
 
     private void OnScrollChanged(object sender, ScrollChangedEventArgs e)
     {
+        // Every scroll re-snaps the pages to whole device pixels at the new offsets (one more arrange, same frame).
+        Pages.ScrollOffset = new Vector(Viewport.HorizontalOffset, Viewport.VerticalOffset);
         if (_viewModel is not { } vm)
         {
             return;
@@ -382,7 +419,7 @@ public partial class DocumentView : UserControl
 
         vm.Viewport.ViewportWidthDip = Viewport.ViewportWidth;
         vm.Viewport.ViewportHeightDip = Viewport.ViewportHeight;
-        Pages.Configure(vm.Viewport.Layout, vm.Viewport.Position.Zoom, vm.Viewport.ViewportWidthDip);
+        Pages.Configure(vm.Viewport.Layout, vm.Viewport.Position.Zoom, vm.Viewport.ViewportWidthDip, DeviceScale());
     }
 
     /// <summary>
@@ -481,7 +518,10 @@ public partial class DocumentView : UserControl
             ScheduleEditorLoads();
         }
 
-        RequestBitmap(slot);
+        if (IsPageVisible(pageIndex))
+        {
+            RequestBitmap(slot); // interim: off-screen pages of the window ask when they become visible
+        }
     }
 
     /// <summary>A very light fade-in of the white page (NFR-03); instant when Windows animations are off (NFR-32).</summary>
@@ -508,6 +548,8 @@ public partial class DocumentView : UserControl
     /// <summary>
     /// Loads a page's strokes for its surface. Until then the surface is a placeholder that accepts no ink; on failure
     /// (e.g. the file is released by a save) it stays so and the load is tried again when the renderer comes back.
+    /// The load is not cancelled when the page leaves the window: the session keeps it (and a later visit needs it),
+    /// and a result arriving after the surface was rebound to another page is dropped (slot identity).
     /// </summary>
     private async Task LoadEditorAsync(PageSlot slot)
     {
@@ -516,12 +558,11 @@ public partial class DocumentView : UserControl
             return;
         }
 
-        var cts = new CancellationTokenSource();
-        slot.EditorLoad = cts;
+        slot.LoadingEditor = true;
         try
         {
-            var editor = await vm.EnsureEditorAsync(slot.PageIndex, cts.Token);
-            if (!cts.IsCancellationRequested && IsBound(slot))
+            var editor = await vm.EnsureEditorAsync(slot.PageIndex);
+            if (IsBound(slot))
             {
                 slot.Surface.Editor = editor;
             }
@@ -533,16 +574,14 @@ public partial class DocumentView : UserControl
         }
         finally
         {
-            if (ReferenceEquals(slot.EditorLoad, cts))
-            {
-                slot.EditorLoad = null;
-            }
-
-            cts.Dispose();
+            slot.LoadingEditor = false;
         }
     }
 
-    /// <summary>Asks for the page's bitmap at the current zoom; a newer request or recycling cancels it.</summary>
+    /// <summary>
+    /// Asks for the page's bitmap at the current zoom. Recycling or a newer request cancels the work; a result that
+    /// still arrives is applied only if it is the latest request of a slot still bound (slot identity).
+    /// </summary>
     private async void RequestBitmap(PageSlot slot)
     {
         slot.CancelRender();
@@ -553,14 +592,15 @@ public partial class DocumentView : UserControl
 
         var cts = new CancellationTokenSource();
         slot.Render = cts;
+        var request = ++slot.RenderRequest;
         var size = VirtualPagePanel.PageSizePt(layout, slot.PageIndex);
         var zoom = _viewModel.Viewport.Position.Zoom;
-        var dpiScale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+        slot.RequestedZoom = zoom;
         try
         {
             var image = await BitmapSource.RenderAsync(
-                slot.PageIndex, new PageSize(size.Width, size.Height), zoom, dpiScale, cts.Token);
-            if (image is not null && !cts.IsCancellationRequested && IsBound(slot))
+                slot.PageIndex, new PageSize(size.Width, size.Height), zoom, DeviceScale(), cts.Token);
+            if (image is not null && request == slot.RenderRequest && IsBound(slot))
             {
                 slot.Surface.PageImage = image;
             }
@@ -595,18 +635,27 @@ public partial class DocumentView : UserControl
     private void OnManipulationDelta(object? sender, ManipulationDeltaEventArgs e)
     {
         e.Handled = true;
+        var delta = e.DeltaManipulation;
+        ApplyManipulation(delta.Translation, (delta.Scale.X + delta.Scale.Y) / 2, e.ManipulationOrigin);
+    }
+
+    /// <summary>
+    /// One finger-manipulation step: the pan first (through the view model, keeping the sub-threshold remainder so
+    /// slow pans are not lost; the overshoot past an edge is not banked), then the pinch around
+    /// <paramref name="origin"/> (viewport DIPs). Nothing while a surface is inking. Separate so tests can drive it.
+    /// </summary>
+    internal void ApplyManipulation(Vector translation, double scale, Point origin)
+    {
         if (_viewModel?.Viewport is not { Layout: { } layout } viewport || AnyInking())
         {
             return; // Never move a page under a stroke being written.
         }
 
-        var delta = e.DeltaManipulation;
-        if (delta.Translation.X != 0 || delta.Translation.Y != 0)
+        if (translation.X != 0 || translation.Y != 0)
         {
-            // Through the view model, keeping the sub-threshold remainder so slow pans are not lost.
             var (x, y) = layout.ToOffsets(viewport.Position, viewport.ViewportWidthDip, viewport.ViewportHeightDip);
-            var targetX = x - delta.Translation.X + _panRemainder.X;
-            var targetY = y - delta.Translation.Y + _panRemainder.Y;
+            var targetX = x - translation.X + _panRemainder.X;
+            var targetY = y - translation.Y + _panRemainder.Y;
             viewport.SetScroll(targetX, targetY);
             var (newX, newY) = layout.ToOffsets(viewport.Position, viewport.ViewportWidthDip, viewport.ViewportHeightDip);
             _panRemainder = new Vector(
@@ -614,10 +663,9 @@ public partial class DocumentView : UserControl
                 Math.Clamp(targetY - newY, -_maxPanRemainderDip, _maxPanRemainderDip));
         }
 
-        var factor = (delta.Scale.X + delta.Scale.Y) / 2;
-        if (Math.Abs(factor - 1) > _minScaleDelta && double.IsFinite(factor) && factor > 0)
+        if (Math.Abs(scale - 1) > _minScaleDelta && double.IsFinite(scale) && scale > 0)
         {
-            viewport.ZoomAt(factor, e.ManipulationOrigin);
+            viewport.ZoomAt(scale, origin);
         }
     }
 
@@ -688,16 +736,20 @@ public partial class DocumentView : UserControl
 
         public int PageIndex { get; } = pageIndex;
 
-        public CancellationTokenSource? EditorLoad { get; set; }
+        /// <summary>True while its strokes are being loaded (one load at a time).</summary>
+        public bool LoadingEditor { get; set; }
 
         public CancellationTokenSource? Render { get; set; }
 
+        /// <summary>Counts bitmap requests: only the latest one may be applied.</summary>
+        public int RenderRequest { get; set; }
+
+        /// <summary>The zoom of the last bitmap request (NaN: none since the last invalidation).</summary>
+        public double RequestedZoom { get; set; } = double.NaN;
+
         public void CancelRender() => Render?.Cancel();
 
-        public void CancelWork()
-        {
-            EditorLoad?.Cancel();
-            Render?.Cancel();
-        }
+        /// <summary>Recycled: stops the render; a stroke load goes on in the session and its result is dropped.</summary>
+        public void CancelWork() => Render?.Cancel();
     }
 }
