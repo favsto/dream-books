@@ -126,6 +126,13 @@ public partial class DocumentView : UserControl
 
     internal PageSurfacePool Pool => _pool;
 
+    /// <summary>The debounce of stroke loads for pages entering the window (tests lengthen it to see immediate loads).</summary>
+    internal TimeSpan EditorLoadDelay
+    {
+        get => _editorTimer.Interval;
+        set => _editorTimer.Interval = value;
+    }
+
     /// <summary>The surface showing a page, or null when the page is outside the window.</summary>
     internal InkSurface? SurfaceFor(int pageIndex) => _slots.TryGetValue(pageIndex, out var slot) ? slot.Surface : null;
 
@@ -162,6 +169,7 @@ public partial class DocumentView : UserControl
             if (_viewModel is { } vm && !AnyInking())
             {
                 vm.Viewport.ToggleFitWidth(position.Y);
+                Rail.NotifyActivity(); // the indicator shows the new zoom (UI-05)
             }
 
             return;
@@ -222,12 +230,14 @@ public partial class DocumentView : UserControl
         }
 
         surface.InkingEnded += OnSurfaceInkingEnded;
+        surface.EditorWanted += OnSurfaceEditorWanted;
         return surface;
     }
 
     private void DiscardSurface(InkSurface surface)
     {
         surface.InkingEnded -= OnSurfaceInkingEnded;
+        surface.EditorWanted -= OnSurfaceEditorWanted;
         BindingOperations.ClearAllBindings(surface);
         surface.ViewModel = null; // unsubscribes from the view model: nothing keeps a discarded surface alive
     }
@@ -238,6 +248,8 @@ public partial class DocumentView : UserControl
         {
             old.Viewport.PositionChanged -= OnPositionChanged;
             old.Viewport.LayoutChanged -= OnLayoutChanged;
+            old.Viewport.Jumped -= OnJumped;
+            old.ZoomVm.StepZoomed -= OnStepZoomed;
             old.Viewport.PropertyChanged -= OnViewportPropertyChanged;
             old.PropertyChanged -= OnViewModelPropertyChanged;
         }
@@ -255,6 +267,8 @@ public partial class DocumentView : UserControl
         {
             viewModel.Viewport.PositionChanged += OnPositionChanged;
             viewModel.Viewport.LayoutChanged += OnLayoutChanged;
+            viewModel.Viewport.Jumped += OnJumped;
+            viewModel.ZoomVm.StepZoomed += OnStepZoomed;
             viewModel.Viewport.PropertyChanged += OnViewportPropertyChanged;
             viewModel.PropertyChanged += OnViewModelPropertyChanged;
             ReportViewportSize();
@@ -314,6 +328,49 @@ public partial class DocumentView : UserControl
             _requestedFrom = renderer;
             _bitmaps.InvalidateAll();
             ScheduleEditorLoads();
+        }
+    }
+
+    /// <summary>
+    /// The pen came near a page whose strokes are not loaded: load them now, not after the debounce (I1). A stroke
+    /// started before they arrive does not ink (no wet ink, nothing committed): queueing it would keep the page
+    /// "inking" (no scroll, no recycling) for as long as a load waits behind a save, and a failed load would make visible
+    /// ink vanish. The pen usually hovers long enough for the load to finish before it touches.
+    /// </summary>
+    private void OnSurfaceEditorWanted(object? sender, EventArgs e)
+    {
+        if (sender is InkSurface surface
+            && _slots.Values.FirstOrDefault(s => ReferenceEquals(s.Surface, surface)) is { } slot)
+        {
+            LoadEditorNow(slot);
+        }
+    }
+
+    /// <summary>After a jump the visible pages were never neighbours: their strokes load at once (the others wait).</summary>
+    private void OnJumped(object? sender, EventArgs e)
+    {
+        if (_viewModel?.Viewport is not { } viewport)
+        {
+            return;
+        }
+
+        foreach (var page in viewport.VisiblePages)
+        {
+            if (_slots.TryGetValue(page, out var slot))
+            {
+                LoadEditorNow(slot);
+            }
+        }
+    }
+
+    /// <summary>Ctrl + / Ctrl − (or the panel's buttons): the user's zoom, the indicator shows (UI-05).</summary>
+    private void OnStepZoomed(object? sender, EventArgs e) => Rail.NotifyActivity();
+
+    private void LoadEditorNow(PageSlot slot)
+    {
+        if (slot.Surface.Editor is null && !slot.LoadingEditor)
+        {
+            _ = LoadEditorAsync(slot);
         }
     }
 
@@ -524,7 +581,6 @@ public partial class DocumentView : UserControl
         surface.Scale = Pages.Scale;
         VirtualPagePanel.SetPageIndex(surface, pageIndex);
         AutomationProperties.SetName(surface, string.Format(CultureInfo.CurrentCulture, Strings.PageNameFormat, pageIndex + 1));
-        FadeIn(surface);
 
         if (_viewModel.Session is { } session && session.TryGetEditor(pageIndex, out var editor) && editor is not null)
         {
@@ -536,12 +592,17 @@ public partial class DocumentView : UserControl
         }
 
         _bitmaps.ShowCached(pageIndex); // a page seen recently shows its bitmap at once, the others their placeholder
+        FadeIn(surface, placeholder: surface.PageImage is null); // only white paper fades in; a bitmap appears at once
     }
 
-    /// <summary>A very light fade-in of the white page (NFR-03); instant when Windows animations are off (NFR-32).</summary>
-    private static void FadeIn(InkSurface surface)
+    /// <summary>
+    /// A very light fade-in of the white placeholder page (NFR-03); a page shown with a bitmap (cached or stale) appears at
+    /// once. Instant when Windows animations are off (NFR-32).
+    /// </summary>
+    private static void FadeIn(InkSurface surface, bool placeholder)
     {
-        if (!SystemParameters.ClientAreaAnimation
+        if (!placeholder
+            || !SystemParameters.ClientAreaAnimation
             || surface.TryFindResource("PageFadeInDuration") is not Duration duration
             || surface.TryFindResource("PageFadeInFromOpacity") is not double from)
         {
@@ -641,6 +702,7 @@ public partial class DocumentView : UserControl
         if (Math.Abs(scale - 1) > _minScaleDelta && double.IsFinite(scale) && scale > 0)
         {
             viewport.ZoomAt(scale, origin);
+            Rail.NotifyActivity(); // a pinch is the user's zoom: the indicator shows (UI-05)
         }
     }
 
@@ -650,7 +712,8 @@ public partial class DocumentView : UserControl
     /// <summary>
     /// PgUp, PgDn, Home and End move the document through the view model's commands (FR-10; Home and End are jumps
     /// recorded for Back). Not with modifiers, and not while the keys belong to a field or a slider
-    /// (<paramref name="source"/> is where the key event comes from). True when the key was used.
+    /// (<paramref name="source"/> is where the key event comes from). The arrow keys are left to the scroll viewer, but
+    /// taken (and do nothing) while a page is inking. True when the key was used.
     /// </summary>
     internal bool HandleNavigationKey(Key key, ModifierKeys modifiers, object? source)
     {
@@ -670,7 +733,9 @@ public partial class DocumentView : UserControl
         };
         if (command is null)
         {
-            return false;
+            // The arrow keys scroll in the scroll viewer itself, except while a page is inking: then they are taken
+            // and nothing moves under the pen.
+            return key is Key.Up or Key.Down or Key.Left or Key.Right && AnyInking();
         }
 
         if (!AnyInking()) // never move a page under a stroke being written
@@ -702,10 +767,11 @@ public partial class DocumentView : UserControl
     /// <summary>
     /// A press at <paramref name="position"/> (rail coordinates, the same as this view's). Any press outside the open
     /// page field closes it. The pen is never taken (false: it inks on the page under it, FR-30). A finger or the
-    /// mouse in the shown rail's strip starts a drag, on its indicator opens the page field (true: the press is the
-    /// rail's); a finger near the edge of a hidden rail shows it and still pans (false).
+    /// mouse in the shown rail's strip presses it (the knob drags; elsewhere a tap jumps on lift), on its indicator
+    /// opens the page field (true: the press is the rail's); a palm-sized <paramref name="contact"/> there is taken and
+    /// does nothing; a finger near the edge of a hidden rail shows it and still pans (false).
     /// </summary>
-    internal bool RoutePointerDown(Point position, PointerKind kind)
+    internal bool RoutePointerDown(Point position, PointerKind kind, Size contact = default)
     {
         if (Rail.IsEditing && !Rail.IsOnGoToPageBox(position))
         {
@@ -717,7 +783,13 @@ public partial class DocumentView : UserControl
             return false;
         }
 
-        switch (Rail.ZoneAt(position))
+        var zone = Rail.ZoneAt(position);
+        if (zone != RailZone.None && kind == PointerKind.Finger && ScrollRail.IsPalmContact(contact))
+        {
+            return true; // a hand coming down to write: neither the rail nor the document moves
+        }
+
+        switch (zone)
         {
             case RailZone.Strip:
                 return Rail.PointerDown(Rail.TrackYAt(position)) || AnyInking(); // while inking: taken, nothing moves
@@ -734,7 +806,7 @@ public partial class DocumentView : UserControl
         }
     }
 
-    /// <summary>The finger or mouse on the rail lifts (or loses capture): the drag ends.</summary>
+    /// <summary>The finger or mouse on the rail lifts: a drag ends, a press off the knob that did not move jumps.</summary>
     internal void RoutePointerUp()
     {
         _railTouchId = null;
@@ -743,8 +815,16 @@ public partial class DocumentView : UserControl
 
     private void OnPreviewMouseWheel(object? sender, MouseWheelEventArgs e)
     {
-        if (_viewModel is not { } vm)
+        if (_viewModel is null)
         {
+            return;
+        }
+
+        if (AnyInking())
+        {
+            // Never move a page under a stroke being written: the wheel, a touchpad's two-finger scroll, Ctrl+wheel and
+            // Shift+wheel are all taken and do nothing (FR-26).
+            e.Handled = true;
             return;
         }
 
@@ -761,12 +841,22 @@ public partial class DocumentView : UserControl
         }
 
         e.Handled = true;
-        if (AnyInking())
+        ZoomByWheel(e.Delta, e.GetPosition(Viewport));
+    }
+
+    /// <summary>
+    /// Ctrl+wheel: one wheel step (<paramref name="delta"/>, 120 per notch) zooms around <paramref name="anchor"/>
+    /// (viewport DIPs), and the indicator shows (UI-05). Nothing while a page is inking.
+    /// </summary>
+    internal void ZoomByWheel(int delta, Point anchor)
+    {
+        if (_viewModel?.Viewport is not { Layout: not null } viewport || AnyInking())
         {
-            return; // the zoom is locked during a stroke anyway
+            return;
         }
 
-        vm.Viewport.ZoomAt(Math.Pow(_wheelStepFactor, e.Delta / _wheelNotch), e.GetPosition(Viewport));
+        viewport.ZoomAt(Math.Pow(_wheelStepFactor, delta / _wheelNotch), anchor);
+        Rail.NotifyActivity();
     }
 
     private bool IsNearRail(Point position) => position.X >= Rail.ActualWidth - Rail.Strip.Width;
@@ -782,7 +872,7 @@ public partial class DocumentView : UserControl
         if (RoutePointerDown(e.GetPosition(Rail), PointerKind.Mouse))
         {
             e.Handled = true;
-            if (Rail.IsDragging)
+            if (Rail.IsPressed)
             {
                 Host.CaptureMouse();
             }
@@ -798,7 +888,7 @@ public partial class DocumentView : UserControl
         }
 
         var position = e.GetPosition(Rail);
-        if (Rail.IsDragging && _railTouchId is null && Host.IsMouseCaptured)
+        if (Rail.IsPressed && _railTouchId is null && Host.IsMouseCaptured)
         {
             Rail.PointerMove(Rail.TrackYAt(position));
             return;
@@ -814,19 +904,19 @@ public partial class DocumentView : UserControl
 
     private void OnHostMouseUp(object sender, MouseButtonEventArgs e)
     {
-        if (e.StylusDevice is null && _railTouchId is null && Rail.IsDragging)
+        if (e.StylusDevice is null && _railTouchId is null && Rail.IsPressed)
         {
             e.Handled = true;
-            Host.ReleaseMouseCapture(); // LostMouseCapture ends the drag
-            RoutePointerUp();
+            RoutePointerUp(); // first: a tap jumps on this lift (the capture loss below then finds nothing pressed)
+            Host.ReleaseMouseCapture();
         }
     }
 
     private void OnHostLostMouseCapture(object sender, MouseEventArgs e)
     {
-        if (_railTouchId is null && Rail.IsDragging)
+        if (_railTouchId is null && Rail.IsPressed)
         {
-            RoutePointerUp();
+            Rail.PointerCancel(); // capture taken away: a drag ends where it is, a pending tap never jumps
         }
     }
 
@@ -836,15 +926,16 @@ public partial class DocumentView : UserControl
     private void OnHostTouchDown(object? sender, TouchEventArgs e)
     {
         var kind = IsPenInput() ? PointerKind.Pen : PointerKind.Finger;
-        if (kind == PointerKind.Pen || Rail.IsDragging)
+        if (kind == PointerKind.Pen || Rail.IsPressed)
         {
-            return; // the pen's press is routed by PreviewStylusDown; a second finger during a drag is ignored
+            return; // the pen's press is routed by PreviewStylusDown; a second finger during a press is ignored
         }
 
-        if (RoutePointerDown(e.GetTouchPoint(Rail).Position, kind))
+        var touch = e.GetTouchPoint(Rail);
+        if (RoutePointerDown(touch.Position, kind, touch.Size))
         {
             e.Handled = true; // not promoted to the mouse, never seen by the scroll viewer's manipulation
-            if (Rail.IsDragging)
+            if (Rail.IsPressed)
             {
                 _railTouchId = e.TouchDevice.Id;
                 Host.CaptureTouch(e.TouchDevice); // the host is not manipulation-enabled: no pan starts
@@ -866,8 +957,8 @@ public partial class DocumentView : UserControl
         if (e.TouchDevice.Id == _railTouchId)
         {
             e.Handled = true;
+            RoutePointerUp(); // first: a tap jumps on this lift
             Host.ReleaseTouchCapture(e.TouchDevice);
-            RoutePointerUp();
         }
     }
 
@@ -875,7 +966,8 @@ public partial class DocumentView : UserControl
     {
         if (e.TouchDevice.Id == _railTouchId)
         {
-            RoutePointerUp();
+            _railTouchId = null;
+            Rail.PointerCancel();
         }
     }
 

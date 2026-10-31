@@ -215,6 +215,21 @@ public sealed class InkSurface : FrameworkElement
     /// <summary>Raised when a stroke or eraser gesture ends (committed or cancelled): <see cref="IsInking"/> is false again.</summary>
     public event EventHandler? InkingEnded;
 
+    /// <summary>
+    /// Raised when the pen comes near (in range, entering, or touching down) while this surface has no editor yet: the
+    /// view loads the page's strokes at once instead of after its debounce, so the stroke that follows can ink (I1).
+    /// </summary>
+    public event EventHandler? EditorWanted;
+
+    /// <summary>The pen is over this page: ask for its strokes if they are not here (separate so tests can drive it).</summary>
+    internal void NotifyPenNearby()
+    {
+        if (Editor is null && PageSizePt != default)
+        {
+            EditorWanted?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     /// <summary>The eraser area circle (FR-32); exposed for tests.</summary>
     internal FrameworkElement EraserCursor => _eraserCursor;
 
@@ -286,6 +301,17 @@ public sealed class InkSurface : FrameworkElement
             UpdateRendererSettings();
             UpdateRendererEnabled(e.StylusDevice);
             _hoverInverted = e.StylusDevice.Inverted;
+            NotifyPenNearby(); // the pen hovers here: the stroke that follows must find the editor
+        }
+    }
+
+    protected override void OnStylusEnter(StylusEventArgs e)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        base.OnStylusEnter(e);
+        if (IsPen(e.StylusDevice))
+        {
+            NotifyPenNearby(); // hovering from another page onto this one
         }
     }
 
@@ -341,6 +367,7 @@ public sealed class InkSurface : FrameworkElement
         }
 
         e.Handled = true; // The pen never scrolls.
+        NotifyPenNearby(); // no editor yet: this stroke does not ink (nothing is shown), the next one will
         RefreshIgnoredDevices(device);
         UpdateRendererEnabled(device);
         if (IsInking)

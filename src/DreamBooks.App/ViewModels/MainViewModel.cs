@@ -44,6 +44,9 @@ public sealed class MainViewModel : ObservableObject
     private Task _positionWrites = Task.CompletedTask;
     private bool _positionsPruned;
     private PageEditor? _activeErasePage;
+
+    // Pages whose stroke load failure was already told to the user (once per page and document).
+    private readonly HashSet<int> _reportedLoadFailures = [];
     private DocumentSession? _session;
     private OpenedDocument? _document;
     private IViewerHandle? _viewer;
@@ -389,6 +392,17 @@ public sealed class MainViewModel : ObservableObject
         catch (ObjectDisposedException ex)
         {
             throw new OperationCanceledException("The document was closed.", ex);
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            // NFR-11: say so, never with the exception text (NFR-12), once per page. Not during a save: a plain Save
+            // releases the file for a moment, and the view tries the load again when the renderer comes back.
+            if (ReferenceEquals(session, Session) && !IsSaving && _reportedLoadFailures.Add(pageIndex))
+            {
+                ReportFailure(session);
+            }
+
+            throw;
         }
 
         if (!ReferenceEquals(session, Session))
@@ -1013,6 +1027,7 @@ public sealed class MainViewModel : ObservableObject
         _viewer = opened.Viewer;
         _lock = documentLock;
         _listenerFailed = false;
+        _reportedLoadFailures.Clear();
         AttachJournal(journal);
         Session = session;
         Viewport.Attach(session, layout, restored?.Position, firstPage, restored?.FitWidth ?? false);

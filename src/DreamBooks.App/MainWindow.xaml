@@ -19,6 +19,11 @@
         <KeyBinding Key="S" Modifiers="Ctrl+Shift" Command="{Binding SaveAsCommand}" />
         <!-- Back after a jump (FR-09); PgUp/PgDn/Home/End are routed in code (not while typing in a field). -->
         <KeyBinding Key="Left" Modifiers="Alt" Command="{Binding Viewport.BackCommand}" />
+        <!-- Ctrl + / Ctrl − zoom in and out (FR-06), on the main keys and the numeric keypad. -->
+        <KeyBinding Key="OemPlus" Modifiers="Ctrl" Command="{Binding ZoomVm.ZoomInCommand}" />
+        <KeyBinding Key="Add" Modifiers="Ctrl" Command="{Binding ZoomVm.ZoomInCommand}" />
+        <KeyBinding Key="OemMinus" Modifiers="Ctrl" Command="{Binding ZoomVm.ZoomOutCommand}" />
+        <KeyBinding Key="Subtract" Modifiers="Ctrl" Command="{Binding ZoomVm.ZoomOutCommand}" />
     </Window.InputBindings>
     <DockPanel>
         <!-- Spartan debug panel (spec section 6); looks come in phase 4. -->

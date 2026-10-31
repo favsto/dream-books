@@ -1,5 +1,6 @@
 using System.Windows;
 using DreamBooks.App.Ink;
+using DreamBooks.App.Resources;
 using DreamBooks.App.Services;
 using DreamBooks.App.ViewModels;
 using DreamBooks.Core.Geometry;
@@ -770,6 +771,55 @@ public sealed class DocumentViewportViewModelTests : IDisposable
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => loading);
         Assert.Equal(2, vm.Session!.PageCount);
         Assert.Equal(0, vm.Editor?.Page.Index);
+    }
+
+    [Fact]
+    public async Task Jumps_raise_Jumped_and_plain_scrolling_does_not()
+    {
+        var vm = await OpenSizedAsync(Pages(20));
+        var jumps = 0;
+        vm.Viewport.Jumped += (_, _) => jumps++;
+
+        vm.Viewport.SetScroll(0, 300);
+        vm.Viewport.ZoomAt(1.2, new Point(500, 400));
+        Assert.Equal(0, jumps);
+
+        vm.Viewport.EndCommand.Execute(null);
+        Assert.Equal(1, jumps);
+        vm.Viewport.HomeCommand.Execute(null);
+        Assert.Equal(2, jumps);
+        vm.Viewport.BackCommand.Execute(null);
+        Assert.Equal(3, jumps);
+        vm.Viewport.PageDownCommand.Execute(null);
+        Assert.Equal(4, jumps);
+        vm.Viewport.ScrollToPage(7, recordHistory: false);
+        Assert.Equal(5, jumps);
+        await vm.Viewport.GoToPageCommand.ExecuteAsync(12);
+        Assert.Equal(6, jumps);
+
+        vm.Viewport.BeginRailDrag();
+        vm.Viewport.SetScroll(0, 5000);
+        Assert.Equal(6, jumps); // scrubbing: not yet
+        vm.Viewport.EndRailDrag();
+        Assert.Equal(7, jumps);
+        vm.Viewport.BeginRailDrag();
+        vm.Viewport.EndRailDrag(); // a press that moved nothing
+        Assert.Equal(7, jumps);
+    }
+
+    [Fact]
+    public async Task Failed_stroke_load_of_a_page_for_the_view_is_reported()
+    {
+        var source = Pages(5);
+        source.FailingPages.Add(3);
+        var vm = await OpenAsync(NewVm(), source);
+        Assert.Null(vm.ErrorMessage);
+
+        await Assert.ThrowsAsync<IOException>(() => vm.EnsureEditorAsync(3));
+
+        Assert.Equal(Strings.ErrorPageChangeFailed, vm.ErrorMessage); // never the exception text (NFR-12)
+        await Assert.ThrowsAsync<IOException>(() => vm.EnsureEditorAsync(3)); // still failing, said once
+        Assert.Equal(Strings.ErrorPageChangeFailed, vm.ErrorMessage);
     }
 
     private static double Offset(DocumentViewportViewModel viewport) =>

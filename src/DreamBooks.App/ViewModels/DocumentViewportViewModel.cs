@@ -77,6 +77,12 @@ public sealed class DocumentViewportViewModel : ObservableObject
     /// <summary>Raised when a document's layout replaces the previous one (open, swap, close).</summary>
     public event EventHandler? LayoutChanged;
 
+    /// <summary>
+    /// Raised after a jump (go to page, Back, Home/End, Page Up/Down, Previous/Next, an undo reveal, a rail scrub that
+    /// moved): the view shows pages it did not have in its window, so it loads their strokes at once.
+    /// </summary>
+    public event EventHandler? Jumped;
+
     /// <summary>Page frames of the open document, built from every page's size at open; null without a document.</summary>
     public DocumentLayout? Layout => _layout;
 
@@ -260,7 +266,15 @@ public sealed class DocumentViewportViewModel : ObservableObject
         _railStart = _position;
     }
 
-    public void EndRailDrag() => _railDrag = false;
+    public void EndRailDrag()
+    {
+        var moved = _railDrag && _position != _railStart;
+        _railDrag = false;
+        if (moved)
+        {
+            Jumped?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     /// <summary>
     /// Makes a document (or none) the viewed one: its layout, and the position to show. A restored position is
@@ -379,6 +393,7 @@ public sealed class DocumentViewportViewModel : ObservableObject
 
         SetPosition(Normalize(new ViewPosition(index, 0, _position.ColumnXPt, _position.Zoom)));
         Refresh(report, forceCurrent: index);
+        Jumped?.Invoke(this, EventArgs.Empty);
     }
 
     private void GoBack()
@@ -391,6 +406,7 @@ public sealed class DocumentViewportViewModel : ObservableObject
         // The zoom stays as it is now: going back restores the place, not the magnification.
         SetPosition(Normalize(Clamp(layout, previous with { Zoom = _position.Zoom })));
         Refresh(CurrentPageReport.Immediate, forceCurrent: null);
+        Jumped?.Invoke(this, EventArgs.Empty);
     }
 
     private void GoHome() => JumpToPage(0, recordHistory: true, CurrentPageReport.Immediate);
@@ -406,6 +422,7 @@ public sealed class DocumentViewportViewModel : ObservableObject
         History.Push(_position);
         SetPosition(Normalize(new ViewPosition(last, PageHeightPt(layout, last), _position.ColumnXPt, _position.Zoom)));
         Refresh(CurrentPageReport.Immediate, forceCurrent: HasViewport ? null : last);
+        Jumped?.Invoke(this, EventArgs.Empty);
     }
 
     private void PageStep(int direction)
@@ -424,6 +441,7 @@ public sealed class DocumentViewportViewModel : ObservableObject
         var (x, y) = layout.ToOffsets(_position, _viewportWidthDip, _viewportHeightDip);
         var target = Math.Max(0, y + (direction * _viewportHeightDip * PageStepFraction));
         MoveTo(layout.ToPosition(x, target, _viewportWidthDip, _position.Zoom), CurrentPageReport.Debounced);
+        Jumped?.Invoke(this, EventArgs.Empty); // a viewport at once: the pages beyond the neighbours load now
     }
 
     private void MoveTo(ViewPosition position, CurrentPageReport report)

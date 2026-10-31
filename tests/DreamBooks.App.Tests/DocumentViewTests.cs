@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -811,6 +812,131 @@ public sealed class DocumentViewTests : IDisposable
                 }
             },
             bitmaps);
+    }
+
+    [Fact]
+    public async Task Pen_coming_near_a_page_without_strokes_loads_them_at_once()
+    {
+        var vm = await OpenFakeAsync();
+        WpfTestThread.Run(() =>
+        {
+            var view = NewSlowLoadingView(vm);
+            var surface = view.SurfaceFor(1)!;
+            Assert.Null(surface.Editor); // a neighbour: its load waits for the debounce
+
+            surface.NotifyPenNearby(); // what pen-in-range and pen-down do
+            WpfTestThread.Drain();
+
+            Assert.Equal(1, surface.Editor!.Page.Index); // no timer tick needed
+            Assert.Null(view.SurfaceFor(2)!.Editor); // only the page under the pen
+            surface.NotifyPenNearby(); // already loaded: nothing more
+            Assert.Same(surface.Editor, view.SurfaceFor(1)!.Editor);
+        });
+    }
+
+    [Fact]
+    public async Task Pages_shown_by_a_jump_load_their_strokes_at_once()
+    {
+        var vm = await OpenFakeAsync();
+        WpfTestThread.Run(() =>
+        {
+            var view = NewSlowLoadingView(vm);
+
+            vm.Viewport.EndCommand.Execute(null);
+            Settle(view);
+            AssertVisibleLoadedAndNeighboursWaiting(vm, view);
+
+            // A rail scrub that ends somewhere new is a jump too.
+            vm.Viewport.BeginRailDrag();
+            vm.Viewport.SetScroll(0, view.Pages.PageRect(14).Top + 50);
+            Settle(view);
+            Assert.Null(view.SurfaceFor(vm.Viewport.VisiblePages[0])!.Editor); // still scrubbing: nothing loaded
+            vm.Viewport.EndRailDrag();
+            Settle(view);
+            AssertVisibleLoadedAndNeighboursWaiting(vm, view);
+        });
+    }
+
+    [Fact]
+    public async Task Wheel_and_arrow_keys_do_not_scroll_while_a_page_is_inking()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            Key[] arrows = [Key.Up, Key.Down, Key.Left, Key.Right];
+            Assert.False(Wheel(view, -120).Handled); // the scroll viewer scrolls
+            Assert.All(arrows, key => Assert.False(view.HandleNavigationKey(key, ModifierKeys.None, view.Viewport)));
+
+            LoadEditors(view);
+            var surface = view.SurfaceFor(0)!;
+            MouseDown(surface);
+            Assert.True(surface.IsInking);
+            var before = view.Viewport.VerticalOffset;
+
+            Assert.True(Wheel(view, -120).Handled); // the wheel, and a touchpad's two-finger scroll
+            Assert.All(arrows, key => Assert.True(view.HandleNavigationKey(key, ModifierKeys.None, view.Viewport)));
+            Assert.False(view.HandleNavigationKey(Key.Down, ModifierKeys.None, new TextBox())); // a field keeps its keys
+            Settle(view);
+            Assert.Equal(before, view.Viewport.VerticalOffset, 6);
+
+            MouseUp(surface);
+            Assert.False(Wheel(view, -120).Handled);
+        });
+    }
+
+    [Fact]
+    public async Task Only_a_page_without_any_bitmap_fades_in()
+    {
+        var bitmaps = new FakeBitmapRenderer { Auto = true };
+        await WithViewAsync(
+            (vm, view) =>
+            {
+                Idle(view);
+                Assert.NotNull(view.SurfaceFor(0)!.PageImage);
+
+                ScrollTo(view, view.Pages.PageRect(20).Top);
+                Idle(view);
+                ScrollTo(view, 0); // page 0 comes back from the cache
+
+                var back = view.SurfaceFor(0)!;
+                Assert.NotNull(back.PageImage);
+                Assert.False(back.HasAnimatedProperties); // shown at once, no blink
+                Assert.Equal(1, back.Opacity);
+            },
+            bitmaps);
+    }
+
+    private async Task<MainViewModel> OpenFakeAsync()
+    {
+        var source = new FakePageSource(Enumerable.Repeat((_widthPt, _heightPt), _pageCount).ToArray());
+        var vm = new MainViewModel(new FakeFileDialogService { NextPath = WriteFakeFile() }, scheduler: _scheduler);
+        source.InstallOn(vm);
+        await vm.OpenPdfCommand.ExecuteAsync(null);
+        return vm;
+    }
+
+    /// <summary>A view whose debounced stroke loads never fire by themselves, so only immediate loads show.</summary>
+    private static DocumentView NewSlowLoadingView(MainViewModel vm)
+    {
+        var view = new DocumentView { EditorLoadDelay = TimeSpan.FromHours(1), BitmapRenderer = new FakeBitmapRenderer() };
+        view.DataContext = vm;
+        LayOut(view, 1000, 800);
+        return view;
+    }
+
+    private static void AssertVisibleLoadedAndNeighboursWaiting(MainViewModel vm, DocumentView view)
+    {
+        var visible = vm.Viewport.VisiblePages;
+        Assert.All(visible, page => Assert.Equal(page, view.SurfaceFor(page)!.Editor?.Page.Index));
+        var neighbours = Retained(vm).Except(visible).Where(p => !vm.Session!.IsPageLoaded(p)).ToArray();
+        Assert.NotEmpty(neighbours);
+        Assert.All(neighbours, page => Assert.Null(view.SurfaceFor(page)!.Editor));
+    }
+
+    private static MouseWheelEventArgs Wheel(DocumentView view, int delta)
+    {
+        var args = new MouseWheelEventArgs(Mouse.PrimaryDevice, 0, delta) { RoutedEvent = UIElement.PreviewMouseWheelEvent };
+        view.Viewport.RaiseEvent(args);
+        return args;
     }
 
     private Task WithViewAsync(Action<MainViewModel, DocumentView> test) => WithViewAsync(test, new FakeBitmapRenderer());

@@ -33,6 +33,12 @@ namespace DreamBooks.App.Views;
 /// </remarks>
 public partial class ScrollRail : UserControl
 {
+    /// <summary>A touch contact wider or taller than this (about 16 mm) is a palm, not a fingertip.</summary>
+    internal const double MaxFingerContactDip = 60;
+
+    /// <summary>A press off the knob that moves more than this is not a tap.</summary>
+    internal const double TapSlopDip = 10;
+
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly RailVisibilityState _state;
     private readonly DispatcherTimer _idleTimer;
@@ -40,6 +46,9 @@ public partial class ScrollRail : UserControl
     private RailTimings? _timings;
     private bool _rendering;
     private bool _dragging;
+    private bool _tapPending;
+    private bool _tapMoved;
+    private double _tapY;
     private bool _hovering;
     private bool _editing;
     private bool _listening;
@@ -83,6 +92,8 @@ public partial class ScrollRail : UserControl
             {
                 EndDrag();
             }
+
+            _tapPending = false;
 
             HideBubble();
             _idleTimer.Stop();
@@ -133,6 +144,9 @@ public partial class ScrollRail : UserControl
     internal bool IsShown => _state.Phase != RailPhase.Hidden;
 
     internal bool IsDragging => _dragging;
+
+    /// <summary>A finger or the mouse is down on the strip: dragging the knob, or a press off it that may be a tap.</summary>
+    internal bool IsPressed => _dragging || _tapPending;
 
     internal bool IsEditing => _editing;
 
@@ -209,52 +223,110 @@ public partial class ScrollRail : UserControl
             EndDrag();
         }
 
+        _tapPending = false; // a press waiting to be a tap is dropped
+
         _hovering = false;
         _state.Hide();
         Refresh();
     }
 
     /// <summary>
+    /// True for a touch contact larger than a fingertip (a palm or the side of the hand coming down to write), when the
+    /// digitizer reports the contact size; such a contact never operates the rail (Windows' palm rejection only works
+    /// while the pen hovers).
+    /// </summary>
+    internal static bool IsPalmContact(Size contact) =>
+        !contact.IsEmpty && (contact.Width > MaxFingerContactDip || contact.Height > MaxFingerContactDip);
+
+    /// <summary>
     /// A finger or the mouse goes down on the strip at <paramref name="trackY"/> (DIPs from the track's top). On the
-    /// knob it grabs it where it was touched; elsewhere the knob's centre jumps there. Nothing (false) while a page is
-    /// inking or without a document.
+    /// knob it grabs it where it was touched and drags. Elsewhere nothing moves yet: the press jumps there when it lifts
+    /// without moving (<see cref="PointerUp"/>), so a hand landing on the rail does not throw the document away. Nothing
+    /// (false) while a page is inking or without a document.
     /// </summary>
     internal bool PointerDown(double trackY)
     {
-        if (_dragging || _model is not { Layout: not null } model || CanScroll?.Invoke() == false)
+        if (IsPressed || _model is not { Layout: not null } model || CanScroll?.Invoke() == false)
         {
             return false;
         }
 
-        _dragging = true;
         NotifyActivity();
+        var knobTop = KnobOffset.Y;
+        if (trackY < knobTop || trackY > knobTop + KnobHeight)
+        {
+            _tapPending = true;
+            _tapMoved = false;
+            _tapY = trackY;
+            UpdateHeld();
+            return true;
+        }
+
+        _dragging = true;
         UpdateHeld();
         model.BeginRailDrag();
-        var knobTop = KnobOffset.Y;
-        _grab = trackY >= knobTop && trackY <= knobTop + KnobHeight ? trackY - knobTop : KnobHeight / 2;
+        _grab = trackY - knobTop;
         PreviewBubble.Visibility = Visibility.Visible;
         ScrubTo(trackY);
         return true;
     }
 
-    /// <summary>The pointer moved while dragging: the document follows continuously.</summary>
+    /// <summary>The pointer moved: a drag follows continuously; a press off the knob that moves is no longer a tap.</summary>
     internal void PointerMove(double trackY)
     {
         if (_dragging)
         {
             ScrubTo(trackY);
         }
+        else if (_tapPending && Math.Abs(trackY - _tapY) > TapSlopDip)
+        {
+            _tapMoved = true;
+        }
     }
 
-    /// <summary>The press ends: the bubble goes at once; the rail fades out after the idle delay.</summary>
+    /// <summary>
+    /// The press ends: a drag's bubble goes at once; a press off the knob that did not move jumps there (recorded for
+    /// Back, FR-09). The rail fades out after the idle delay.
+    /// </summary>
     internal void PointerUp()
     {
+        if (_tapPending)
+        {
+            var jump = !_tapMoved;
+            ClearTap();
+            if (jump && _model is { Layout: not null } model && CanScroll?.Invoke() != false)
+            {
+                model.BeginRailDrag();
+                _grab = KnobHeight / 2;
+                ScrubTo(_tapY);
+                model.EndRailDrag();
+            }
+
+            UpdateKnob();
+            return;
+        }
+
         if (!_dragging)
         {
             return;
         }
 
         EndDrag();
+        UpdateKnob();
+    }
+
+    /// <summary>The press lost its capture (another window, a cancelled touch): a drag ends where it is, a tap is dropped.</summary>
+    internal void PointerCancel()
+    {
+        if (_tapPending)
+        {
+            ClearTap();
+        }
+        else if (_dragging)
+        {
+            EndDrag();
+        }
+
         UpdateKnob();
     }
 
@@ -351,7 +423,7 @@ public partial class ScrollRail : UserControl
     private void UpdateHeld()
     {
         PrepareState();
-        _state.IsHeld = _dragging || _hovering || _editing;
+        _state.IsHeld = IsPressed || _hovering || _editing;
         Refresh();
     }
 
@@ -438,6 +510,13 @@ public partial class ScrollRail : UserControl
         model.SetScroll(x, fraction * Scrollable(model, layout));
         UpdatePreview(layout, layout.PageAt(fraction * layout.TotalHeightPt));
         PlaceBubble();
+    }
+
+    private void ClearTap()
+    {
+        _tapPending = false;
+        _tapMoved = false;
+        UpdateHeld();
     }
 
     private void EndDrag()

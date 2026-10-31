@@ -18,9 +18,12 @@ public sealed class ZoomViewModel : ObservableObject
 
     public ZoomViewModel()
     {
-        ZoomInCommand = new RelayCommand(() => Zoom = _steps.FirstOrDefault(s => s > _zoom + _epsilon, _max));
-        ZoomOutCommand = new RelayCommand(() => Zoom = _steps.LastOrDefault(s => s < _zoom - _epsilon, _min));
+        ZoomInCommand = new RelayCommand(() => Step(_steps.FirstOrDefault(s => s > _zoom + _epsilon, _max)));
+        ZoomOutCommand = new RelayCommand(() => Step(_steps.LastOrDefault(s => s < _zoom - _epsilon, _min)));
     }
+
+    /// <summary>Raised after Ctrl + / Ctrl − (or the panel's buttons) changed the zoom: the user's zoom, the indicator shows.</summary>
+    public event EventHandler? StepZoomed;
 
     public IRelayCommand ZoomInCommand { get; }
 
@@ -76,4 +79,15 @@ public sealed class ZoomViewModel : ObservableObject
 
     /// <summary>Turns fit-width mode on or off without changing the zoom (the viewport applies it once it knows its width).</summary>
     internal void SetFitWidthMode(bool on) => IsFitWidth = on;
+
+    /// <summary>A zoom step of the commands: like setting <see cref="Zoom"/>, and announced when it changed something.</summary>
+    private void Step(double zoom)
+    {
+        var before = _zoom;
+        Zoom = zoom;
+        if (_zoom != before)
+        {
+            StepZoomed?.Invoke(this, EventArgs.Empty);
+        }
+    }
 }

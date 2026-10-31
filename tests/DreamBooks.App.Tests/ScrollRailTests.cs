@@ -623,13 +623,13 @@ public sealed class ScrollRailTests : IDisposable
                 Assert.False(rail.IsEditing);
             }
 
-            // A finger or the mouse in the strip goes to the rail (a drag starts), on the indicator opens the field.
+            // A finger or the mouse in the strip goes to the rail (a press starts), on the indicator opens the field.
             Assert.True(view.RoutePointerDown(strip, PointerKind.Finger));
-            Assert.True(rail.IsDragging);
+            Assert.True(rail.IsPressed); // off the knob: a tap that jumps on lift (I3)
             view.RoutePointerUp();
             Assert.False(rail.IsDragging);
             Assert.True(view.RoutePointerDown(strip, PointerKind.Mouse));
-            Assert.True(rail.IsDragging);
+            Assert.True(rail.IsPressed); // off the knob: a tap that jumps on lift (I3)
             view.RoutePointerUp();
             Assert.True(view.RoutePointerDown(indicator, PointerKind.Finger));
             Assert.True(rail.IsEditing);
@@ -641,7 +641,7 @@ public sealed class ScrollRailTests : IDisposable
             Assert.False(rail.IsDragging);
 
             // Dragging: the bubble beside the knob is shown, but the page under it still takes the pen.
-            rail.PointerDown(rail.KnobHeight / 2);
+            rail.PointerDown(rail.KnobOffset.Y + (rail.KnobHeight / 2)); // on the knob: a drag
             Settle(view);
             var bubble = rail.PreviewBubble.TranslatePoint(
                 new Point(rail.PreviewBubble.ActualWidth / 2, rail.PreviewBubble.ActualHeight / 2), view);
@@ -695,6 +695,139 @@ public sealed class ScrollRailTests : IDisposable
                 Assert.Equal(Strings.GoToPageHint, AutomationProperties.GetHelpText(window.GoToPageField));
                 Assert.True(window.GoToPageField.MinHeight >= 40);
                 Assert.Equal(Visibility.Visible, window.GoToPageField.Visibility);
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    [Fact]
+    public async Task Finger_on_the_track_jumps_only_when_it_lifts_without_moving()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            var rail = view.Rail;
+            rail.NotifyActivity();
+            Settle(view);
+            var pushes = 0;
+            vm.Viewport.History.Changed += (_, _) => pushes++;
+            var trackY = (rail.KnobHeight / 2) + (0.6 * rail.TrackLength); // well below the knob
+            var point = new Point(view.ActualWidth - 20, rail.Track.TranslatePoint(new Point(0, trackY), rail).Y);
+
+            // Down: taken by the rail, but nothing moves yet (a palm or a hand coming down to write lands here).
+            Assert.True(view.RoutePointerDown(point, PointerKind.Finger));
+            Assert.True(rail.IsPressed);
+            Assert.False(rail.IsDragging);
+            Settle(view);
+            Near(0, view.Viewport.VerticalOffset);
+            Assert.Equal(0, pushes);
+
+            // Lift without moving: the tap jumps there (a jump: Back returns).
+            view.RoutePointerUp();
+            Settle(view);
+            Near(0.6 * Scrollable(view), view.Viewport.VerticalOffset);
+            Assert.Equal(1, pushes);
+            Assert.False(rail.IsPressed);
+
+            // A press off the knob that moves is not a tap: nothing jumps, nothing is recorded, and it never drags.
+            var before = view.Viewport.VerticalOffset;
+            var low = new Point(point.X, rail.Track.TranslatePoint(new Point(0, (rail.KnobHeight / 2) + (0.1 * rail.TrackLength)), rail).Y);
+            Assert.True(view.RoutePointerDown(low, PointerKind.Finger));
+            rail.PointerMove(rail.TrackYAt(low) + 40);
+            Assert.False(rail.IsDragging);
+            view.RoutePointerUp();
+            Settle(view);
+            Near(before, view.Viewport.VerticalOffset);
+            Assert.Equal(1, pushes);
+
+            // A press that loses its capture (another window, a cancelled touch) does not jump either.
+            Assert.True(view.RoutePointerDown(low, PointerKind.Finger));
+            rail.PointerCancel();
+            Settle(view);
+            Near(before, view.Viewport.VerticalOffset);
+            Assert.False(rail.IsPressed);
+        });
+    }
+
+    [Fact]
+    public async Task Palm_sized_contact_on_the_rail_is_ignored()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            var rail = view.Rail;
+            rail.NotifyActivity();
+            Settle(view);
+            var point = new Point(view.ActualWidth - 20, rail.Track.TranslatePoint(new Point(0, rail.KnobHeight / 2), rail).Y);
+
+            // On the knob even: a palm neither drags nor pans the document, and opens nothing.
+            Assert.True(view.RoutePointerDown(point, PointerKind.Finger, new Size(90, 70)));
+            Assert.False(rail.IsPressed);
+            view.RoutePointerUp();
+            Settle(view);
+            Near(0, view.Viewport.VerticalOffset);
+            Assert.False(vm.Viewport.History.CanGoBack);
+
+            // A fingertip still works, and so does a contact whose size the digitizer does not report.
+            Assert.True(view.RoutePointerDown(point, PointerKind.Finger, new Size(12, 14)));
+            Assert.True(rail.IsDragging);
+            view.RoutePointerUp();
+            Assert.True(view.RoutePointerDown(point, PointerKind.Finger, default));
+            Assert.True(rail.IsDragging);
+            view.RoutePointerUp();
+
+            Assert.True(ScrollRail.IsPalmContact(new Size(70, 20)));
+            Assert.False(ScrollRail.IsPalmContact(new Size(40, 40)));
+            Assert.False(ScrollRail.IsPalmContact(Size.Empty));
+        });
+    }
+
+    [Fact]
+    public async Task Indicator_shows_on_user_zoom_but_not_on_programmatic_zoom()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            var rail = view.Rail;
+            var centre = new Point(500, 400);
+            Assert.Equal(RailPhase.Hidden, rail.State.Phase);
+            vm.ZoomVm.Zoom = 1.5; // a restore or a fit computed by the view
+            Settle(view);
+            Assert.Equal(RailPhase.Hidden, rail.State.Phase);
+
+            view.ApplyManipulation(default, 1.2, centre); // a pinch without vertical movement
+            Assert.NotEqual(RailPhase.Hidden, rail.State.Phase);
+
+            rail.HideNow();
+            view.ZoomByWheel(120, centre); // Ctrl+wheel
+            Assert.NotEqual(RailPhase.Hidden, rail.State.Phase);
+
+            rail.HideNow();
+            vm.ZoomVm.ZoomOutCommand.Execute(null); // Ctrl+minus, or the panel's button
+            Assert.NotEqual(RailPhase.Hidden, rail.State.Phase);
+
+            rail.HideNow();
+            view.RegisterTap(centre, 1000);
+            view.RegisterTap(centre, 1100); // double tap
+            Assert.NotEqual(RailPhase.Hidden, rail.State.Phase);
+        });
+    }
+
+    [Fact]
+    public void Ctrl_plus_and_minus_zoom()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var window = new MainWindow();
+            try
+            {
+                LayOut((FrameworkElement)window.Content, 1000, 700); // the key bindings resolve with the layout
+                var vm = (MainViewModel)window.DataContext;
+                var bindings = window.InputBindings.OfType<KeyBinding>().Select(b => (b.Key, b.Modifiers, b.Command)).ToList();
+                Assert.Contains((Key.OemPlus, ModifierKeys.Control, (ICommand)vm.ZoomVm.ZoomInCommand), bindings);
+                Assert.Contains((Key.Add, ModifierKeys.Control, (ICommand)vm.ZoomVm.ZoomInCommand), bindings);
+                Assert.Contains((Key.OemMinus, ModifierKeys.Control, (ICommand)vm.ZoomVm.ZoomOutCommand), bindings);
+                Assert.Contains((Key.Subtract, ModifierKeys.Control, (ICommand)vm.ZoomVm.ZoomOutCommand), bindings);
             }
             finally
             {
