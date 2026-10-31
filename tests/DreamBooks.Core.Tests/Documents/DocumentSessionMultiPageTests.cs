@@ -1,3 +1,4 @@
+using DreamBooks.Core.Commands;
 using DreamBooks.Core.Documents;
 using DreamBooks.Core.Geometry;
 using DreamBooks.Core.Ink;
@@ -317,5 +318,92 @@ public class DocumentSessionMultiPageTests
         await session.UndoAsync();
 
         Assert.Equal(0, reveals);
+    }
+
+    [Fact]
+    public async Task Undo_of_a_command_on_a_page_without_editor_creates_it_applies_and_reveals()
+    {
+        // Like a command restored by the journal replayer: built on the loaded page, no editor yet.
+        var source = new FakePageSource(3);
+        using var session = Open(source);
+        var page = await session.EnsurePageAsync(1);
+        session.Undo.Execute(new AddStrokesCommand(page, [Stroke(100)]));
+        Assert.False(session.TryGetEditor(1, out _));
+        var reveals = new List<int>();
+        session.RevealRequested += (_, e) => reveals.Add(e.PageIndex);
+
+        Assert.True(await session.UndoAsync());
+
+        Assert.Empty(page.Strokes);
+        Assert.True(session.TryGetEditor(1, out var editor));
+        Assert.Same(page, editor!.Page);
+        Assert.Equal([1], reveals);
+        Assert.Equal(1, source.LoadCount(1));
+        Assert.False(session.IsDirty);
+
+        Assert.True(await session.RedoAsync());
+        Assert.Single(page.Strokes);
+        Assert.Equal([1, 1], reveals);
+        Assert.Equal(1, source.LoadCount(1));
+    }
+
+    [Fact]
+    public async Task Undo_applies_the_new_top_command_when_the_history_changes_while_the_page_loads()
+    {
+        var source = new FakePageSource(3);
+        using var session = Open(source);
+        var zero = await session.EnsureEditorAsync(0);
+
+        // A command on page 2 whose strokes are not loaded yet, so undo has to load the page first.
+        var stale = new AddStrokesCommand(new Page(2, 612, 792), [Stroke(100)]);
+        session.Undo.Execute(stale);
+        source.Gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reveals = new List<int>();
+        session.RevealRequested += (_, e) => reveals.Add(e.PageIndex);
+
+        var undo = session.UndoAsync();
+        Assert.False(undo.IsCompleted);
+        Draw(zero, 300); // the history changes while page 2 loads
+        source.Gate.SetResult();
+
+        Assert.True(await undo);
+
+        Assert.Empty(zero.Page.Strokes);
+        Assert.Same(stale, session.Undo.PeekUndo());
+        Assert.Equal([0], reveals);
+        Assert.True(session.TryGetEditor(2, out _));
+    }
+
+    [Fact]
+    public async Task SetCurrentPageFromView_on_the_same_page_does_not_drop_a_GoToPageAsync_in_flight()
+    {
+        var source = new FakePageSource(100);
+        using var session = Open(source);
+        session.SetCurrentPageFromView(3);
+        source.Gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var goTo = session.GoToPageAsync(49);
+        session.SetCurrentPageFromView(3); // a layout tick still reports the old centre page
+        source.Gate.SetResult();
+        await goTo;
+
+        Assert.Equal(49, session.CurrentPageIndex);
+        Assert.NotNull(session.CurrentEditor);
+    }
+
+    [Fact]
+    public async Task RevealRequested_is_raised_after_the_undo_or_redo_is_applied()
+    {
+        using var session = Open(new FakePageSource(3));
+        var editor = await session.EnsureEditorAsync(1);
+        Draw(editor, 100);
+        session.SetCurrentPageFromView(0);
+        var seen = new List<int>();
+        session.RevealRequested += (_, e) => seen.Add(editor.Page.Strokes.Count);
+
+        Assert.True(await session.UndoAsync());
+        Assert.True(await session.RedoAsync());
+
+        Assert.Equal([0, 1], seen);
     }
 }

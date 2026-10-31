@@ -194,7 +194,8 @@ public sealed class DocumentSession : IDisposable
 
     /// <summary>
     /// Records the page the view considers current (e.g. the one at the viewport centre) without loading its
-    /// strokes and without touching the undo history. Supersedes a <see cref="GoToPageAsync"/> in flight.
+    /// strokes and without touching the undo history. Supersedes a <see cref="GoToPageAsync"/> in flight only
+    /// when the current page actually changes.
     /// Ignored once the session is disposed.
     /// </summary>
     public void SetCurrentPageFromView(int pageIndex)
@@ -205,12 +206,12 @@ public sealed class DocumentSession : IDisposable
         }
 
         ValidatePageIndex(pageIndex);
-        ++_navigation;
         if (pageIndex == CurrentPageIndex)
         {
-            return;
+            return; // Nothing changes, so an explicit GoToPageAsync in flight stays valid.
         }
 
+        ++_navigation;
         CurrentPageIndex = pageIndex;
         CurrentPageChanged?.Invoke(this, EventArgs.Empty);
     }
