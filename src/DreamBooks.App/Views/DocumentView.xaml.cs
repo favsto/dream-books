@@ -1,7 +1,9 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -25,7 +27,9 @@ namespace DreamBooks.App.Views;
 /// <see cref="DocumentLayout.ZoomAt"/>, fit width, jumps, restore) is applied to the scroll viewer, so nothing jumps
 /// under the fingers (FR-06, FR-07, FR-04). Every visible page with loaded strokes inks at once; pen-down never changes
 /// the current page; an eraser gesture belongs to the page where it starts; a stroke is clipped to its page (FR-26,
-/// FR-27). Fingers pan and zoom, never while a surface is inking; the pen never scrolls (FR-30).
+/// FR-27). Fingers pan and zoom, never while a surface is inking; the pen never scrolls (FR-30). The scroll bars are
+/// replaced by the fading <see cref="ScrollRail"/> (UI-07); the navigation keys go through the view model's commands
+/// (<see cref="HandleNavigationKey"/>, FR-10).
 /// </summary>
 /// <remarks>
 /// A page entering the window gets a surface at once (white placeholder of the exact size, light fade-in, NFR-03),
@@ -47,6 +51,10 @@ public partial class DocumentView : UserControl
     private const double _minScaleDelta = 1e-4;
     private const double _sameOffsetDip = 0.5;
     private const double _maxPanRemainderDip = 0.5;
+
+    /// <summary>One wheel line in DIPs, as the scroll viewer's own wheel scrolling.</summary>
+    private const double _wheelLineDip = 16;
+    private const int _defaultWheelLines = 3;
 
     private readonly Dictionary<int, PageSlot> _slots = [];
     private readonly HashSet<int> _touches = [];
@@ -70,6 +78,9 @@ public partial class DocumentView : UserControl
         _pool = NewPool(null);
         _bitmapRenderer = _pdfBitmaps;
         _bitmaps = NewBitmapCoordinator();
+        Rail.PreviewSource = (pageIndex, ct) => _bitmaps.GetPreviewAsync(pageIndex, ct); // the current coordinator
+        Rail.CanScroll = () => !AnyInking();
+        Rail.WheelScroll = delta => ScrollByWheel(delta, horizontal: false);
         _editorTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = DocumentViewportViewModel.CurrentPageDelay };
         _editorTimer.Tick += (_, _) => FlushEditorLoads();
         DataContextChanged += (_, e) => Attach(e.NewValue as MainViewModel);
@@ -203,7 +214,7 @@ public partial class DocumentView : UserControl
     private InkSurface CreateSurface(MainViewModel? viewModel)
     {
         var surface = new InkSurface { ViewModel = viewModel };
-        AutomationProperties.SetName(surface, Strings.Page);
+        AutomationProperties.SetName(surface, Strings.Page); // numbered when bound to a page
         if (viewModel is not null)
         {
             surface.SetBinding(InkSurface.CurveProperty, new Binding("Tools.Curve") { Source = viewModel });
@@ -234,6 +245,7 @@ public partial class DocumentView : UserControl
         ReleaseAll();
         _pool.Clear();
         _viewModel = viewModel;
+        Rail.Model = viewModel?.Viewport;
         _pool = NewPool(viewModel);
         _pendingOffsets = null;
         _requestedFrom = viewModel?.Renderer;
@@ -393,6 +405,11 @@ public partial class DocumentView : UserControl
             return;
         }
 
+        if (e.VerticalChange != 0)
+        {
+            Rail.NotifyActivity(); // the rail shows while the document scrolls (UI-07)
+        }
+
         if (e.ViewportWidthChange != 0 || e.ViewportHeightChange != 0)
         {
             // Resize (or first layout): the view model refits in fit-width mode and publishes the position to show.
@@ -506,6 +523,7 @@ public partial class DocumentView : UserControl
         surface.PageSizePt = VirtualPagePanel.PageSizePt(layout, pageIndex);
         surface.Scale = Pages.Scale;
         VirtualPagePanel.SetPageIndex(surface, pageIndex);
+        AutomationProperties.SetName(surface, string.Format(CultureInfo.CurrentCulture, Strings.PageNameFormat, pageIndex + 1));
         FadeIn(surface);
 
         if (_viewModel.Session is { } session && session.TryGetEditor(pageIndex, out var editor) && editor is not null)
@@ -625,11 +643,81 @@ public partial class DocumentView : UserControl
     private void OnManipulationBoundaryFeedback(object? sender, ManipulationBoundaryFeedbackEventArgs e) =>
         e.Handled = true; // No window "bounce" at the scroll limits.
 
-    private void OnPreviewMouseWheel(object? sender, MouseWheelEventArgs e)
+    /// <summary>
+    /// PgUp, PgDn, Home and End move the document through the view model's commands (FR-10; Home and End are jumps
+    /// recorded for Back). Not with modifiers, and not while the keys belong to a field or a slider
+    /// (<paramref name="source"/> is where the key event comes from). True when the key was used.
+    /// </summary>
+    internal bool HandleNavigationKey(Key key, ModifierKeys modifiers, object? source)
     {
-        if (_viewModel is not { } vm || (Keyboard.Modifiers & ModifierKeys.Control) == 0)
+        if (modifiers != ModifierKeys.None || source is TextBoxBase or PasswordBox or RangeBase
+            || _viewModel?.Viewport is not { Layout: not null } viewport)
+        {
+            return false;
+        }
+
+        var command = key switch
+        {
+            Key.PageUp => viewport.PageUpCommand,
+            Key.PageDown => viewport.PageDownCommand,
+            Key.Home => viewport.HomeCommand,
+            Key.End => viewport.EndCommand,
+            _ => null,
+        };
+        if (command is null)
+        {
+            return false;
+        }
+
+        if (!AnyInking()) // never move a page under a stroke being written
+        {
+            command.Execute(null);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// One wheel step (<paramref name="delta"/> as in the wheel event, 120 per notch, positive = up/left) scrolls the
+    /// document vertically, or horizontally for Shift+wheel, through the view model. Nothing while a page is inking.
+    /// </summary>
+    internal void ScrollByWheel(int delta, bool horizontal)
+    {
+        if (_viewModel?.Viewport is not { Layout: { } layout } viewport || AnyInking())
         {
             return;
+        }
+
+        var lines = SystemParameters.WheelScrollLines > 0 ? SystemParameters.WheelScrollLines : _defaultWheelLines;
+        var step = delta / _wheelNotch * lines * _wheelLineDip;
+        var (x, y) = layout.ToOffsets(viewport.Position, viewport.ViewportWidthDip, viewport.ViewportHeightDip);
+        if (horizontal)
+        {
+            viewport.SetScroll(x - step, y);
+        }
+        else
+        {
+            viewport.SetScroll(x, y - step);
+        }
+    }
+
+    private void OnPreviewMouseWheel(object? sender, MouseWheelEventArgs e)
+    {
+        if (_viewModel is not { } vm)
+        {
+            return;
+        }
+
+        var modifiers = Keyboard.Modifiers;
+        if ((modifiers & ModifierKeys.Control) == 0)
+        {
+            if ((modifiers & ModifierKeys.Shift) != 0)
+            {
+                e.Handled = true; // the scroll bars are hidden: Shift+wheel pans sideways with a plain mouse
+                ScrollByWheel(e.Delta, horizontal: true);
+            }
+
+            return; // the plain wheel scrolls vertically in the scroll viewer
         }
 
         e.Handled = true;
@@ -641,11 +729,27 @@ public partial class DocumentView : UserControl
         vm.Viewport.ZoomAt(Math.Pow(_wheelStepFactor, e.Delta / _wheelNotch), e.GetPosition(Viewport));
     }
 
+    /// <summary>The mouse (not the pen hovering) near the right edge shows the rail (UI-07).</summary>
+    private void OnPreviewMouseMove(object? sender, MouseEventArgs e)
+    {
+        if (e.StylusDevice is null && IsNearRail(e.GetPosition(this)))
+        {
+            Rail.NotifyActivity();
+        }
+    }
+
+    private bool IsNearRail(Point position) => position.X >= ActualWidth - Rail.Strip.Width;
+
     private void OnPreviewTouchDown(object? sender, TouchEventArgs e)
     {
         if (IsPenInput())
         {
             return; // only fingers tap; the pen never zooms
+        }
+
+        if (IsNearRail(e.GetTouchPoint(this).Position))
+        {
+            Rail.NotifyActivity(); // a finger near the edge shows the rail (it still pans the document)
         }
 
         _touches.Add(e.TouchDevice.Id);

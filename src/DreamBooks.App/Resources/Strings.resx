@@ -100,4 +100,12 @@
   <data name="JournalWarningLabel" xml:space="preserve"><value>Avviso sul diario di ripristino</value></data>
   <data name="NoticeNotSavable" xml:space="preserve"><value>Questo PDF è protetto: non è possibile salvare le annotazioni nel file.</value></data>
   <data name="PageIndicatorFormat" xml:space="preserve"><value>{0} / {1} · {2}%</value></data>
+  <data name="PageNameFormat" xml:space="preserve"><value>Pagina {0}</value></data>
+  <data name="RailLabel" xml:space="preserve"><value>Barra di scorrimento del documento</value></data>
+  <data name="RailPreviewLabel" xml:space="preserve"><value>Anteprima della pagina</value></data>
+  <data name="RailPreviewPageFormat" xml:space="preserve"><value>pag. {0}</value></data>
+  <data name="PageIndicatorLabel" xml:space="preserve"><value>Pagina e zoom: tocca per andare a una pagina</value></data>
+  <data name="GoToPage" xml:space="preserve"><value>Vai alla pagina</value></data>
+  <data name="GoToPageHint" xml:space="preserve"><value>Scrivi il numero della pagina e premi Invio (Esc per annullare)</value></data>
+  <data name="Back" xml:space="preserve"><value>Indietro</value></data>
 </root>

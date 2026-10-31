@@ -157,6 +157,24 @@ internal static class Strings
     /// <summary>Page indicator: page number, page count, zoom percent ("12 / 48 · 125%").</summary>
     public static string PageIndicatorFormat => Get(nameof(PageIndicatorFormat));
 
+    /// <summary>Automation name of a page surface: the 1-based page number ("Pagina 12").</summary>
+    public static string PageNameFormat => Get(nameof(PageNameFormat));
+
+    public static string RailLabel => Get(nameof(RailLabel));
+
+    public static string RailPreviewLabel => Get(nameof(RailPreviewLabel));
+
+    /// <summary>Caption of the rail's page preview: the 1-based page number ("pag. 12").</summary>
+    public static string RailPreviewPageFormat => Get(nameof(RailPreviewPageFormat));
+
+    public static string PageIndicatorLabel => Get(nameof(PageIndicatorLabel));
+
+    public static string GoToPage => Get(nameof(GoToPage));
+
+    public static string GoToPageHint => Get(nameof(GoToPageHint));
+
+    public static string Back => Get(nameof(Back));
+
     private static string Get(string name) =>
         Manager.GetString(name, System.Globalization.CultureInfo.CurrentUICulture) ?? name;
 }

@@ -17,6 +17,8 @@
         <KeyBinding Key="O" Modifiers="Ctrl" Command="{Binding OpenPdfCommand}" />
         <KeyBinding Key="S" Modifiers="Ctrl" Command="{Binding SaveCommand}" />
         <KeyBinding Key="S" Modifiers="Ctrl+Shift" Command="{Binding SaveAsCommand}" />
+        <!-- Back after a jump (FR-09); PgUp/PgDn/Home/End are routed in code (not while typing in a field). -->
+        <KeyBinding Key="Left" Modifiers="Alt" Command="{Binding Viewport.BackCommand}" />
     </Window.InputBindings>
     <DockPanel>
         <!-- Spartan debug panel (spec section 6); looks come in phase 4. -->
@@ -63,6 +65,21 @@
                         </TextBlock>
                         <Button Content="&gt;" Command="{Binding NextPageCommand}"
                                 AutomationProperties.Name="{x:Static res:Strings.Page}" />
+                    </StackPanel>
+
+                    <!-- Go to page and Back (FR-09): spartan for now, the real placement is phase 4. -->
+                    <TextBlock Text="{x:Static res:Strings.GoToPage}" Style="{StaticResource SectionLabel}" />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBox x:Name="GoToPageField" InputScope="Number"
+                                 MinWidth="{StaticResource GoToPageFieldWidth}" MinHeight="{StaticResource TouchTarget}"
+                                 VerticalContentAlignment="Center" Margin="0,0,4,0"
+                                 ToolTip="{x:Static res:Strings.GoToPageHint}"
+                                 AutomationProperties.Name="{x:Static res:Strings.GoToPage}"
+                                 AutomationProperties.HelpText="{x:Static res:Strings.GoToPageHint}"
+                                 PreviewKeyDown="OnGoToPageFieldKeyDown" />
+                        <Button x:Name="BackButton" Content="{x:Static res:Strings.Back}"
+                                Command="{Binding Viewport.BackCommand}"
+                                AutomationProperties.Name="{x:Static res:Strings.Back}" />
                     </StackPanel>
 
                     <!-- Journal warning (FR-84): unsaved changes are not being recorded for recovery -->

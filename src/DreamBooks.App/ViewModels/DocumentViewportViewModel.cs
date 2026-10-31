@@ -224,6 +224,24 @@ public sealed class DocumentViewportViewModel : ObservableObject
     public void ScrollToPage(int pageIndex, bool recordHistory) =>
         JumpToPage(pageIndex, recordHistory, CurrentPageReport.Immediate);
 
+    /// <summary>
+    /// The go-to-page field (FR-09): a whole page number of the document (1 to <see cref="PageCount"/>, surrounding
+    /// spaces allowed) jumps there through <see cref="GoToPageCommand"/> and returns true; anything else is ignored
+    /// and returns false.
+    /// </summary>
+    public bool TryGoToPage(string? text)
+    {
+        if (_layout is not { } layout
+            || !int.TryParse(text?.Trim(), NumberStyles.None, CultureInfo.CurrentCulture, out var page)
+            || page < 1 || page > layout.PageCount)
+        {
+            return false;
+        }
+
+        GoToPageCommand.Execute(page);
+        return true;
+    }
+
     /// <summary>A rail drag starts: the position before it is recorded for Back, once per drag.</summary>
     public void BeginRailDrag()
     {

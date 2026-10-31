@@ -1,0 +1,67 @@
+<UserControl x:Class="DreamBooks.App.Views.ScrollRail"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="clr-namespace:DreamBooks.App.Resources"
+             Focusable="False" IsTabStop="False" Opacity="0" IsHitTestVisible="False"
+             MouseEnter="OnMouseEnterRail" MouseLeave="OnMouseLeaveRail">
+    <!-- The scroll rail (UI-07, design B) over the document's right edge. No background anywhere but the 40 px strip
+         and the indicator, so the rest of the overlay never takes the pen from the pages under it; nothing at all
+         hit-tests while the rail is hidden. Nothing here is focusable: tapping the rail never takes focus from the
+         document (the page field takes it only while it is open). -->
+    <Grid>
+        <!-- One large preview beside the knob while scrubbing: the page number and a light render (white until it
+             arrives). Never hit-testable. -->
+        <Border x:Name="PreviewBubble" HorizontalAlignment="Right" VerticalAlignment="Top"
+                Width="{StaticResource RailPreviewWidth}" Margin="{StaticResource RailPreviewMargin}"
+                Padding="{StaticResource RailPreviewPadding}" CornerRadius="{StaticResource RailPreviewCornerRadius}"
+                Background="{StaticResource RailPreviewBackgroundBrush}" Effect="{StaticResource RailPreviewShadow}"
+                IsHitTestVisible="False" Visibility="Collapsed" SizeChanged="OnBubbleSizeChanged"
+                AutomationProperties.Name="{x:Static res:Strings.RailPreviewLabel}">
+            <Border.RenderTransform>
+                <TranslateTransform x:Name="BubbleOffset" />
+            </Border.RenderTransform>
+            <StackPanel>
+                <Grid>
+                    <Rectangle x:Name="PreviewPlaceholder" Fill="{StaticResource PagePlaceholderBrush}" />
+                    <Image x:Name="PreviewImage" Stretch="Uniform" />
+                </Grid>
+                <TextBlock x:Name="PreviewText" HorizontalAlignment="Center" Margin="{StaticResource Gap}" />
+            </StackPanel>
+        </Border>
+
+        <!-- The touch strip: tap the track to jump, drag the knob (or anywhere) to scrub. -->
+        <Border x:Name="Strip" HorizontalAlignment="Right" Width="{StaticResource RailTouchWidth}"
+                Background="Transparent" Focusable="False"
+                AutomationProperties.Name="{x:Static res:Strings.RailLabel}"
+                MouseLeftButtonDown="OnStripMouseDown" MouseMove="OnStripMouseMove"
+                MouseLeftButtonUp="OnStripMouseUp" LostMouseCapture="OnStripLostMouseCapture"
+                TouchDown="OnStripTouchDown" TouchMove="OnStripTouchMove" TouchUp="OnStripTouchUp"
+                LostTouchCapture="OnStripLostTouchCapture" MouseWheel="OnStripMouseWheel">
+            <Grid x:Name="Track" Margin="{StaticResource RailTrackMargin}">
+                <Border Width="{StaticResource RailBarWidth}" HorizontalAlignment="Center"
+                        CornerRadius="{StaticResource RailBarCornerRadius}" Background="{StaticResource RailTrackBrush}" />
+                <Border x:Name="Knob" Width="{StaticResource RailKnobWidth}" Height="{StaticResource RailKnobHeight}"
+                        HorizontalAlignment="Center" VerticalAlignment="Top"
+                        CornerRadius="{StaticResource RailKnobCornerRadius}" Background="{StaticResource RailKnobBrush}">
+                    <Border.RenderTransform>
+                        <TranslateTransform x:Name="KnobOffset" />
+                    </Border.RenderTransform>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- "12 / 48 · 125%": tap it to type a page number (FR-09); Enter goes, Esc cancels. -->
+        <Grid HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="{StaticResource RailIndicatorMargin}">
+            <Button x:Name="IndicatorButton" Content="{Binding Viewport.IndicatorText}" Focusable="False"
+                    Click="OnIndicatorClick"
+                    AutomationProperties.Name="{x:Static res:Strings.PageIndicatorLabel}" />
+            <TextBox x:Name="GoToPageBox" Visibility="Collapsed" InputScope="Number"
+                     MinWidth="{StaticResource GoToPageFieldWidth}" MinHeight="{StaticResource TouchTarget}"
+                     VerticalContentAlignment="Center"
+                     ToolTip="{x:Static res:Strings.GoToPageHint}"
+                     AutomationProperties.Name="{x:Static res:Strings.GoToPage}"
+                     AutomationProperties.HelpText="{x:Static res:Strings.GoToPageHint}"
+                     PreviewKeyDown="OnGoToPageKeyDown" LostKeyboardFocus="OnGoToPageLostFocus" />
+        </Grid>
+    </Grid>
+</UserControl>

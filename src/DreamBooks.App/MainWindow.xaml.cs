@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.IO;
 using System.Windows;
+using System.Windows.Input;
 using DreamBooks.App.Services;
 using DreamBooks.App.ViewModels;
 using DreamBooks.Pdf;
@@ -21,6 +22,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = _viewModel;
         Loaded += OnLoaded;
+        PreviewKeyDown += OnPreviewKeyDown;
     }
 
     /// <summary>Journals and document locks: <c>%LOCALAPPDATA%\DreamBooks\recovery</c> (FR-84), outside the user's folders.</summary>
@@ -124,6 +126,40 @@ public partial class MainWindow : Window
         {
             _closeAllowed = true;
             await Dispatcher.InvokeAsync(Close); // not from inside the cancelled Closing event
+        }
+    }
+
+    /// <summary>
+    /// PgUp, PgDn, Home and End anywhere in the window move the document through the view model (FR-10), before the
+    /// scroll viewer's own handling; never while typing in a field or on a slider.
+    /// </summary>
+    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (!e.Handled && DocumentViewer.HandleNavigationKey(e.Key, Keyboard.Modifiers, e.OriginalSource))
+        {
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>The panel's go-to-page field (FR-09): Enter jumps to a valid page and clears it; Esc clears it.</summary>
+    private void OnGoToPageFieldKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            if (_viewModel.Viewport.TryGoToPage(GoToPageField.Text))
+            {
+                GoToPageField.Clear();
+            }
+            else
+            {
+                GoToPageField.SelectAll(); // invalid input is ignored
+            }
+        }
+        else if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            GoToPageField.Clear();
         }
     }
 
