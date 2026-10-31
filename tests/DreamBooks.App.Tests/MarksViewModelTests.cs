@@ -67,7 +67,7 @@ public sealed class MarksViewModelTests : IDisposable
     {
         var (_, marks, index) = Standalone();
         var rebuilds = 0;
-        marks.PropertyChanged += (_, e) => rebuilds += e.PropertyName == nameof(MarksViewModel.Items) ? 1 : 0;
+        marks.PropertyChanged += (_, e) => rebuilds += e.PropertyName == nameof(MarksViewModel.Count) ? 1 : 0;
 
         index.SetPage(1, [Mark(1, 100, 300)]);
         index.SetPage(2, [Mark(2, 100, 300)]);
@@ -186,11 +186,37 @@ public sealed class MarksViewModelTests : IDisposable
         _scheduler.Advance(MarksViewModel.RefreshInterval);
         marks.GoToMarkCommand.Execute(marks.Items[0]);
         var position = viewport.Position;
+        var pushes = 0;
+        viewport.History.Changed += (_, _) => pushes++;
+        var jumps = 0;
+        viewport.Jumped += (_, _) => jumps++;
 
         marks.PreviousCommand.Execute(null);
 
         Assert.Equal(position, viewport.Position);
+        Assert.Equal(0, pushes);
+        Assert.Equal(0, jumps);
         Assert.Equal(Strings.MarksNoOther, marks.StatusText);
+    }
+
+    [Fact]
+    public async Task A_failing_mark_tracker_leaves_the_document_open_without_marks()
+    {
+        var pages = Pages(3);
+        pages.Strokes[1] = [MarginLine()];
+        var vm = NewVm(pages, _ => new FakeMarkPageSource(pages));
+        vm.MarkTrackerFactory = (_, _, _) => throw new InvalidOperationException("broken");
+
+        await OpenAsync(vm, "a.pdf");
+
+        Assert.NotNull(vm.Session);
+        Assert.Equal(1, vm.PageNumber);
+        Assert.Null(vm.MarkIndexForTest);
+        Assert.Null(vm.MarkScannerForTest);
+        Assert.True(vm.Marks.IsEmpty);
+        Assert.False(vm.Marks.NextCommand.CanExecute(null));
+        Draw(vm); // editing works as usual
+        Assert.True(vm.UndoCommand.CanExecute(null));
     }
 
     [Fact]
@@ -240,7 +266,227 @@ public sealed class MarksViewModelTests : IDisposable
         Assert.Equal(CentredTop(viewport, 4, 300, 400), AbsoluteTop(viewport), 3);
     }
 
+    [Fact]
+    public void Next_after_Back_goes_on_to_the_following_mark()
+    {
+        var (viewport, marks, index) = Standalone();
+        SetThreeMarks(index);
+        marks.NextCommand.Execute(null);
+        marks.NextCommand.Execute(null);
+        viewport.BackCommand.Execute(null); // at A again
+        Assert.Equal(CentredTop(viewport, 2, 100, 200), AbsoluteTop(viewport), 3);
+
+        marks.NextCommand.Execute(null);
+
+        Assert.Equal(CentredTop(viewport, 5, 300, 400), AbsoluteTop(viewport), 3);
+    }
+
+    [Fact]
+    public void Next_after_a_resize_goes_on_to_the_following_mark()
+    {
+        var (viewport, marks, index) = Standalone();
+        SetThreeMarks(index);
+        marks.NextCommand.Execute(null); // A
+
+        viewport.ViewportWidthDip = 700; // fit width: the zoom and the window in points change, A stays in view
+        Assert.NotEqual(1.0, viewport.Position.Zoom, 3);
+        marks.NextCommand.Execute(null);
+
+        Assert.Equal(CentredTop(viewport, 5, 300, 400, WindowPt(viewport)), AbsoluteTop(viewport), 3);
+    }
+
+    [Fact]
+    public void Previous_after_Back_and_after_a_resize_goes_on_to_the_preceding_mark()
+    {
+        var (viewport, marks, index) = Standalone();
+        SetThreeMarks(index);
+        ScrollToPageTop(viewport, 9);
+        marks.PreviousCommand.Execute(null); // C
+        marks.PreviousCommand.Execute(null); // B
+        viewport.BackCommand.Execute(null); // at C again
+
+        marks.PreviousCommand.Execute(null);
+        Assert.Equal(CentredTop(viewport, 5, 300, 400), AbsoluteTop(viewport), 3);
+
+        viewport.ViewportWidthDip = 700;
+        marks.PreviousCommand.Execute(null);
+        Assert.Equal(CentredTop(viewport, 2, 100, 200, WindowPt(viewport)), AbsoluteTop(viewport), 3);
+    }
+
+    [Fact]
+    public void Marks_clamped_to_the_end_of_the_document_leave_no_history_and_report_no_other_mark()
+    {
+        var (viewport, marks, index) = Standalone();
+        index.SetPage(9, [Mark(9, 600, 650), Mark(9, 700, 750)]); // both centre past the end: the same clamped view
+        _scheduler.Advance(MarksViewModel.RefreshInterval);
+        marks.GoToMarkCommand.Execute(marks.Items[0]);
+        var position = viewport.Position;
+        var pushes = 0;
+        viewport.History.Changed += (_, _) => pushes++;
+        var jumps = 0;
+        viewport.Jumped += (_, _) => jumps++;
+
+        marks.NextCommand.Execute(null);
+
+        Assert.Equal(position, viewport.Position);
+        Assert.Equal(0, pushes);
+        Assert.Equal(0, jumps);
+        Assert.Equal(Strings.MarksNoOther, marks.StatusText);
+    }
+
+    [Fact]
+    public void Marks_clamped_to_the_start_are_skipped_and_Next_moves_on_to_a_later_mark()
+    {
+        var (viewport, marks, index) = Standalone();
+        index.SetPage(0, [Mark(0, 10, 60), Mark(0, 100, 150)]); // both centred above the top: the view stays at 0
+        index.SetPage(3, [Mark(3, 300, 400)]);
+        _scheduler.Advance(MarksViewModel.RefreshInterval);
+        var pushes = 0;
+        viewport.History.Changed += (_, _) => pushes++;
+
+        marks.NextCommand.Execute(null);
+
+        Assert.Equal(CentredTop(viewport, 3, 300, 400), AbsoluteTop(viewport), 3);
+        Assert.Equal(1, pushes);
+        viewport.BackCommand.Execute(null);
+        Assert.Equal(0, AbsoluteTop(viewport), 3);
+        Assert.False(viewport.BackCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void GoToMark_on_the_mark_already_shown_leaves_no_history()
+    {
+        var (viewport, marks, index) = Standalone();
+        SetThreeMarks(index);
+        var pushes = 0;
+        viewport.History.Changed += (_, _) => pushes++;
+        var jumps = 0;
+        viewport.Jumped += (_, _) => jumps++;
+
+        marks.GoToMarkCommand.Execute(marks.Items[1]);
+        marks.GoToMarkCommand.Execute(marks.Items[1]);
+
+        Assert.Equal(1, pushes);
+        Assert.Equal(1, jumps);
+        viewport.BackCommand.Execute(null);
+        Assert.False(viewport.BackCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void Left_and_right_lines_of_one_passage_take_one_jump()
+    {
+        var (viewport, marks, index) = Standalone();
+        index.SetPage(3, [Mark(3, 300, 400), new Mark(3, MarkSide.Right, 300.5, 420, [Guid.NewGuid()])]);
+        index.SetPage(6, [Mark(6, 100, 200)]);
+        _scheduler.Advance(MarksViewModel.RefreshInterval);
+
+        marks.NextCommand.Execute(null);
+        Assert.Equal(CentredTop(viewport, 3, 300, 400), AbsoluteTop(viewport), 3);
+        marks.NextCommand.Execute(null); // the right line of the same passage is already shown
+        Assert.Equal(CentredTop(viewport, 6, 100, 200), AbsoluteTop(viewport), 3);
+
+        marks.PreviousCommand.Execute(null); // back to the passage: one jump, to either line
+        Assert.InRange(AbsoluteTop(viewport), CentredTop(viewport, 3, 300, 400) - 1, CentredTop(viewport, 3, 300.5, 420) + 1);
+        var position = viewport.Position;
+        marks.PreviousCommand.Execute(null);
+        Assert.Equal(position, viewport.Position);
+        Assert.Equal(Strings.MarksNoOther, marks.StatusText);
+    }
+
+    [Fact]
+    public void Unchanged_marks_keep_their_rows_across_refreshes()
+    {
+        var (_, marks, index) = Standalone();
+        index.SetPage(5, [Mark(5, 100, 300)]);
+        _scheduler.Advance(MarksViewModel.RefreshInterval);
+        var items = marks.Items;
+        var row = marks.Items[0];
+
+        index.SetPage(2, [Mark(2, 100, 300)]); // before it
+        index.SetPage(8, [Mark(8, 100, 300)]); // after it
+        _scheduler.Advance(MarksViewModel.RefreshInterval);
+
+        Assert.Same(items, marks.Items);
+        Assert.Equal(3, marks.Count);
+        Assert.Same(row, marks.Items[1]);
+
+        index.ClearPage(2);
+        _scheduler.Advance(MarksViewModel.RefreshInterval);
+        Assert.Same(row, marks.Items[0]);
+        Assert.Equal([5, 8], marks.Items.Select(i => i.Mark.PageIndex));
+    }
+
+    [Fact]
+    public async Task Index_changes_made_on_another_thread_reach_the_list_without_a_synchronization_context()
+    {
+        var (marks, index) = await Task.Run(() =>
+        {
+            Assert.Null(SynchronizationContext.Current);
+            var (_, vm, markIndex) = Standalone();
+            return (vm, markIndex);
+        });
+
+        await Task.Run(() => index.SetPage(1, [Mark(1, 100, 300)]));
+        _scheduler.Advance(MarksViewModel.RefreshInterval);
+
+        Assert.Equal(1, marks.Count);
+    }
+
+    [Fact]
+    public void The_dispatcher_scheduler_runs_actions_scheduled_from_another_thread_on_its_own_thread()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var scheduler = new DispatcherDelayScheduler();
+            var uiThread = Environment.CurrentManagedThreadId;
+            int? ranOn = null;
+            var cancelledRan = false;
+
+            Task.Run(() =>
+            {
+                scheduler.Schedule(TimeSpan.FromMilliseconds(1), () => ranOn = Environment.CurrentManagedThreadId);
+                scheduler.Schedule(TimeSpan.FromMilliseconds(1), () => cancelledRan = true).Dispose();
+            }).Wait();
+            WpfTestThread.PumpUntil(() => ranOn is not null);
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            WpfTestThread.PumpUntil(() => watch.ElapsedMilliseconds > 50); // long past the cancelled one's due time
+
+            Assert.Equal(uiThread, ranOn);
+            Assert.False(cancelledRan);
+        });
+    }
+
     // ---- Lifecycle in the main view model -----------------------------------------------------------------
+
+    [Fact]
+    public async Task No_other_mark_is_not_reported_while_the_scan_still_has_pages_to_visit()
+    {
+        var pages = Pages(6);
+        pages.Strokes[3] = [MarginLine()];
+        var source = new FakeMarkPageSource(pages);
+        var gate = source.Hold(3);
+        var vm = NewVm(pages, _ => source);
+        await OpenAsync(vm, "a.pdf");
+        var scanner = vm.MarkScannerForTest!;
+        await source.Started[3].Task.WaitAsync(_timeout);
+        _scheduler.Advance(MarksViewModel.RefreshInterval);
+
+        Assert.True(vm.Marks.IsScanning);
+        Assert.True(vm.Marks.NextCommand.CanExecute(null)); // no mark yet, but the scan goes on
+        vm.Marks.NextCommand.Execute(null);
+        Assert.Null(vm.Marks.StatusText);
+
+        gate.SetResult();
+        await scanner.WhenIdleAsync().WaitAsync(_timeout);
+        _scheduler.Advance(MarksViewModel.RefreshInterval);
+        Assert.False(vm.Marks.IsScanning);
+        vm.Marks.NextCommand.Execute(null);
+        Assert.Equal(3, vm.Viewport.Position.PageIndex);
+        vm.Marks.NextCommand.Execute(null);
+        Assert.Equal(Strings.MarksNoOther, vm.Marks.StatusText); // the scan is complete: now it is true
+    }
+
+    // ---- Lifecycle in the main view model (continued) ------------------------------------------------------
 
     [Fact]
     public async Task Opening_a_document_starts_the_scan_and_closing_disposes_it()
@@ -433,10 +679,18 @@ public sealed class MarksViewModelTests : IDisposable
         await source.Started[1].Task.WaitAsync(_timeout);
 
         var layout = vm.Viewport.Layout!;
-        vm.Viewport.SetScroll(0, layout.PageTopPt(50) * 4 / 3); // scroll ticks passing through: not settled
-        vm.Viewport.SetScroll(0, layout.PageTopPt(20) * 4 / 3);
+        _scheduler.Advance(DocumentViewportViewModel.CurrentPageDelay); // the resize above settles first
+        var recentres = vm.MarkRecentresForTest;
+        for (var page = 60; page >= 20; page -= 10)
+        {
+            vm.Viewport.SetScroll(0, layout.PageTopPt(page) * 4 / 3); // scroll ticks passing through: not settled
+            _scheduler.Advance(50);
+        }
+
+        Assert.Equal(recentres, vm.MarkRecentresForTest); // no recentre per tick
         _scheduler.Advance(DocumentViewportViewModel.CurrentPageDelay); // settled: the session hears of page 21
         Assert.Equal(20, vm.Session!.CurrentPageIndex);
+        Assert.Equal(recentres + 1, vm.MarkRecentresForTest);
         gate.SetResult();
         await scanner.WhenIdleAsync().WaitAsync(_timeout);
 
@@ -459,13 +713,25 @@ public sealed class MarksViewModelTests : IDisposable
         return (viewport, marks, index);
     }
 
+    private static double WindowPt(DocumentViewportViewModel viewport) =>
+        _viewportHeightDip / (viewport.Position.Zoom * 4.0 / 3.0);
+
     private static Mark Mark(int page, double top, double bottom) => new(page, MarkSide.Left, top, bottom, [Guid.NewGuid()]);
 
     private static double AbsoluteTop(DocumentViewportViewModel viewport) =>
         viewport.Layout!.PageTopPt(viewport.Position.PageIndex) + viewport.Position.YPt;
 
-    private static double CentredTop(DocumentViewportViewModel viewport, int page, double top, double bottom) =>
-        viewport.Layout!.PageTopPt(page) + ((top + bottom) / 2) - (_windowPt / 2);
+    private static double CentredTop(
+        DocumentViewportViewModel viewport, int page, double top, double bottom, double windowPt = _windowPt) =>
+        viewport.Layout!.PageTopPt(page) + ((top + bottom) / 2) - (windowPt / 2);
+
+    private void SetThreeMarks(MarkIndex index)
+    {
+        index.SetPage(2, [Mark(2, 100, 200)]); // A
+        index.SetPage(5, [Mark(5, 300, 400)]); // B
+        index.SetPage(8, [Mark(8, 300, 400)]); // C
+        _scheduler.Advance(MarksViewModel.RefreshInterval);
+    }
 
     private static void ScrollToPageTop(DocumentViewportViewModel viewport, int page) =>
         viewport.SetScroll(0, viewport.Layout!.PageTopPt(page) * 4 / 3);
@@ -479,6 +745,9 @@ public sealed class MarksViewModelTests : IDisposable
             Enumerable.Range(0, 20)
                 .Select(i => new InkPoint(x, top + ((bottom - top) * i / 19.0), 0.5f, null, null, null, i))
                 .ToArray());
+
+    private static void Draw(MainViewModel vm) =>
+        Assert.True(vm.Editor!.CommitStroke(MarginLine(x: 300).Points, InkTool.Pen, InkColor.FromRgb(0, 0, 0), 1.5));
 
     private static FakePageSource Pages(int count) => new(Enumerable.Repeat((612.0, 792.0), count).ToArray());
 

@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -8,78 +9,73 @@ using DreamBooks.Core.Marks;
 namespace DreamBooks.App.ViewModels;
 
 /// <summary>
-/// The marks of the open document for the UI (FR-101..FR-103): the list (rebuilt from the <see cref="MarkIndex"/>
-/// at most once per <see cref="RefreshInterval"/>, so a background scan cannot flood the UI), whether the scan is
-/// still running, and previous/next mark and go-to-mark, which jump through the viewport and record Back history.
+/// The marks of the open document for the UI (FR-101..FR-103): the list (brought in step with the
+/// <see cref="MarkIndex"/> at most once per <see cref="RefreshInterval"/>, so a background scan cannot flood the UI),
+/// whether the scan is still running, and previous/next mark and go-to-mark, which jump through the viewport and
+/// record Back history.
 /// </summary>
 /// <remarks>
-/// <para>Index changes and scan progress may arrive on any thread: they only set a flag, and the rebuild is
-/// scheduled on the UI thread (the synchronization context current when this was created, or inline when there is
-/// none). While a scan runs the state is re-read every <see cref="RefreshInterval"/>, so the end of the scan is seen
-/// without the scanner calling back.</para>
-/// <para>Previous/next start from the viewport's position (the page of the top edge and the offset in it, page
-/// points). Right after a jump to a mark, while the view has not moved, they start from that mark instead, because
-/// centring a mark puts the top edge above it. A mark within 1 pt of the start counts as "here". At either end there
-/// is no jump and <see cref="StatusText"/> says so for <see cref="StatusDuration"/>. The commands do not depend on a
-/// save running.</para>
+/// <para><see cref="Items"/> is one collection for the life of the view model, updated in place: a refresh inserts
+/// and removes only the rows whose mark changed and keeps the very same <see cref="MarkItem"/> instance for every
+/// unchanged mark, so a list bound to it keeps its containers, selection and scroll position.</para>
+/// <para>Index changes and scan progress may arrive on any thread: they set a flag and schedule one refresh through
+/// the <see cref="IDelayScheduler"/>, which accepts any thread and runs it on the UI thread (no synchronization context
+/// is needed, so the list cannot silently stop updating). While a scan runs the state is re-read every
+/// <see cref="RefreshInterval"/>, so the end of the scan is seen without the scanner calling back.</para>
+/// <para>Previous/next compare where each mark would be shown (<see cref="DocumentViewportViewModel.TargetPositionFor"/>)
+/// with where the view is now. A mark whose target lies within <see cref="HereBandFraction"/> of the window height of
+/// the current position (at least 1 pt) is "here" and skipped: the mark just shown, after Back, after a resize or a
+/// zoom change, two marks clamped to the same position at an end of the document, and the left and right lines of one
+/// passage, which one jump shows together. Next goes to the first mark whose target is further down, Previous to the
+/// last one further up. With nothing there: while the scan still has unscanned pages in that direction nothing is
+/// said (marks may still arrive); otherwise <see cref="StatusText"/> says "Nessun altro segno" for
+/// <see cref="StatusDuration"/>. The commands do not depend on a save running.</para>
 /// </remarks>
 public sealed class MarksViewModel : ObservableObject
 {
-    /// <summary>The list is rebuilt at most once per interval.</summary>
+    /// <summary>The list is brought in step with the index at most once per interval.</summary>
     public static readonly TimeSpan RefreshInterval = TimeSpan.FromMilliseconds(100);
 
     /// <summary>How long "no other mark" stays visible.</summary>
     public static readonly TimeSpan StatusDuration = TimeSpan.FromSeconds(2);
 
-    private const double _hereToleranceInPoints = 1.0;
+    /// <summary>A mark whose target is closer than this fraction of the window height to the view counts as "here".</summary>
+    public const double HereBandFraction = 0.15;
+
+    private const double _minimumBandInPoints = 1.0;
 
     private readonly DocumentViewportViewModel _viewport;
     private readonly IDelayScheduler _scheduler;
-    private readonly SynchronizationContext? _context;
-    private readonly int _uiThreadId;
     private readonly object _gate = new();
+    private readonly ObservableCollection<MarkItem> _items = [];
     private MarkIndex? _index;
     private MarkScanner? _scanner;
-    private IReadOnlyList<MarkItem> _items = [];
     private bool _isScanning;
     private string? _statusText;
     private IDisposable? _pendingRefresh;
     private IDisposable? _pendingStatusClear;
     private int _dirty;
-    private (Mark Mark, Core.Layout.ViewPosition Position)? _lastJump;
 
+    /// <param name="viewport">The view the commands move.</param>
+    /// <param name="scheduler">
+    /// The refresh throttle and the status timer: called from any thread (the scan's too), it runs its actions on the UI
+    /// thread, as <see cref="IDelayScheduler"/> requires (the app's <see cref="DispatcherDelayScheduler"/> marshals to
+    /// the dispatcher it was created on), so the list keeps following the index whatever thread changed it.
+    /// </param>
     public MarksViewModel(DocumentViewportViewModel viewport, IDelayScheduler scheduler)
     {
         ArgumentNullException.ThrowIfNull(viewport);
         ArgumentNullException.ThrowIfNull(scheduler);
         _viewport = viewport;
         _scheduler = scheduler;
-        _context = SynchronizationContext.Current;
-        _uiThreadId = Environment.CurrentManagedThreadId;
-        NextCommand = new RelayCommand(() => Step(forward: true), () => Count > 0);
-        PreviousCommand = new RelayCommand(() => Step(forward: false), () => Count > 0);
+        Items = new ReadOnlyObservableCollection<MarkItem>(_items);
+        NextCommand = new RelayCommand(() => Step(forward: true), CanStep);
+        PreviousCommand = new RelayCommand(() => Step(forward: false), CanStep);
         GoToMarkCommand = new RelayCommand<MarkItem>(GoToMark, item => item is not null);
     }
 
-    /// <summary>One row per mark, in document order.</summary>
-    public IReadOnlyList<MarkItem> Items
-    {
-        get => _items;
-        private set
-        {
-            var hadItems = _items.Count > 0;
-            if (SetProperty(ref _items, value))
-            {
-                OnPropertyChanged(nameof(Count));
-                OnPropertyChanged(nameof(IsEmpty));
-                if (hadItems != value.Count > 0)
-                {
-                    NextCommand.NotifyCanExecuteChanged();
-                    PreviousCommand.NotifyCanExecuteChanged();
-                }
-            }
-        }
-    }
+    /// <summary>One row per mark, in document order; updated in place (see the remarks).</summary>
+    public ReadOnlyObservableCollection<MarkItem> Items { get; }
 
     public int Count => _items.Count;
 
@@ -89,7 +85,13 @@ public sealed class MarksViewModel : ObservableObject
     public bool IsScanning
     {
         get => _isScanning;
-        private set => SetProperty(ref _isScanning, value);
+        private set
+        {
+            if (SetProperty(ref _isScanning, value))
+            {
+                NotifyCommands();
+            }
+        }
     }
 
     /// <summary>The empty list's text: what counts as a mark.</summary>
@@ -102,16 +104,16 @@ public sealed class MarksViewModel : ObservableObject
         private set => SetProperty(ref _statusText, value);
     }
 
-    /// <summary>Goes to the first mark after the current position (FR-102).</summary>
+    /// <summary>Goes to the next mark further down (FR-102); enabled with marks or while the scan runs.</summary>
     public IRelayCommand NextCommand { get; }
 
-    /// <summary>Goes to the last mark before the current position (FR-102).</summary>
+    /// <summary>Goes to the previous mark further up (FR-102); enabled with marks or while the scan runs.</summary>
     public IRelayCommand PreviousCommand { get; }
 
-    /// <summary>Goes to a row's mark (FR-103).</summary>
+    /// <summary>Goes to a row's mark (FR-103); no history entry when it is already shown.</summary>
     public IRelayCommand<MarkItem> GoToMarkCommand { get; }
 
-    /// <summary>The index of the document now shown, or none; the list is rebuilt from it at once.</summary>
+    /// <summary>The index of the document now shown, or none; the list follows it at once.</summary>
     internal void Attach(MarkIndex? index)
     {
         if (_index is { } previous)
@@ -120,7 +122,6 @@ public sealed class MarksViewModel : ObservableObject
         }
 
         _index = index;
-        _lastJump = null;
         if (index is not null)
         {
             index.Changed += OnIndexChanged;
@@ -157,6 +158,14 @@ public sealed class MarksViewModel : ObservableObject
         }
     }
 
+    private bool CanStep() => Count > 0 || IsScanning;
+
+    private void NotifyCommands()
+    {
+        NextCommand.NotifyCanExecuteChanged();
+        PreviousCommand.NotifyCanExecuteChanged();
+    }
+
     private void OnIndexChanged(object? sender, MarkIndexChangedEventArgs e) => Signal(changed: true);
 
     private void OnScanProgress(object? sender, EventArgs e) => Signal(changed: false);
@@ -169,14 +178,7 @@ public sealed class MarksViewModel : ObservableObject
             Interlocked.Exchange(ref _dirty, 1);
         }
 
-        if (Environment.CurrentManagedThreadId == _uiThreadId || _context is null)
-        {
-            ScheduleRefresh();
-        }
-        else
-        {
-            _context.Post(_ => ScheduleRefresh(), null);
-        }
+        ScheduleRefresh(); // the scheduler accepts any thread and runs the refresh on the UI thread
     }
 
     private void ScheduleRefresh()
@@ -206,54 +208,166 @@ public sealed class MarksViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Brings <see cref="Items"/> in step with the index by a merge over both sorted sequences: unchanged marks keep
+    /// their row, new ones are inserted where they belong, gone ones removed. Linear in the number of marks.
+    /// </summary>
     private void Rebuild()
     {
         var marks = _index?.AllMarks() ?? [];
-        Items = marks
-            .Select(m => new MarkItem(m, string.Format(CultureInfo.CurrentCulture, Strings.MarkPageLabelFormat, m.PageIndex + 1)))
-            .ToArray();
+        var countBefore = _items.Count;
+        int i = 0, j = 0;
+        while (j < marks.Count)
+        {
+            var mark = marks[j];
+            if (i == _items.Count)
+            {
+                _items.Add(NewItem(mark));
+            }
+            else if (_items[i].Mark.Equals(mark))
+            {
+                // Unchanged: the same row stays.
+            }
+            else
+            {
+                var order = Compare(_items[i].Mark, mark);
+                if (order < 0)
+                {
+                    _items.RemoveAt(i); // gone: look at the same new mark again
+                    continue;
+                }
+
+                if (order > 0)
+                {
+                    _items.Insert(i, NewItem(mark));
+                }
+                else
+                {
+                    _items[i] = NewItem(mark); // same place, different mark (its strokes changed)
+                }
+            }
+
+            i++;
+            j++;
+        }
+
+        while (_items.Count > i)
+        {
+            _items.RemoveAt(_items.Count - 1);
+        }
+
+        if (countBefore != _items.Count)
+        {
+            OnPropertyChanged(nameof(Count));
+            OnPropertyChanged(nameof(IsEmpty));
+            if ((countBefore == 0) != (_items.Count == 0))
+            {
+                NotifyCommands();
+            }
+        }
     }
+
+    // The index's own order: page, then top, then bottom.
+    private static int Compare(Mark a, Mark b)
+    {
+        var page = a.PageIndex.CompareTo(b.PageIndex);
+        if (page != 0)
+        {
+            return page;
+        }
+
+        var top = a.TopPt.CompareTo(b.TopPt);
+        return top != 0 ? top : a.BottomPt.CompareTo(b.BottomPt);
+    }
+
+    private static MarkItem NewItem(Mark mark) =>
+        new(mark, string.Format(CultureInfo.CurrentCulture, Strings.MarkPageLabelFormat, mark.PageIndex + 1));
 
     private void Step(bool forward)
     {
-        if (_index is not { } index || Count == 0 || _viewport.Layout is null)
+        if (_index is not { } index || _viewport.Layout is not { } layout)
         {
             return;
         }
 
-        var (page, y) = StartingPoint();
-        var found = forward
-            ? index.TryNext(page, y + _hereToleranceInPoints, out var mark)
-            : index.TryPrevious(page, y, out mark); // TryPrevious applies the same tolerance itself
-        if (!found)
+        var scanning = _scanner is { IsCompleted: false };
+        if (index.TotalMarkCount == 0 && !scanning)
         {
-            ShowStatus(Strings.MarksNoOther);
+            return; // nothing to go to at all: the commands are disabled
+        }
+
+        var currentTop = _viewport.AbsoluteTopPt(_viewport.Position);
+        var windowPt = Math.Max(0, _viewport.WindowHeightPt);
+        var band = Math.Max(_minimumBandInPoints, windowPt * HereBandFraction);
+        int startPage;
+        Mark? found = null;
+        if (forward)
+        {
+            startPage = _viewport.Position.PageIndex;
+            for (var p = Math.Max(startPage, 0); p < layout.PageCount && found is null; p++)
+            {
+                found = index.MarksOnPage(p).FirstOrDefault(m => Delta(m, currentTop) > band);
+            }
+        }
+        else
+        {
+            startPage = layout.PageAt(currentTop + windowPt);
+            for (var p = Math.Min(startPage, layout.PageCount - 1); p >= 0 && found is null; p--)
+            {
+                found = index.MarksOnPage(p).LastOrDefault(m => Delta(m, currentTop) < -band);
+            }
+        }
+
+        if (found is not null)
+        {
+            _viewport.ScrollToMark(found, recordHistory: true);
             return;
         }
 
-        JumpTo(mark);
+        if (scanning && HasUnscannedPages(index, layout.PageCount, startPage, forward))
+        {
+            return; // the scan has not been there yet: a mark may still appear, so "no other mark" would be wrong
+        }
+
+        ShowStatus(Strings.MarksNoOther);
     }
 
-    private (int Page, double YPt) StartingPoint()
+    /// <summary>How far the view would move for the mark, in points (positive = down); NaN when it cannot go there.</summary>
+    private double Delta(Mark mark, double currentTop) =>
+        _viewport.TargetPositionFor(mark) is { } target ? _viewport.AbsoluteTopPt(target) - currentTop : double.NaN;
+
+    private static bool HasUnscannedPages(MarkIndex index, int pageCount, int startPage, bool forward)
     {
-        var position = _viewport.Position;
-        return _lastJump is { } last && last.Position == position
-            ? (last.Mark.PageIndex, last.Mark.TopPt)
-            : (position.PageIndex, position.YPt);
+        if (forward)
+        {
+            for (var p = Math.Max(startPage, 0); p < pageCount; p++)
+            {
+                if (!index.IsScanned(p))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        for (var p = Math.Min(startPage, pageCount - 1); p >= 0; p--)
+        {
+            if (!index.IsScanned(p))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void GoToMark(MarkItem? item)
     {
-        if (item is not null && _viewport.Layout is not null)
+        if (item is not null)
         {
-            JumpTo(item.Mark);
+            _viewport.ScrollToMark(item.Mark, recordHistory: true);
         }
-    }
-
-    private void JumpTo(Mark mark)
-    {
-        _viewport.ScrollToMark(mark, recordHistory: true);
-        _lastJump = (mark, _viewport.Position);
     }
 
     private void ShowStatus(string text)

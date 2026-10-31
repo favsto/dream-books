@@ -306,6 +306,13 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Test hook: the scan running over the current renderer, if any.</summary>
     internal MarkScanner? MarkScannerForTest => _markScanner;
 
+    /// <summary>Test seam: builds the live tracker of a document's marks.</summary>
+    internal Func<DocumentSession, MarkRecognizer, MarkIndex, MarkTracker> MarkTrackerFactory { get; set; } =
+        static (session, recognizer, index) => new MarkTracker(session, recognizer, index);
+
+    /// <summary>Test hook: how many times the scan was recentred.</summary>
+    internal int MarkRecentresForTest { get; private set; }
+
     /// <summary>
     /// Whether the window may close (FR-85): waits for a running save, then, with unsaved changes, asks
     /// Save / Don't save / Cancel. Save closes only if the save succeeded; Don't save raises
@@ -1096,11 +1103,27 @@ public sealed class MainViewModel : ObservableObject
     /// A new document: a new index, the tracker for its loaded pages (it recognises those already loaded at once),
     /// the list, then the scan over the current renderer around the current page.
     /// </summary>
+    /// <remarks>
+    /// Runs at the end of <see cref="Swap"/>, after the session is current: a failure here (the tracker recognises the
+    /// loaded pages at once) must not leave the swap half done, so marks are simply off for this document.
+    /// </remarks>
     private void StartMarks(DocumentSession session)
     {
-        _markIndex = new MarkIndex(session.PageCount);
-        _markTracker = new MarkTracker(session, _markRecognizer, _markIndex);
-        Marks.Attach(_markIndex);
+        var index = new MarkIndex(session.PageCount);
+        try
+        {
+            _markTracker = MarkTrackerFactory(session, _markRecognizer, index);
+        }
+#pragma warning disable CA1031 // Marks are an aid: the document stays open without them.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            _markTracker = null;
+            return;
+        }
+
+        _markIndex = index;
+        Marks.Attach(index);
         StartScan();
     }
 
@@ -1559,7 +1582,11 @@ public sealed class MainViewModel : ObservableObject
 
             // Only settled page changes and jumps reach here (the viewport debounces scrolling): the scan goes on
             // around the page being read.
-            _markScanner?.Recentre(Math.Max(session.CurrentPageIndex, 0));
+            if (_markScanner is { } scanner)
+            {
+                scanner.Recentre(Math.Max(session.CurrentPageIndex, 0));
+                MarkRecentresForTest++;
+            }
         }
     }
 

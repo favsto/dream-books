@@ -233,21 +233,23 @@ public sealed class DocumentViewportViewModel : ObservableObject
     public void ScrollToPage(int pageIndex, bool recordHistory) =>
         JumpToPage(pageIndex, recordHistory, CurrentPageReport.Immediate);
 
+    /// <summary>Height of the window in page points at the current zoom; 0 while the view has not reported its size.</summary>
+    public double WindowHeightPt => _viewportHeightDip / (_position.Zoom * Units.DipPerPt);
+
     /// <summary>
-    /// Brings a mark into view (FR-102, FR-103): its vertical extent is centred in the window when it fits, otherwise
-    /// its top is aligned with the window's top. The zoom and the column stay. The page under the centre becomes
-    /// current at once and <see cref="Jumped"/> is raised, like go-to-page; with <paramref name="recordHistory"/> the
-    /// previous position is pushed on <see cref="History"/>. Ignored without a document or for a page outside it.
+    /// Where <see cref="ScrollToMark"/> would scroll for <paramref name="mark"/>, without moving: the mark's vertical
+    /// extent centred in the window when it fits, otherwise its top aligned with the window's top, clamped to the
+    /// scrollable extent; the zoom and the column stay. Null without a document or for a page outside it.
     /// </summary>
-    public void ScrollToMark(Mark mark, bool recordHistory)
+    public ViewPosition? TargetPositionFor(Mark mark)
     {
         ArgumentNullException.ThrowIfNull(mark);
         if (_layout is not { } layout || mark.PageIndex < 0 || mark.PageIndex >= layout.PageCount)
         {
-            return;
+            return null;
         }
 
-        var windowPt = _viewportHeightDip / (_position.Zoom * Units.DipPerPt);
+        var windowPt = WindowHeightPt;
         var extentPt = Math.Max(0, mark.BottomPt - mark.TopPt);
         var topPt = layout.PageTopPt(mark.PageIndex) + mark.TopPt;
         if (windowPt > 0 && extentPt <= windowPt)
@@ -257,14 +259,56 @@ public sealed class DocumentViewportViewModel : ObservableObject
 
         topPt = Math.Clamp(topPt, 0, layout.TotalHeightPt);
         var page = layout.PageAt(topPt);
+        return Normalize(new ViewPosition(page, topPt - layout.PageTopPt(page), _position.ColumnXPt, _position.Zoom));
+    }
+
+    /// <summary>The top edge of a position in points from the top of the document; 0 without a document.</summary>
+    public double AbsoluteTopPt(ViewPosition position) =>
+        _layout is { } layout && position.PageIndex >= 0 && position.PageIndex < layout.PageCount
+            ? layout.PageTopPt(position.PageIndex) + position.YPt
+            : 0;
+
+    /// <summary>
+    /// Brings a mark into view (FR-102, FR-103) at <see cref="TargetPositionFor"/>. The page under the centre becomes
+    /// current at once and <see cref="Jumped"/> is raised, like go-to-page; with <paramref name="recordHistory"/> the
+    /// previous position is pushed on <see cref="History"/>. When the view is already there (the same scroll offsets,
+    /// e.g. two marks clamped to the end of the document, or the mark already shown) nothing happens: no history
+    /// entry, no event. Returns whether the view moved. Ignored without a document or for a page outside it.
+    /// </summary>
+    public bool ScrollToMark(Mark mark, bool recordHistory)
+    {
+        if (TargetPositionFor(mark) is not { } target || IsSamePlace(target, _position))
+        {
+            return false;
+        }
+
         if (recordHistory)
         {
             History.Push(_position);
         }
 
-        SetPosition(Normalize(new ViewPosition(page, topPt - layout.PageTopPt(page), _position.ColumnXPt, _position.Zoom)));
+        SetPosition(target);
         Refresh(CurrentPageReport.Immediate, forceCurrent: null);
         Jumped?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>Two positions the view shows identically: offsets within half a DIP (or equal points without a size).</summary>
+    private bool IsSamePlace(ViewPosition a, ViewPosition b)
+    {
+        if (_layout is not { } layout || Math.Abs(a.Zoom - b.Zoom) > _zoomEpsilon)
+        {
+            return false;
+        }
+
+        if (HasViewport)
+        {
+            var (ax, ay) = layout.ToOffsets(a, _viewportWidthDip, _viewportHeightDip);
+            var (bx, by) = layout.ToOffsets(b, _viewportWidthDip, _viewportHeightDip);
+            return Math.Abs(ax - bx) < _sameOffsetDip && Math.Abs(ay - by) < _sameOffsetDip;
+        }
+
+        return Math.Abs(AbsoluteTopPt(a) - AbsoluteTopPt(b)) < _zoomEpsilon && Math.Abs(a.ColumnXPt - b.ColumnXPt) < _zoomEpsilon;
     }
 
     /// <summary>
