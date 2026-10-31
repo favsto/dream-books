@@ -194,7 +194,7 @@
         </Expander>
 
         <Grid x:Name="PageHost">
-            <views:PageView x:Name="PageViewer" />
+            <views:DocumentView x:Name="DocumentViewer" />
             <!-- Shown until a document is open; the error line stays visible over the page. -->
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
                 <TextBlock Text="{x:Static res:Strings.NoDocument}" TextAlignment="Center">
@@ -202,7 +202,7 @@
                         <Style TargetType="TextBlock">
                             <Setter Property="Visibility" Value="Collapsed" />
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding Editor}" Value="{x:Null}">
+                                <DataTrigger Binding="{Binding Session}" Value="{x:Null}">
                                     <Setter Property="Visibility" Value="Visible" />
                                 </DataTrigger>
                             </Style.Triggers>

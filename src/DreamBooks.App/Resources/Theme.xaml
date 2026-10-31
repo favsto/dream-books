@@ -13,6 +13,13 @@
     <SolidColorBrush x:Key="EraserCursorOutline" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" />
     <sys:Double x:Key="EraserCursorOutlineThickness">1</sys:Double>
 
+    <!-- Document view (phase 3a): neutral backdrop around the pages; a page not rendered yet is white paper that
+         fades in lightly (instant when Windows animations are off, NFR-03, NFR-32). -->
+    <SolidColorBrush x:Key="PageBackdropBrush" Color="{DynamicResource {x:Static SystemColors.ControlColorKey}}" />
+    <SolidColorBrush x:Key="PagePlaceholderBrush" Color="White" />
+    <Duration x:Key="PageFadeInDuration">0:0:0.15</Duration>
+    <sys:Double x:Key="PageFadeInFromOpacity">0.6</sys:Double>
+
     <Style TargetType="Button">
         <Setter Property="MinWidth" Value="{StaticResource TouchTarget}" />
         <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />

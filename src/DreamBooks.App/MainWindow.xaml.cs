@@ -127,6 +127,12 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnFitWidthClick(object sender, RoutedEventArgs e) =>
-        _viewModel.ZoomVm.FitWidth(PageViewer.FitWidthViewport, _viewModel.PageSize.WidthPt);
+    /// <summary>Fit width (FR-07): turns the mode on, fitting the widest page; nothing to do when it is already on.</summary>
+    private void OnFitWidthClick(object sender, RoutedEventArgs e)
+    {
+        if (!_viewModel.Viewport.IsFitWidth)
+        {
+            _viewModel.Viewport.ToggleFitWidth(null);
+        }
+    }
 }

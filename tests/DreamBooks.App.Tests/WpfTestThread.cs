@@ -43,6 +43,28 @@ internal static class WpfTestThread
     public static void Drain() =>
         Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
 
+    /// <summary>
+    /// Pumps the dispatcher (on the WPF thread) until <paramref name="condition"/> holds, e.g. while a load completes
+    /// on the PDFium thread and its continuation is posted back here. Throws after <paramref name="timeoutMs"/>.
+    /// </summary>
+    public static void PumpUntil(Func<bool> condition, int timeoutMs = 10_000)
+    {
+        ArgumentNullException.ThrowIfNull(condition);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition())
+        {
+            if (watch.ElapsedMilliseconds > timeoutMs)
+            {
+                throw new TimeoutException("The condition did not become true while pumping the dispatcher.");
+            }
+
+            var frame = new DispatcherFrame();
+            Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, () => frame.Continue = false);
+            Dispatcher.PushFrame(frame);
+            Thread.Sleep(2);
+        }
+    }
+
     private static Dispatcher Start()
     {
         Dispatcher? dispatcher = null;

@@ -15,20 +15,36 @@ using CorePage = DreamBooks.Core.Model.Page;
 namespace DreamBooks.App.Ink;
 
 /// <summary>
-/// The page itself: PDF bitmap, committed ink (outline layer) and the wet ink of the pen.
-/// Its size is the page size × <see cref="Scale"/>; strokes are kept in page points and only scaled to
-/// draw (FR-26). Pen ink is drawn live by a <see cref="DynamicRenderer"/> on the real-time stylus thread
-/// (FR-24, NFR-04); on pen-up one stroke is committed through <see cref="PageEditor.CommitStroke"/>.
+/// One page: white paper (the placeholder, never a hole, NFR-03), PDF bitmap, committed ink (outline layer) and the
+/// wet ink of the pen. Its size is the page size × <see cref="Scale"/>; strokes are kept in page points and only
+/// scaled to draw (FR-26). Pen ink is drawn live by a <see cref="DynamicRenderer"/> on the real-time stylus thread
+/// (FR-24, NFR-04); on pen-up one stroke is committed through this surface's own <see cref="Editor"/>, clipped to
+/// its page (FR-27). Without an editor (strokes not loaded yet) the surface shows the page but accepts no ink.
 /// Fingers never ink (they reach the viewport for pan and zoom); the mouse inks like the pen (NFR-23).
 /// The pen's back end erases whatever tool is active, and the tip or the mouse erase with the eraser tool
-/// (FR-30, FR-34): the gesture runs through <see cref="MainViewModel.BeginErase"/>, and the working copy
-/// is drawn as committed ink until it ends. A circle shows the eraser area while hovering (FR-32).
+/// (FR-30, FR-34): the gesture runs through <see cref="MainViewModel.BeginErase(PageEditor)"/> on this page, and
+/// the working copy is drawn as committed ink until it ends. A circle shows the eraser area while hovering (FR-32).
 /// </summary>
 public sealed class InkSurface : FrameworkElement
 {
     public static readonly DependencyProperty ViewModelProperty = DependencyProperty.Register(
         nameof(ViewModel), typeof(MainViewModel), typeof(InkSurface),
         new PropertyMetadata(null, (d, e) => ((InkSurface)d).OnViewModelChanged((MainViewModel?)e.OldValue, (MainViewModel?)e.NewValue)));
+
+    /// <summary>The editor of the page this surface shows; null while the page's strokes are not loaded.</summary>
+    public static readonly DependencyProperty EditorProperty = DependencyProperty.Register(
+        nameof(Editor), typeof(PageEditor), typeof(InkSurface),
+        new PropertyMetadata(null, (d, e) => ((InkSurface)d).OnEditorChanged((PageEditor?)e.NewValue)));
+
+    /// <summary>Page size in points, used for the placeholder while <see cref="Page"/> is null.</summary>
+    public static readonly DependencyProperty PageSizePtProperty = DependencyProperty.Register(
+        nameof(PageSizePt), typeof(Size), typeof(InkSurface),
+        new FrameworkPropertyMetadata(default(Size), FrameworkPropertyMetadataOptions.AffectsMeasure));
+
+    /// <summary>The paper under the bitmap: what a page shows before its bitmap arrives.</summary>
+    public static readonly DependencyProperty PlaceholderBrushProperty = DependencyProperty.Register(
+        nameof(PlaceholderBrush), typeof(Brush), typeof(InkSurface),
+        new FrameworkPropertyMetadata(Brushes.White, FrameworkPropertyMetadataOptions.AffectsRender));
 
     public static readonly DependencyProperty PageProperty = DependencyProperty.Register(
         nameof(Page), typeof(CorePage), typeof(InkSurface),
@@ -109,6 +125,7 @@ public sealed class InkSurface : FrameworkElement
         }
 
         ClipToBounds = true;
+        SetResourceReference(PlaceholderBrushProperty, "PagePlaceholderBrush");
         Stylus.SetIsPressAndHoldEnabled(this, false);
         Stylus.SetIsFlicksEnabled(this, false);
         Stylus.SetIsTapFeedbackEnabled(this, false);
@@ -130,10 +147,32 @@ public sealed class InkSurface : FrameworkElement
         set => SetValue(ViewModelProperty, value);
     }
 
+    /// <summary>
+    /// The editor of the shown page: ink, erase and commit go through it, never through the current page's editor.
+    /// Setting one also shows its page. Null: placeholder only, no ink.
+    /// </summary>
+    public PageEditor? Editor
+    {
+        get => (PageEditor?)GetValue(EditorProperty);
+        set => SetValue(EditorProperty, value);
+    }
+
     public CorePage? Page
     {
         get => (CorePage?)GetValue(PageProperty);
         set => SetValue(PageProperty, value);
+    }
+
+    public Size PageSizePt
+    {
+        get => (Size)GetValue(PageSizePtProperty);
+        set => SetValue(PageSizePtProperty, value);
+    }
+
+    public Brush? PlaceholderBrush
+    {
+        get => (Brush?)GetValue(PlaceholderBrushProperty);
+        set => SetValue(PlaceholderBrushProperty, value);
     }
 
     /// <summary>DIPs per page point: zoom × <see cref="Units.DipPerPt"/>.</summary>
@@ -171,6 +210,9 @@ public sealed class InkSurface : FrameworkElement
 
     /// <summary>True while a pen or mouse stroke or an eraser gesture is live; the viewport must not pan or zoom then.</summary>
     public bool IsInking => _penPoints is not null || _mousePoints is not null || _erase is not null;
+
+    /// <summary>Raised when a stroke or eraser gesture ends (committed or cancelled): <see cref="IsInking"/> is false again.</summary>
+    public event EventHandler? InkingEnded;
 
     /// <summary>The eraser area circle (FR-32); exposed for tests.</summary>
     internal FrameworkElement EraserCursor => _eraserCursor;
@@ -212,8 +254,9 @@ public sealed class InkSurface : FrameworkElement
     {
         ArgumentNullException.ThrowIfNull(drawingContext);
 
-        // Transparent background so the whole page is hit-testable for stylus and mouse input.
-        drawingContext.DrawRectangle(Brushes.Transparent, null, new Rect(RenderSize));
+        // The paper under the bitmap (and the placeholder until it arrives); also makes the whole page hit-testable
+        // for stylus and mouse input.
+        drawingContext.DrawRectangle(PlaceholderBrush ?? Brushes.Transparent, null, new Rect(RenderSize));
     }
 
     protected override void OnStylusInRange(StylusEventArgs e)
@@ -471,14 +514,14 @@ public sealed class InkSurface : FrameworkElement
     /// <param name="stylusId">The pen's stylus device Id, or null for the mouse.</param>
     internal bool BeginEraseGesture(bool inverted, int? stylusId)
     {
-        if (IsInking || ViewModel is not { Editor: { } editor } vm || !ReferenceEquals(editor.Page, Page))
+        if (IsInking || Editor is not { } editor || ViewModel is not { } vm || !ReferenceEquals(editor.Page, Page))
         {
             return false;
         }
 
-        if (!inverted && vm.Tools.EffectiveTool != AppTool.Eraser)
+        if ((!inverted && vm.Tools.EffectiveTool != AppTool.Eraser) || vm.ActiveErase is not null)
         {
-            return false;
+            return false; // not erasing, or a gesture is live on another page (one at a time)
         }
 
         if (inverted)
@@ -486,8 +529,9 @@ public sealed class InkSurface : FrameworkElement
             vm.Tools.BeginInvertedEraser();
         }
 
-        vm.BeginErase();
-        if (vm.ActiveErase is null)
+        // One gesture at a time, on the page where it starts: a gesture live on another page refuses this one.
+        vm.BeginErase(editor);
+        if (vm.ActiveErase is null || !ReferenceEquals(vm.ActiveErasePage, editor))
         {
             if (inverted)
             {
@@ -540,7 +584,11 @@ public sealed class InkSurface : FrameworkElement
         var vm = ViewModel;
         try
         {
-            vm?.EndErase();
+            // Only this page's gesture: if it was dropped meanwhile (undo mid-gesture), another page's is not ended.
+            if (vm is not null && Editor is { } editor && ReferenceEquals(vm.ActiveErasePage, editor))
+            {
+                vm.EndErase();
+            }
         }
         finally
         {
@@ -550,7 +598,63 @@ public sealed class InkSurface : FrameworkElement
             }
 
             UpdateRendererEnabled(null);
+            InkingEnded?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    /// <summary>
+    /// Drops whatever gesture is live without committing anything (the surface is recycled or its document goes):
+    /// a stroke is discarded, an erase cancelled, capture released, the zoom unlocked, the back end's tool given back.
+    /// </summary>
+    internal void CancelLiveGesture()
+    {
+        if (!IsInking)
+        {
+            return;
+        }
+
+        var vm = ViewModel;
+        var hadStroke = _penPoints is not null || _mousePoints is not null;
+        _penPoints = null;
+        _mousePoints = null;
+        if (_mouseWet is not null)
+        {
+            _presenter.Strokes.Remove(_mouseWet);
+            _mouseWet = null;
+        }
+
+        if (_erase is { } gesture)
+        {
+            _erase = null;
+            if (vm is not null && Editor is { } editor && ReferenceEquals(vm.ActiveErasePage, editor))
+            {
+                vm.CancelErase();
+            }
+
+            if (gesture.Inverted)
+            {
+                vm?.Tools.EndInvertedEraser();
+            }
+        }
+
+        if (Stylus.Captured == this)
+        {
+            Stylus.Capture(null);
+        }
+
+        if (IsMouseCaptured)
+        {
+            ReleaseMouseCapture();
+        }
+
+        if (hadStroke)
+        {
+            LockZoom(false);
+        }
+
+        HideEraserCursor();
+        UpdateRendererEnabled(null);
+        InkingEnded?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
@@ -592,11 +696,15 @@ public sealed class InkSurface : FrameworkElement
     private static bool ReportsPressure(TabletDevice? tablet) =>
         tablet is not null && tablet.SupportedStylusPointProperties.Any(p => p.Id == StylusPointProperties.NormalPressure.Id);
 
-    private Size PageSizeDip() => Page is { } page ? new Size(page.WidthPt * Scale, page.HeightPt * Scale) : default;
+    private Size PageSizeDip() => Page is { } page
+        ? new Size(page.WidthPt * Scale, page.HeightPt * Scale)
+        : new Size(PageSizePt.Width * Scale, PageSizePt.Height * Scale);
 
+    /// <summary>Only a page whose strokes are loaded (an editor of its own) accepts ink.</summary>
     private bool CanInk(StylusDevice? device) =>
-        ViewModel is { Editor: not null } vm
-        && ReferenceEquals(vm.Editor.Page, Page)
+        Editor is { } editor
+        && ReferenceEquals(editor.Page, Page)
+        && ViewModel is { } vm
         && vm.Tools.EffectiveTool == AppTool.Pen
         && device?.Inverted != true;
 
@@ -606,12 +714,23 @@ public sealed class InkSurface : FrameworkElement
         return new StrokeStyle(tools.Color, tools.BaseWidthPt);
     }
 
-    private void AppendStylusPoints(StylusEventArgs e)
+    private void AppendStylusPoints(StylusEventArgs e) => AppendPenPoints(e.GetStylusPoints(this), e.Timestamp);
+
+    /// <summary>
+    /// Adds samples (surface DIPs, relative to this page even beyond its edges: the stroke is clipped on commit, FR-27)
+    /// to the live pen stroke. Separate from the event handler so tests can drive it.
+    /// </summary>
+    internal void AppendPenPoints(IReadOnlyList<StylusPoint> points, int timestamp)
     {
-        var scale = Scale;
-        foreach (var sp in e.GetStylusPoints(this))
+        if (_penPoints is null)
         {
-            _penPoints!.Add(StylusPointConverter.ToInkPoint(sp, scale, e.Timestamp, _penHasPressure));
+            return;
+        }
+
+        var scale = Scale;
+        foreach (var sp in points)
+        {
+            _penPoints.Add(StylusPointConverter.ToInkPoint(sp, scale, timestamp, _penHasPressure));
         }
     }
 
@@ -653,7 +772,10 @@ public sealed class InkSurface : FrameworkElement
 
     /// <summary>The working copy while an eraser gesture is live on this page, the page strokes otherwise.</summary>
     private IReadOnlyList<InkStroke> CurrentStrokes() =>
-        ViewModel is { ActiveErase: { } erase, Editor: { } editor } && ReferenceEquals(editor.Page, Page)
+        ViewModel is { ActiveErase: { } erase, ActiveErasePage: { } erasePage }
+        && Editor is { } editor
+        && ReferenceEquals(erasePage, editor)
+        && ReferenceEquals(editor.Page, Page)
             ? erase.Strokes
             : Page?.Strokes ?? Array.Empty<InkStroke>();
 
@@ -680,6 +802,7 @@ public sealed class InkSurface : FrameworkElement
         }
 
         Commit(points, _penStyle);
+        InkingEnded?.Invoke(this, EventArgs.Empty);
     }
 
     private void FinishMouseStroke()
@@ -698,15 +821,17 @@ public sealed class InkSurface : FrameworkElement
         }
 
         Commit(points, _mouseStyle);
+        InkingEnded?.Invoke(this, EventArgs.Empty);
     }
 
     private void Commit(List<InkPoint> points, StrokeStyle style)
     {
         // Committing raises Page.StrokesChanged, which redraws the committed ink synchronously, before the
-        // dynamic renderer drops its wet visual: no gap between wet and committed ink.
+        // dynamic renderer drops its wet visual: no gap between wet and committed ink. The editor clips the stroke
+        // to this page (FR-27).
         try
         {
-            if (points.Count > 0 && ViewModel?.Editor is { } editor && ReferenceEquals(editor.Page, Page))
+            if (points.Count > 0 && Editor is { } editor && ReferenceEquals(editor.Page, Page))
             {
                 editor.CommitStroke(points, InkTool.Pen, style.Color, style.WidthPt);
             }
@@ -761,6 +886,18 @@ public sealed class InkSurface : FrameworkElement
         UpdateRendererEnabled(null);
         HideEraserCursor();
         SetCurrentValue(DisplayStrokesProperty, CurrentStrokes());
+    }
+
+    private void OnEditorChanged(PageEditor? editor)
+    {
+        if (editor is not null && !ReferenceEquals(editor.Page, Page))
+        {
+            SetCurrentValue(PageProperty, editor.Page); // refreshes the strokes and the renderer gating
+            return;
+        }
+
+        SetCurrentValue(DisplayStrokesProperty, CurrentStrokes());
+        UpdateRendererEnabled(null);
     }
 
     private void OnToolsChanged(object? sender, PropertyChangedEventArgs e)
@@ -850,7 +987,8 @@ public sealed class InkSurface : FrameworkElement
             return;
         }
 
-        var enabled = ViewModel is { Editor: not null } vm
+        var enabled = Editor is not null
+            && ViewModel is { } vm
             && vm.Tools.EffectiveTool == AppTool.Pen
             && device?.Inverted != true;
         if (_renderer.Enabled != enabled)

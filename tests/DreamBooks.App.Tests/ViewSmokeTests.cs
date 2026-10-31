@@ -44,7 +44,7 @@ public sealed class ViewSmokeTests : IDisposable
     }
 
     [Fact]
-    public void Main_window_loads_its_xaml_and_hosts_the_page_view()
+    public void Main_window_loads_its_xaml_and_hosts_the_document_view()
     {
         WpfTestThread.Run(() =>
         {
@@ -52,7 +52,7 @@ public sealed class ViewSmokeTests : IDisposable
             try
             {
                 Assert.IsType<MainViewModel>(window.DataContext);
-                Assert.NotNull(window.PageViewer);
+                Assert.NotNull(window.DocumentViewer);
                 LayOut((FrameworkElement)window.Content, 1000, 700);
             }
             finally
@@ -425,74 +425,73 @@ public sealed class ViewSmokeTests : IDisposable
     }
 
     [Fact]
-    public async Task Page_view_shows_page_1_strokes_again_after_visiting_page_2()
+    public async Task Document_view_keeps_each_page_on_its_own_surface_across_go_to_page()
     {
         var path = Path.Combine(_dir, "fake.pdf");
         await File.WriteAllBytesAsync(path, [1, 2, 3]);
-        var vm = new MainViewModel(new FakeFileDialogService { NextPath = path });
+        var vm = new MainViewModel(new FakeFileDialogService { NextPath = path }, scheduler: new ManualScheduler());
         new FakePageSource((200, 300), (400, 500)).InstallOn(vm);
         await vm.OpenPdfCommand.ExecuteAsync(null);
 
         WpfTestThread.Run(() =>
         {
-            var view = new PageView { DataContext = vm };
+            var view = new DocumentView { DataContext = vm };
             LayOut(view, 1000, 1000);
-            var surface = view.Surface;
-            Assert.True(vm.Editor!.CommitStroke(_line, InkTool.Pen, vm.Tools.Color, 1));
-            var page1 = vm.Editor.Page;
-            Assert.Same(page1, surface.Page);
-            Assert.Single(surface.CustomLayer.Strokes);
+            view.FlushEditorLoads(); // the fake source loads synchronously
+            var first = view.SurfaceFor(0)!;
+            Assert.True(first.Editor!.CommitStroke(_line, InkTool.Pen, vm.Tools.Color, 1));
+            var page1 = first.Editor.Page;
+            Assert.Single(first.CustomLayer.Strokes);
 
-            // The fake source loads synchronously, so navigation completes before the call returns.
             Assert.True(vm.GoToPageCommand.ExecuteAsync(2).IsCompletedSuccessfully);
+            LayOut(view, 1000, 1000);
             WpfTestThread.Drain();
-            Assert.NotSame(page1, surface.Page);
-            Assert.Equal(400, surface.Page!.WidthPt);
-            Assert.Empty(surface.DisplayStrokes);
-            Assert.Empty(surface.CustomLayer.Strokes);
+            var second = view.SurfaceFor(1)!;
+            Assert.Equal(400, second.Page!.WidthPt);
+            Assert.Empty(second.DisplayStrokes);
+            Assert.Empty(second.CustomLayer.Strokes);
 
             Assert.True(vm.GoToPageCommand.ExecuteAsync(1).IsCompletedSuccessfully);
-            WpfTestThread.Drain();
-            Assert.Same(page1, surface.Page);
-            Assert.Same(page1.Strokes, surface.DisplayStrokes);
-            Assert.Single(surface.CustomLayer.Strokes);
             LayOut(view, 1000, 1000);
+            WpfTestThread.Drain();
+            first = view.SurfaceFor(0)!;
+            Assert.Same(page1, first.Page);
+            Assert.Same(page1.Strokes, first.DisplayStrokes);
+            Assert.Single(first.CustomLayer.Strokes);
         });
     }
 
     [Fact]
-    public async Task Page_view_applies_a_restored_position_and_reports_the_settled_view()
+    public async Task Document_view_scroll_is_journalled_by_the_view_model_once_settled()
     {
         var path = Path.Combine(_dir, "fake.pdf");
         await File.WriteAllBytesAsync(path, [1, 2, 3]);
         var store = new RecoveryStore(Path.Combine(_dir, "recovery"));
         var dialogs = new FakeFileDialogService { NextPath = path, SaveChangesAnswer = SaveChangesAnswer.DontSave };
-        var vm = new MainViewModel(dialogs, store);
-        new FakePageSource((600, 800)).InstallOn(vm);
+        var scheduler = new ManualScheduler();
+        var vm = new MainViewModel(dialogs, store, scheduler: scheduler);
+        new FakePageSource((600, 800), (600, 800), (600, 800)).InstallOn(vm);
         await vm.OpenPdfCommand.ExecuteAsync(null);
         Assert.True(vm.Editor!.CommitStroke(_line, InkTool.Pen, vm.Tools.Color, 1)); // dirty: views are journalled
 
         WpfTestThread.Run(() =>
         {
-            vm.ZoomVm.Zoom = 2;
-            var view = new PageView { DataContext = vm };
-            LayOut(view, 300, 300);
-
-            view.ApplyRestoredView(new RestoredView(2, 100, 150));
-            LayOut(view, 300, 300);
+            var view = new DocumentView { DataContext = vm };
+            LayOut(view, 400, 300);
+            vm.ZoomVm.Zoom = 1;
+            LayOut(view, 400, 300);
+            view.Viewport.ScrollToVerticalOffset(((800 + 8) * Units.DipPerPt) + 150);
+            LayOut(view, 400, 300);
             WpfTestThread.Drain();
-
-            Assert.Equal(100, view.Viewport.HorizontalOffset);
-            Assert.Equal(150, view.Viewport.VerticalOffset);
-            Assert.True(view.IsViewStateReportPending); // waits for the view to stay still
-            Assert.Equal(TimeSpan.FromMilliseconds(500), PageView.ViewStateDelay);
-
-            view.ReportViewState(); // what the timer does after 500 ms
-            Assert.False(view.IsViewStateReportPending);
+            Assert.Equal(1, vm.Viewport.Position.PageIndex);
+            scheduler.Advance(MainViewModel.ViewSettleDelay);
         });
 
         var last = store.Find(path)!.Contents.Entries.OfType<DreamBooks.Core.Journal.ViewEntry>().Last();
-        Assert.Equal(new DreamBooks.Core.Journal.ViewEntry(0, 2, 100, 150), last);
+        Assert.Equal(1, last.PageIndex);
+        Assert.Equal(1, last.Zoom, 9);
+        Assert.Equal(150 / Units.DipPerPt, last.ScrollY, 6); // points inside the page, not DIPs
+        Assert.False(last.FitWidth);
         Assert.True(await vm.CanCloseAsync());
     }
 
@@ -571,7 +570,7 @@ public sealed class ViewSmokeTests : IDisposable
         }
     }
 
-    private static InkSurface CreateSurface(MainViewModel vm) => new() { ViewModel = vm, Page = vm.Editor!.Page };
+    private static InkSurface CreateSurface(MainViewModel vm) => new() { ViewModel = vm, Editor = vm.Editor };
 
     private static void LayOut(FrameworkElement element, double width, double height)
     {
