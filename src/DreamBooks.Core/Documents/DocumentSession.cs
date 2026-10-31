@@ -11,7 +11,8 @@ namespace DreamBooks.Core.Documents;
 /// (FR-62, FR-83, NFR-02).
 /// </summary>
 /// <remarks>
-/// Mutation and events belong to one thread (the UI thread). <see cref="EnsurePageAsync"/> and
+/// Mutation and events belong to one thread (the UI thread), except <see cref="PageStrokesChanged"/>, which
+/// documents its own threading. <see cref="EnsurePageAsync"/> and
 /// <see cref="EnsureEditorAsync"/> may be awaited concurrently: callers share one load per page, which runs
 /// without the callers' tokens so that one caller cancelling does not cancel the load for the others; a failed
 /// load is not cached. Every loaded page can have an editor, so several visible pages can be edited at once;
@@ -54,6 +55,17 @@ public sealed class DocumentSession : IDisposable
     public event EventHandler<RevealRequestedEventArgs>? RevealRequested;
 
     public event EventHandler? DirtyChanged;
+
+    /// <summary>
+    /// Raised when a loaded page's strokes change (stroke added, erased, undone, redone) and once when a page
+    /// finishes loading. Unlike the other events it may be raised off the UI thread: an edit raises it on the
+    /// thread that changed the page (synchronously, inside the command); a load raises it on the context of the
+    /// call that started the load (the UI thread for the app's loads, a pool thread otherwise), never while the
+    /// session's lock is held. Handlers must be thread-safe, cheap and must not throw: an exception from a
+    /// handler of a load notification is swallowed, the load itself succeeded. Nothing is raised after
+    /// <see cref="Dispose"/>; unloaded pages are not listened to.
+    /// </summary>
+    public event EventHandler<PageStrokesChangedEventArgs>? PageStrokesChanged;
 
     public string Path { get; private set; }
 
@@ -109,6 +121,7 @@ public sealed class DocumentSession : IDisposable
         ValidatePageIndex(pageIndex);
 
         Task<LoadedPage> load;
+        var started = false;
         lock (_gate)
         {
             if (_pages.TryGetValue(pageIndex, out var loaded))
@@ -121,6 +134,7 @@ public sealed class DocumentSession : IDisposable
                 // The lock is held until the task is registered, so the load's own cleanup
                 // (which takes the lock) always runs after the registration.
                 pending = LoadAsync(pageIndex);
+                started = true;
                 if (!pending.IsCompleted)
                 {
                     _loads[pageIndex] = pending;
@@ -128,6 +142,12 @@ public sealed class DocumentSession : IDisposable
             }
 
             load = pending;
+        }
+
+        if (started)
+        {
+            // Outside the lock; for a load that already completed this raises before returning.
+            _ = RaiseWhenLoadedAsync(load, pageIndex);
         }
 
         return (await load.WaitAsync(ct)).Page;
@@ -310,15 +330,25 @@ public sealed class DocumentSession : IDisposable
         UpdateDirty();
     }
 
-    /// <summary>Stops listening to the undo history; no event is raised afterwards. Idempotent.</summary>
+    /// <summary>
+    /// Stops listening to the undo history and to the loaded pages; no event is raised afterwards. Idempotent.
+    /// </summary>
     public void Dispose()
     {
-        if (_disposed)
+        lock (_gate)
         {
-            return;
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            foreach (var loaded in _pages.Values)
+            {
+                loaded.Page.StrokesChanged -= OnPageStrokesChanged;
+            }
         }
 
-        _disposed = true;
         Undo.CommandApplied -= OnCommandApplied;
     }
 
@@ -380,6 +410,11 @@ public sealed class DocumentSession : IDisposable
             lock (_gate)
             {
                 _pages[pageIndex] = loaded;
+                if (!_disposed)
+                {
+                    // Only loaded pages are listened to; Dispose (under the same lock) unsubscribes them.
+                    loaded.Page.StrokesChanged += OnPageStrokesChanged;
+                }
             }
 
             return loaded;
@@ -390,6 +425,49 @@ public sealed class DocumentSession : IDisposable
             {
                 _loads.Remove(pageIndex);
             }
+        }
+    }
+
+    private async Task RaiseWhenLoadedAsync(Task<LoadedPage> load, int pageIndex)
+    {
+        try
+        {
+            await load;
+        }
+        catch (Exception)
+        {
+            return; // A failed load is reported to its callers, who await it; nothing changed.
+        }
+
+        try
+        {
+            RaisePageStrokesChanged(pageIndex);
+        }
+        catch (Exception)
+        {
+            // Nobody awaits this notification: a throwing handler must not leave an unobserved exception.
+        }
+    }
+
+    private void OnPageStrokesChanged(object? sender, EventArgs e)
+    {
+        if (sender is Page page)
+        {
+            RaisePageStrokesChanged(page.Index);
+        }
+    }
+
+    private void RaisePageStrokesChanged(int pageIndex)
+    {
+        bool disposed;
+        lock (_gate)
+        {
+            disposed = _disposed;
+        }
+
+        if (!disposed)
+        {
+            PageStrokesChanged?.Invoke(this, new PageStrokesChangedEventArgs(pageIndex));
         }
     }
 
