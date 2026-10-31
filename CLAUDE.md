@@ -40,14 +40,22 @@ implementation, review). Project-specific additions:
 ## Project structure
 
 - `src/DreamBooks.App/` — WPF app: views, view models, styles, resources.
-  The only project that references WPF.
+  The only project that references WPF. The document view is `Views/`
+  DocumentView (virtualised pages, one recycled InkSurface per retained
+  page), VirtualPagePanel, PageSurfacePool, ScrollRail (fading rail, page
+  preview, go to page) and PageBitmapCoordinator (bitmaps through the render
+  scheduler); its state is `ViewModels/DocumentViewportViewModel`.
 - `src/DreamBooks.Core/` — domain model, ink math, UndoManager,
   DocumentSession (lazy pages, dirty tracking), stroke JSON schema, journal
-  (recorder, replayer). No references to WPF or PDFium.
-- `src/DreamBooks.Pdf/` — PDFium only: PdfRenderer (PDFium thread), stroke
-  annotations, PdfDocumentSaver and FileReplacer (verified full rewrite),
-  RecoveryStore (journals under LocalAppData). References Core. PDFsharp is
-  not used.
+  (recorder, replayer), `Layout/` (DocumentLayout, ViewPosition,
+  PositionHistory) and `Rendering/` (RenderScheduler: priorities, budgeted
+  bitmap cache). No references to WPF or PDFium.
+- `src/DreamBooks.Pdf/` — PDFium (PdfRenderer on its own thread, stroke
+  annotations, PdfDocumentSaver and FileReplacer: verified full rewrite) and
+  the app's files under LocalAppData: RecoveryStore (journals,
+  `DreamBooks\recovery`) and ViewPositionStore (last position per document,
+  `DreamBooks\positions`, plain file I/O). References Core. PDFsharp is not
+  used.
 - `tests/DreamBooks.Core.Tests/`, `tests/DreamBooks.Pdf.Tests/`,
   `tests/DreamBooks.App.Tests/` — xUnit.
 - `docs/` — requirements and plans.
