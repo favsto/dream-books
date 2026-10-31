@@ -51,6 +51,8 @@ public sealed class DocumentViewportViewModel : ObservableObject
     private IDisposable? _pendingReport;
     private bool _applyingZoom;
     private bool _railDrag;
+    private bool _railRecorded;
+    private ViewPosition _railStart;
 
     public DocumentViewportViewModel(ZoomViewModel zoom, IDelayScheduler scheduler)
     {
@@ -242,7 +244,10 @@ public sealed class DocumentViewportViewModel : ObservableObject
         return true;
     }
 
-    /// <summary>A rail drag starts: the position before it is recorded for Back, once per drag.</summary>
+    /// <summary>
+    /// A rail press starts: the position before it is recorded for Back once per press, on its first actual move,
+    /// so a press that moves nothing (a tap on the knob) leaves no entry.
+    /// </summary>
     public void BeginRailDrag()
     {
         if (_railDrag || _layout is null)
@@ -251,7 +256,8 @@ public sealed class DocumentViewportViewModel : ObservableObject
         }
 
         _railDrag = true;
-        History.Push(_position);
+        _railRecorded = false;
+        _railStart = _position;
     }
 
     public void EndRailDrag() => _railDrag = false;
@@ -431,6 +437,12 @@ public sealed class DocumentViewportViewModel : ObservableObject
         if (position == _position)
         {
             return; // nothing moved: no event, no settle timer restarted
+        }
+
+        if (_railDrag && !_railRecorded)
+        {
+            _railRecorded = true;
+            History.Push(_railStart); // the first move of a rail press: Back returns to where it started
         }
 
         _position = position;

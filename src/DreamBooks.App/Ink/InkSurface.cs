@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Ink;
 using System.Windows.Input;
@@ -228,6 +229,9 @@ public sealed class InkSurface : FrameworkElement
     /// <summary>Number of stylus plug-ins installed; exposed for tests (only one wet renderer at a time).</summary>
     internal int PlugInCount => StylusPlugIns.Count;
     protected override int VisualChildrenCount => _children.Length;
+
+    /// <summary>A peer, so the page's name ("Pagina 12") reaches UI Automation (NFR-31).</summary>
+    protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
 
     protected override Visual GetVisualChild(int index) => _children[index];
 

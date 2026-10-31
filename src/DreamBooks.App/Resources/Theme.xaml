@@ -41,6 +41,9 @@
     <CornerRadius x:Key="RailPreviewCornerRadius">10</CornerRadius>
     <SolidColorBrush x:Key="RailPreviewBackgroundBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" Opacity="0.92" />
     <DropShadowEffect x:Key="RailPreviewShadow" BlurRadius="14" ShadowDepth="4" Opacity="0.3" />
+    <!-- With Windows "Transparency effects" off (NFR-32): the same colours, opaque, and no shadow. -->
+    <SolidColorBrush x:Key="RailTrackBrushOpaque" Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
+    <SolidColorBrush x:Key="RailPreviewBackgroundBrushOpaque" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
     <Thickness x:Key="RailIndicatorMargin">0,0,44,12</Thickness>
     <sys:Double x:Key="GoToPageFieldWidth">80</sys:Double>
 

@@ -171,6 +171,9 @@ internal static class Strings
 
     public static string GoToPage => Get(nameof(GoToPage));
 
+    /// <summary>The page field opened from the rail's indicator (the panel's field is <see cref="GoToPage"/>).</summary>
+    public static string GoToPageIndicatorField => Get(nameof(GoToPageIndicatorField));
+
     public static string GoToPageHint => Get(nameof(GoToPageHint));
 
     public static string Back => Get(nameof(Back));

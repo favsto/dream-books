@@ -106,6 +106,7 @@
   <data name="RailPreviewPageFormat" xml:space="preserve"><value>pag. {0}</value></data>
   <data name="PageIndicatorLabel" xml:space="preserve"><value>Pagina e zoom: tocca per andare a una pagina</value></data>
   <data name="GoToPage" xml:space="preserve"><value>Vai alla pagina</value></data>
+  <data name="GoToPageIndicatorField" xml:space="preserve"><value>Vai alla pagina dall'indicatore</value></data>
   <data name="GoToPageHint" xml:space="preserve"><value>Scrivi il numero della pagina e premi Invio (Esc per annullare)</value></data>
   <data name="Back" xml:space="preserve"><value>Indietro</value></data>
 </root>

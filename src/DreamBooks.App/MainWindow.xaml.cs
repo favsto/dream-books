@@ -135,11 +135,18 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (!e.Handled && DocumentViewer.HandleNavigationKey(e.Key, Keyboard.Modifiers, e.OriginalSource))
+        if (!e.Handled && RouteKey(e.Key == Key.System ? e.SystemKey : e.Key, Keyboard.Modifiers, e.OriginalSource))
         {
             e.Handled = true;
         }
     }
+
+    /// <summary>
+    /// The window's key routing (separate so tests can drive it): true when a navigation key was taken for the
+    /// document. Everything else (Alt+Left for Back, the shortcuts) is left to the key bindings.
+    /// </summary>
+    internal bool RouteKey(Key key, ModifierKeys modifiers, object? source) =>
+        DocumentViewer.HandleNavigationKey(key, modifiers, source);
 
     /// <summary>The panel's go-to-page field (FR-09): Enter jumps to a valid page and clears it; Esc clears it.</summary>
     private void OnGoToPageFieldKeyDown(object sender, KeyEventArgs e)

@@ -7,25 +7,29 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using DreamBooks.App.Resources;
+using DreamBooks.App.Services;
 using DreamBooks.App.ViewModels;
 using DreamBooks.Core.Layout;
 using DreamBooks.Pdf;
+using Microsoft.Win32;
 
 namespace DreamBooks.App.Views;
 
 /// <summary>
 /// The fading scroll rail on the document's right edge (UI-07, design B): a knob showing the position, a 40 px strip
-/// where a tap jumps and a drag scrubs through the document (the position before is recorded for Back once per drag,
-/// FR-09), one large preview of the page under the knob while scrubbing, and the "12 / 48 · 125%" indicator that opens
-/// a page field on tap. It appears on scroll and near the edge and fades out after the idle delay
-/// (<see cref="RailVisibilityState"/>; instant when Windows animations are off, NFR-32).
+/// where a tap jumps and a drag scrubs through the document (the position before is recorded for Back on the first
+/// move of a press, FR-09), one large preview of the page at the knob while scrubbing, and the "12 / 48 · 125%"
+/// indicator that opens a page field on tap. It appears while the user scrolls and near the edge and fades out after
+/// the idle delay (<see cref="RailVisibilityState"/>; instant when Windows animations are off, opaque without shadow
+/// when transparency effects are off, NFR-32).
 /// </summary>
 /// <remarks>
-/// The position fraction is the scroll offset over the scrollable range (extent minus viewport), both from the view
-/// model, which is the only writer of the position: scrubbing calls <see cref="DocumentViewportViewModel.SetScroll"/>.
-/// Nothing scrolls while a page is inking (<see cref="CanScroll"/>). Only the strip and the indicator hit-test, and
-/// only while the rail is shown, so the pen inks everywhere else; nothing here takes keyboard focus except the page
-/// field while it is open.
+/// Nothing of the rail hit-tests: the pen always reaches the page under it and inks (FR-30). Fingers and the mouse
+/// reach it through <see cref="DocumentView"/>, which routes their presses by position (<see cref="ZoneAt"/>) to
+/// <see cref="PointerDown"/> / <see cref="OpenGoToPage"/>. The position fraction is the scroll offset over the
+/// scrollable range (extent minus viewport), both from the view model, the only writer of the position (scrubbing
+/// calls <see cref="DocumentViewportViewModel.SetScroll"/>). Nothing scrolls while a page is inking
+/// (<see cref="CanScroll"/>). Only the page field, while open, takes keyboard focus.
 /// </remarks>
 public partial class ScrollRail : UserControl
 {
@@ -38,7 +42,7 @@ public partial class ScrollRail : UserControl
     private bool _dragging;
     private bool _hovering;
     private bool _editing;
-    private int? _touchId;
+    private bool _listening;
     private double _grab;
     private int _previewPage = -1;
     private CancellationTokenSource? _previewCancel;
@@ -55,9 +59,32 @@ public partial class ScrollRail : UserControl
             Refresh();
         };
         SizeChanged += (_, _) => UpdateKnob();
-        Loaded += (_, _) => Refresh();
+        Loaded += (_, _) =>
+        {
+            ApplyTransparency();
+            if (!_listening)
+            {
+                _listening = true;
+                SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+            }
+
+            Refresh();
+        };
         Unloaded += (_, _) =>
         {
+            if (_listening)
+            {
+                _listening = false;
+                SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+            }
+
+            CloseGoToPage(restoreFocus: false);
+            if (_dragging)
+            {
+                EndDrag();
+            }
+
+            HideBubble();
             _idleTimer.Stop();
             SetRendering(false);
         };
@@ -98,12 +125,16 @@ public partial class ScrollRail : UserControl
     /// <summary>False while a page is inking: the rail then never moves the document under the pen.</summary>
     internal Func<bool>? CanScroll { get; set; }
 
-    /// <summary>The mouse wheel over the strip (the delta of the event): scrolls the document.</summary>
-    internal Action<int>? WheelScroll { get; set; }
+    /// <summary>The Windows transparency setting (NFR-32); tests inject it.</summary>
+    internal Func<bool> TransparencyEnabled { get; set; } = TransparencySetting.IsEnabled;
 
     internal RailVisibilityState State => _state;
 
+    internal bool IsShown => _state.Phase != RailPhase.Hidden;
+
     internal bool IsDragging => _dragging;
+
+    internal bool IsEditing => _editing;
 
     internal double KnobHeight => Knob.Height;
 
@@ -118,7 +149,44 @@ public partial class ScrollRail : UserControl
             Require(find, "RailFadeInDuration"), Require(find, "RailFadeOutDuration"), Require(find, "RailIdleDelay"));
     }
 
-    /// <summary>Scrolling, the wheel, a finger or the mouse near the edge: the rail shows and its idle delay restarts.</summary>
+    /// <summary>
+    /// The part of the rail under a point in rail coordinates: the strip or the indicator while the rail is shown,
+    /// otherwise none (the document's). Used only for fingers and the mouse.
+    /// </summary>
+    internal RailZone ZoneAt(Point point)
+    {
+        if (!IsShown || point.Y < 0 || point.Y > ActualHeight)
+        {
+            return RailZone.None;
+        }
+
+        if (point.X >= ActualWidth - Strip.Width && point.X <= ActualWidth)
+        {
+            return RailZone.Strip;
+        }
+
+        return IndicatorButton.Visibility == Visibility.Visible && BoundsOf(IndicatorButton).Contains(point)
+            ? RailZone.Indicator
+            : RailZone.None;
+    }
+
+    /// <summary>True when a point (rail coordinates) is on the open page field.</summary>
+    internal bool IsOnGoToPageBox(Point point) => _editing && BoundsOf(GoToPageBox).Contains(point);
+
+    /// <summary>A point in rail coordinates as a y on the track (what <see cref="PointerDown"/> takes).</summary>
+    internal double TrackYAt(Point point) => TranslatePoint(point, Track).Y;
+
+    /// <summary>The mouse (not the pen) is over the strip or the indicator: the rail stays while it is.</summary>
+    internal void SetHover(bool hovering)
+    {
+        if (hovering != _hovering)
+        {
+            _hovering = hovering;
+            UpdateHeld();
+        }
+    }
+
+    /// <summary>The user scrolled, or a finger or the mouse is near the edge: the rail shows, the idle delay restarts.</summary>
     internal void NotifyActivity()
     {
         if (_model?.Layout is null)
@@ -147,9 +215,9 @@ public partial class ScrollRail : UserControl
     }
 
     /// <summary>
-    /// A finger, pen or mouse goes down on the strip at <paramref name="trackY"/> (DIPs from the track's top). On the
-    /// knob it grabs it where it was touched; elsewhere the knob's centre jumps there. The position before is recorded
-    /// for Back. Nothing (false) while a page is inking or without a document.
+    /// A finger or the mouse goes down on the strip at <paramref name="trackY"/> (DIPs from the track's top). On the
+    /// knob it grabs it where it was touched; elsewhere the knob's centre jumps there. Nothing (false) while a page is
+    /// inking or without a document.
     /// </summary>
     internal bool PointerDown(double trackY)
     {
@@ -178,7 +246,7 @@ public partial class ScrollRail : UserControl
         }
     }
 
-    /// <summary>The drag ends; the rail and the bubble fade out after the idle delay.</summary>
+    /// <summary>The press ends: the bubble goes at once; the rail fades out after the idle delay.</summary>
     internal void PointerUp()
     {
         if (!_dragging)
@@ -234,8 +302,28 @@ public partial class ScrollRail : UserControl
         return false;
     }
 
-    /// <summary>Esc: closes the field without moving.</summary>
+    /// <summary>Esc, or a press anywhere outside the field: closes it without moving.</summary>
     internal void CancelGoToPage() => CloseGoToPage(restoreFocus: true);
+
+    /// <summary>
+    /// Opaque theme brushes and no shadow when Windows transparency effects are off (NFR-32); the translucent ones
+    /// otherwise. The values live in the theme dictionary.
+    /// </summary>
+    internal void ApplyTransparency()
+    {
+        var transparent = TransparencyEnabled();
+        var suffix = transparent ? string.Empty : "Opaque";
+        TrackBar.SetResourceReference(Border.BackgroundProperty, "RailTrackBrush" + suffix);
+        PreviewBubble.SetResourceReference(Border.BackgroundProperty, "RailPreviewBackgroundBrush" + suffix);
+        if (transparent)
+        {
+            PreviewBubble.SetResourceReference(EffectProperty, "RailPreviewShadow");
+        }
+        else
+        {
+            PreviewBubble.Effect = null;
+        }
+    }
 
     private static TimeSpan Require(Func<string, object?> find, string key) =>
         find(key) is TimeSpan value
@@ -244,6 +332,14 @@ public partial class ScrollRail : UserControl
 
     private static double Scrollable(DocumentViewportViewModel model, DocumentLayout layout) =>
         Math.Max(0, layout.ExtentHeightDip(model.Position.Zoom) - model.ViewportHeightDip);
+
+    private Rect BoundsOf(FrameworkElement element) =>
+        element.ActualWidth > 0 && element.ActualHeight > 0
+            ? element.TransformToAncestor(this).TransformBounds(new Rect(element.RenderSize))
+            : Rect.Empty;
+
+    private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e) =>
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, ApplyTransparency); // raised on another thread
 
     private void PrepareState()
     {
@@ -259,12 +355,11 @@ public partial class ScrollRail : UserControl
         Refresh();
     }
 
-    /// <summary>Applies the state: opacity, hit-testing (none while hidden), the bubble, and when to look again.</summary>
+    /// <summary>Applies the state: opacity, the bubble, and when to look again.</summary>
     private void Refresh()
     {
         var phase = _state.Phase;
         Opacity = _state.Opacity;
-        IsHitTestVisible = phase != RailPhase.Hidden;
         if (phase == RailPhase.Hidden)
         {
             HideBubble();
@@ -301,11 +396,7 @@ public partial class ScrollRail : UserControl
 
     private void OnRendering(object? sender, EventArgs e) => Refresh();
 
-    private void OnPositionChanged(object? sender, EventArgs e)
-    {
-        UpdateKnob();
-        UpdatePreview();
-    }
+    private void OnPositionChanged(object? sender, EventArgs e) => UpdateKnob();
 
     private void OnLayoutChanged(object? sender, EventArgs e)
     {
@@ -329,7 +420,6 @@ public partial class ScrollRail : UserControl
         }
 
         KnobOffset.Y = fraction * TrackLength;
-        PlaceBubble();
     }
 
     /// <summary>The knob's top goes to <paramref name="trackY"/> minus the grab point; the document follows.</summary>
@@ -342,37 +432,26 @@ public partial class ScrollRail : UserControl
 
         var length = TrackLength;
         var top = Math.Clamp(trackY - _grab, 0, length);
+        var fraction = length > 0 ? top / length : 0;
         KnobOffset.Y = top;
         var (x, _) = layout.ToOffsets(model.Position, model.ViewportWidthDip, model.ViewportHeightDip);
-        model.SetScroll(x, length > 0 ? top / length * Scrollable(model, layout) : 0);
-        UpdatePreview();
+        model.SetScroll(x, fraction * Scrollable(model, layout));
+        UpdatePreview(layout, layout.PageAt(fraction * layout.TotalHeightPt));
         PlaceBubble();
     }
 
     private void EndDrag()
     {
         _dragging = false;
-        _touchId = null;
-        if (Strip.IsMouseCaptured)
-        {
-            Strip.ReleaseMouseCapture();
-        }
-
-        Strip.ReleaseAllTouchCaptures();
         _model?.EndRailDrag();
+        HideBubble(); // the preview shows only while the finger or the mouse is down
         UpdateHeld();
     }
 
-    /// <summary>The bubble shows the page under the knob (the current page): its number, then its preview.</summary>
-    private void UpdatePreview()
+    /// <summary>The bubble shows the page at the knob's fraction of the document: its number, then its preview.</summary>
+    private void UpdatePreview(DocumentLayout layout, int page)
     {
-        if (PreviewBubble.Visibility != Visibility.Visible || _model is not { Layout: { } layout } model)
-        {
-            return;
-        }
-
-        var page = model.CurrentPage;
-        if (page == _previewPage || page < 0 || page >= layout.PageCount)
+        if (PreviewBubble.Visibility != Visibility.Visible || page == _previewPage || page < 0 || page >= layout.PageCount)
         {
             return;
         }
@@ -392,8 +471,7 @@ public partial class ScrollRail : UserControl
             PreviewPlaceholder.Height = width;
         }
 
-        _previewCancel?.Cancel();
-        _previewCancel?.Dispose();
+        CancelPreview();
         _previewCancel = new CancellationTokenSource();
         _ = LoadPreviewAsync(page, _previewCancel.Token);
     }
@@ -423,17 +501,17 @@ public partial class ScrollRail : UserControl
         }
     }
 
-    private void HideBubble()
+    private void CancelPreview()
     {
-        if (PreviewBubble.Visibility == Visibility.Collapsed && _previewPage < 0)
-        {
-            return;
-        }
-
-        PreviewBubble.Visibility = Visibility.Collapsed;
         _previewCancel?.Cancel();
         _previewCancel?.Dispose();
         _previewCancel = null;
+    }
+
+    private void HideBubble()
+    {
+        CancelPreview();
+        PreviewBubble.Visibility = Visibility.Collapsed;
         _previewPage = -1;
         PreviewImage.Source = null;
     }
@@ -463,16 +541,21 @@ public partial class ScrollRail : UserControl
         _editing = false;
         var before = _focusBefore;
         _focusBefore = null;
+        var hadFocus = GoToPageBox.IsKeyboardFocusWithin;
         GoToPageBox.Visibility = Visibility.Collapsed;
         IndicatorButton.Visibility = Visibility.Visible;
         UpdateHeld();
-        if (restoreFocus && before is UIElement { IsVisible: true } element)
+        if (restoreFocus && hadFocus && before is UIElement { IsVisible: true } element)
         {
             element.Focus();
         }
+        else if (hadFocus)
+        {
+            Keyboard.ClearFocus(); // the keys go back to the window (and the navigation keys to the document)
+        }
     }
 
-    private void OnIndicatorClick(object sender, RoutedEventArgs e) => OpenGoToPage();
+    private void OnIndicatorClick(object sender, RoutedEventArgs e) => OpenGoToPage(); // UI Automation's Invoke
 
     private void OnGoToPageKeyDown(object sender, KeyEventArgs e)
     {
@@ -492,102 +575,7 @@ public partial class ScrollRail : UserControl
     {
         if (!GoToPageBox.IsKeyboardFocusWithin)
         {
-            CloseGoToPage(restoreFocus: false); // tapped elsewhere: closed, nothing moves
+            CloseGoToPage(restoreFocus: false); // focus moved elsewhere: closed, nothing moves
         }
-    }
-
-    private void OnMouseEnterRail(object sender, MouseEventArgs e)
-    {
-        if (e.StylusDevice is null)
-        {
-            _hovering = true; // the mouse over the rail keeps it (not the pen hovering: it is on its way to ink)
-            UpdateHeld();
-        }
-    }
-
-    private void OnMouseLeaveRail(object sender, MouseEventArgs e)
-    {
-        if (_hovering)
-        {
-            _hovering = false;
-            UpdateHeld();
-        }
-    }
-
-    private void OnStripMouseDown(object sender, MouseButtonEventArgs e)
-    {
-        e.Handled = true;
-        if (PointerDown(e.GetPosition(Track).Y))
-        {
-            Strip.CaptureMouse();
-        }
-    }
-
-    private void OnStripMouseMove(object sender, MouseEventArgs e)
-    {
-        if (_dragging && _touchId is null && Strip.IsMouseCaptured)
-        {
-            PointerMove(e.GetPosition(Track).Y);
-        }
-    }
-
-    private void OnStripMouseUp(object sender, MouseButtonEventArgs e)
-    {
-        if (_touchId is null && _dragging)
-        {
-            e.Handled = true;
-            PointerUp();
-        }
-    }
-
-    private void OnStripLostMouseCapture(object sender, MouseEventArgs e)
-    {
-        if (_touchId is null)
-        {
-            PointerUp();
-        }
-    }
-
-    private void OnStripTouchDown(object sender, TouchEventArgs e)
-    {
-        e.Handled = true; // not promoted to the mouse, never seen by the document's pan
-        if (PointerDown(e.GetTouchPoint(Track).Position.Y))
-        {
-            _touchId = e.TouchDevice.Id;
-            Strip.CaptureTouch(e.TouchDevice);
-        }
-    }
-
-    private void OnStripTouchMove(object sender, TouchEventArgs e)
-    {
-        if (e.TouchDevice.Id == _touchId)
-        {
-            e.Handled = true;
-            PointerMove(e.GetTouchPoint(Track).Position.Y);
-        }
-    }
-
-    private void OnStripTouchUp(object sender, TouchEventArgs e)
-    {
-        if (e.TouchDevice.Id == _touchId)
-        {
-            e.Handled = true;
-            PointerUp();
-        }
-    }
-
-    private void OnStripLostTouchCapture(object sender, TouchEventArgs e)
-    {
-        if (e.TouchDevice.Id == _touchId)
-        {
-            PointerUp();
-        }
-    }
-
-    private void OnStripMouseWheel(object sender, MouseWheelEventArgs e)
-    {
-        e.Handled = true;
-        WheelScroll?.Invoke(e.Delta);
-        NotifyActivity();
     }
 }

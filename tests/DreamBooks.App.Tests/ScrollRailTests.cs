@@ -1,11 +1,13 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using DreamBooks.App.Resources;
+using DreamBooks.App.Services;
 using DreamBooks.App.ViewModels;
 using DreamBooks.App.Views;
 using DreamBooks.Pdf.Tests;
@@ -180,14 +182,43 @@ public sealed class ScrollRailTests : IDisposable
         await WithViewAsync((vm, view) =>
         {
             var rail = view.Rail;
+            var pushes = 0;
+            vm.Viewport.History.Changed += (_, _) => pushes++;
             var y = (rail.KnobHeight / 2) + (0.6 * rail.TrackLength); // well below the knob
             rail.PointerDown(y);
             rail.PointerUp();
             Settle(view);
 
             Near(0.6 * Scrollable(view), view.Viewport.VerticalOffset);
-            Assert.True(vm.Viewport.History.CanGoBack); // a jump: Back returns
+            Assert.Equal(1, pushes); // a jump: Back returns
             Near(0.6 * rail.TrackLength, rail.KnobOffset.Y);
+
+            vm.Viewport.BackCommand.Execute(null);
+            Settle(view);
+            Near(0, view.Viewport.VerticalOffset);
+        });
+    }
+
+    [Fact]
+    public async Task Rail_tap_on_the_knob_without_movement_pushes_no_history()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            var jump = vm.Viewport.GoToPageCommand.ExecuteAsync(5);
+            WpfTestThread.PumpUntil(() => jump.IsCompleted);
+            Settle(view);
+            vm.Viewport.History.Clear();
+            var before = view.Viewport.VerticalOffset;
+            var rail = view.Rail;
+
+            rail.PointerDown(rail.KnobOffset.Y + (rail.KnobHeight / 2)); // on the knob: grabbed, nothing moves
+            rail.PointerMove(rail.KnobOffset.Y + (rail.KnobHeight / 2));
+            rail.PointerUp();
+            Settle(view);
+
+            Near(before, view.Viewport.VerticalOffset);
+            Assert.False(vm.Viewport.History.CanGoBack);
+            Assert.False(vm.Viewport.BackCommand.CanExecute(null));
         });
     }
 
@@ -226,12 +257,13 @@ public sealed class ScrollRailTests : IDisposable
             };
 
             Assert.Equal(Visibility.Collapsed, rail.PreviewBubble.Visibility);
-            Assert.Equal(Strings.RailPreviewLabel, AutomationProperties.GetName(rail.PreviewBubble));
+            var layout = vm.Viewport.Layout!;
             rail.PointerDown(rail.KnobHeight / 2);
             rail.PointerMove((rail.KnobHeight / 2) + (0.5 * rail.TrackLength));
             Settle(view);
 
-            var page = vm.Viewport.CurrentPage;
+            // The page at the knob's fraction of the document, not the page under the viewport centre.
+            var page = layout.PageAt(0.5 * layout.TotalHeightPt);
             Assert.InRange(page, 10, 20);
             Assert.Equal(Visibility.Visible, rail.PreviewBubble.Visibility);
             Assert.Equal(string.Format(CultureInfo.CurrentCulture, Strings.RailPreviewPageFormat, page + 1), rail.PreviewText.Text);
@@ -245,19 +277,29 @@ public sealed class ScrollRailTests : IDisposable
             WpfTestThread.Drain();
             Assert.Same(bitmap, rail.PreviewImage.Source);
 
-            // Moving on to another page asks for that one and gives up the previous request (the latest wins).
-            rail.PointerMove((rail.KnobHeight / 2) + (0.9 * rail.TrackLength));
+            // At the very top and bottom the bubble names the first and the last page; the latest request wins.
+            rail.PointerMove(-1000);
             Settle(view);
-            Assert.NotEqual(page, vm.Viewport.CurrentPage);
-            Assert.Equal(vm.Viewport.CurrentPage, requests[^1].Page);
+            Assert.Equal(0, requests[^1].Page);
             Assert.Null(rail.PreviewImage.Source);
-            rail.PointerMove((rail.KnobHeight / 2) + (0.2 * rail.TrackLength));
+            rail.PointerMove(rail.TrackLength + 1000);
             Settle(view);
+            Assert.Equal(_pageCount - 1, requests[^1].Page);
+            Assert.Equal(string.Format(CultureInfo.CurrentCulture, Strings.RailPreviewPageFormat, _pageCount), rail.PreviewText.Text);
             Assert.True(requests[^2].Token.IsCancellationRequested);
-            rail.PointerUp();
 
-            // The bubble does not hit-test: it never takes the pen from the page under it.
+            // Released: the bubble goes at once and asks for nothing more, even while the document keeps moving.
+            rail.PointerUp();
+            Assert.Equal(Visibility.Collapsed, rail.PreviewBubble.Visibility);
+            Assert.True(requests[^1].Token.IsCancellationRequested);
+            var count = requests.Count;
+            vm.Viewport.SetScroll(0, 100);
+            Settle(view);
+            Assert.Equal(count, requests.Count);
+
+            // The bubble does not hit-test; its preview image carries the automation name (it has a peer).
             Assert.False(rail.PreviewBubble.IsHitTestVisible);
+            Assert.Equal(Strings.RailPreviewLabel, UIElementAutomationPeer.CreatePeerForElement(rail.PreviewImage).GetName());
         });
     }
 
@@ -304,7 +346,8 @@ public sealed class ScrollRailTests : IDisposable
             Assert.Equal(Visibility.Visible, rail.GoToPageBox.Visibility);
             Assert.Equal(Visibility.Collapsed, rail.IndicatorButton.Visibility);
             Assert.Equal("7", rail.GoToPageBox.Text);
-            Assert.Equal(Strings.GoToPage, AutomationProperties.GetName(rail.GoToPageBox));
+            Assert.Equal(Strings.GoToPageIndicatorField, AutomationProperties.GetName(rail.GoToPageBox));
+            Assert.NotEqual(Strings.GoToPage, Strings.GoToPageIndicatorField); // the panel's field has its own name
             Assert.Equal(Strings.GoToPageHint, AutomationProperties.GetHelpText(rail.GoToPageBox));
             Assert.True(rail.State.IsHeld); // the rail stays while typing
 
@@ -325,6 +368,40 @@ public sealed class ScrollRailTests : IDisposable
             rail.CancelGoToPage();
             Assert.Equal(19, viewport.CurrentPage);
             Assert.Equal(Visibility.Collapsed, rail.GoToPageBox.Visibility);
+            Assert.False(rail.State.IsHeld);
+        });
+    }
+
+    [Fact]
+    public async Task Go_to_page_field_closes_on_any_pointer_down_outside_it_and_on_unload()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            var rail = view.Rail;
+            var page = new Point(500, 400);
+            foreach (var kind in new[] { PointerKind.Pen, PointerKind.Finger, PointerKind.Mouse })
+            {
+                rail.OpenGoToPage();
+                Settle(view);
+                Assert.True(rail.IsEditing);
+
+                // Inside the field: it stays open (the finger or the mouse places the caret).
+                var inside = rail.GoToPageBox.TranslatePoint(
+                    new Point(rail.GoToPageBox.ActualWidth / 2, rail.GoToPageBox.ActualHeight / 2), rail);
+                Assert.False(view.RoutePointerDown(inside, PointerKind.Finger));
+                Assert.True(rail.IsEditing);
+
+                // On the page: closed without moving, and the rail is no longer held.
+                Assert.False(view.RoutePointerDown(page, kind));
+                Assert.False(rail.IsEditing, kind.ToString());
+                Assert.Equal(Visibility.Collapsed, rail.GoToPageBox.Visibility);
+                Assert.False(rail.State.IsHeld);
+                Assert.Equal(0, vm.Viewport.CurrentPage);
+            }
+
+            rail.OpenGoToPage();
+            rail.RaiseEvent(new RoutedEventArgs(FrameworkElement.UnloadedEvent));
+            Assert.False(rail.IsEditing);
             Assert.False(rail.State.IsHeld);
         });
     }
@@ -367,11 +444,51 @@ public sealed class ScrollRailTests : IDisposable
             Assert.False(view.HandleNavigationKey(Key.A, ModifierKeys.None, view.Viewport));
             Settle(view);
             Near(offset, view.Viewport.VerticalOffset);
+
+            // While a page is inking the key is taken but nothing moves under the pen.
+            LoadEditors(view);
+            var surface = view.SurfaceFor(vm.Viewport.CurrentPage)!;
+            surface.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left) { RoutedEvent = Mouse.MouseDownEvent });
+            Assert.True(surface.IsInking);
+            Assert.True(view.HandleNavigationKey(Key.PageDown, ModifierKeys.None, view.Viewport));
+            Settle(view);
+            Near(offset, view.Viewport.VerticalOffset);
+            surface.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left) { RoutedEvent = Mouse.MouseUpEvent });
         });
     }
 
     [Fact]
-    public async Task Shift_wheel_pans_horizontally_and_the_wheel_over_the_rail_scrolls()
+    public async Task Window_routes_navigation_keys_except_in_fields_sliders_and_with_modifiers()
+    {
+        await WithViewAsync((vm, _) =>
+        {
+            var window = new MainWindow();
+            try
+            {
+                window.DataContext = vm;
+                LayOut((FrameworkElement)window.Content, 1000, 700);
+                window.DocumentViewer.UpdateLayout();
+                WpfTestThread.Drain();
+                var slider = FindDescendant<Slider>(window)!;
+
+                Assert.False(window.RouteKey(Key.PageDown, ModifierKeys.None, window.GoToPageField));
+                Assert.False(window.RouteKey(Key.End, ModifierKeys.None, slider));
+                Assert.False(window.RouteKey(Key.End, ModifierKeys.Shift, window.BackButton));
+                Assert.False(window.RouteKey(Key.Left, ModifierKeys.Alt, window.BackButton)); // left to the KeyBinding
+                Assert.Equal(0, vm.Viewport.CurrentPage);
+
+                Assert.True(window.RouteKey(Key.End, ModifierKeys.None, window.BackButton)); // focus on a panel button
+                Assert.Equal(_pageCount - 1, vm.Viewport.CurrentPage);
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    [Fact]
+    public async Task Shift_wheel_pans_horizontally()
     {
         await WithViewAsync((vm, view) =>
         {
@@ -380,14 +497,72 @@ public sealed class ScrollRailTests : IDisposable
             var x = view.Viewport.HorizontalOffset;
             var y = view.Viewport.VerticalOffset;
 
-            view.ScrollByWheel(-120, horizontal: true); // Shift + wheel down: to the right
+            view.PanByWheel(-120); // Shift + wheel down: to the right
             Settle(view);
             Assert.True(view.Viewport.HorizontalOffset > x);
             Near(y, view.Viewport.VerticalOffset);
+        });
+    }
 
-            view.ScrollByWheel(-120, horizontal: false); // the wheel over the rail: down
+    [Fact]
+    public async Task Rail_shows_on_user_scrolling_and_near_the_edge_but_not_on_programmatic_changes()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            var rail = view.Rail;
+            Assert.Equal(RailPhase.Hidden, rail.State.Phase); // just opened
+
+            vm.ZoomVm.Zoom = 2; // zoom anchoring moves the offsets
             Settle(view);
-            Assert.True(view.Viewport.VerticalOffset > y);
+            vm.Viewport.ToggleFitWidth(null); // back to fit width
+            Settle(view);
+            var restored = vm.Viewport.Position with { PageIndex = 12 };
+            vm.Viewport.Attach(vm.Session, vm.Viewport.Layout, restored); // a restore
+            Settle(view);
+            Assert.Equal(RailPhase.Hidden, rail.State.Phase);
+
+            view.Viewport.ScrollToVerticalOffset(view.Viewport.VerticalOffset + 300); // the wheel in the scroll viewer
+            Settle(view);
+            Assert.NotEqual(RailPhase.Hidden, rail.State.Phase);
+
+            rail.HideNow();
+            view.ApplyManipulation(new Vector(0, -200), 1, new Point(500, 400)); // a finger pan
+            Assert.NotEqual(RailPhase.Hidden, rail.State.Phase);
+
+            rail.HideNow();
+            Assert.True(view.HandleNavigationKey(Key.PageDown, ModifierKeys.None, view.Viewport));
+            Assert.NotEqual(RailPhase.Hidden, rail.State.Phase);
+
+            rail.HideNow();
+            Assert.False(view.RoutePointerDown(new Point(view.ActualWidth - 10, 400), PointerKind.Finger)); // pans
+            Assert.NotEqual(RailPhase.Hidden, rail.State.Phase);
+        });
+    }
+
+    [Fact]
+    public void Transparency_off_makes_the_rail_opaque_without_a_shadow()
+    {
+        WpfTestThread.Run(() =>
+        {
+            Assert.IsType<bool>(TransparencySetting.IsEnabled()); // reads the setting without throwing
+            Assert.True(TransparencySetting.Parse(null)); // unknown: transparency stays on
+            Assert.True(TransparencySetting.Parse(1));
+            Assert.False(TransparencySetting.Parse(0));
+            Assert.True(TransparencySetting.Parse("odd"));
+
+            var rail = new ScrollRail { TransparencyEnabled = () => false };
+            rail.ApplyTransparency();
+            Assert.Same(Application.Current.FindResource("RailTrackBrushOpaque"), rail.TrackBar.Background);
+            Assert.Same(Application.Current.FindResource("RailPreviewBackgroundBrushOpaque"), rail.PreviewBubble.Background);
+            Assert.Null(rail.PreviewBubble.Effect);
+            Assert.Equal(1, ((SolidColorBrush)rail.TrackBar.Background).Opacity);
+            Assert.Equal(1, ((SolidColorBrush)rail.PreviewBubble.Background).Opacity);
+
+            rail.TransparencyEnabled = () => true;
+            rail.ApplyTransparency();
+            Assert.Same(Application.Current.FindResource("RailTrackBrush"), rail.TrackBar.Background);
+            Assert.Same(Application.Current.FindResource("RailPreviewBackgroundBrush"), rail.PreviewBubble.Background);
+            Assert.Same(Application.Current.FindResource("RailPreviewShadow"), rail.PreviewBubble.Effect);
         });
     }
 
@@ -427,20 +602,43 @@ public sealed class ScrollRailTests : IDisposable
         await WithViewAsync((vm, view) =>
         {
             var rail = view.Rail;
-            var strip = new Point(view.ActualWidth - 10, 400);
-            var page = new Point(500, 400);
-            var besideStrip = new Point(view.ActualWidth - 60, 400);
-
-            // Hidden: nothing of the rail hit-tests, the right edge of the page inks too.
-            rail.HideNow();
-            Assert.False(IsWithin(HitAt(view, strip), rail));
-            Assert.True(IsWithin(HitAt(view, strip), view.Viewport));
-
+            var strip = new Point(view.ActualWidth - 20, 400); // on the bar, in the middle of the strip
+            var surface = view.SurfaceFor(vm.Viewport.CurrentPage)!;
             rail.NotifyActivity();
-            Assert.True(IsWithin(HitAt(view, strip), rail.Strip)); // the 40 px strip is the rail's
+            Settle(view);
             Assert.True(rail.Strip.ActualWidth <= 40.0001 && rail.Strip.ActualWidth >= 40);
-            Assert.True(IsWithin(HitAt(view, page), view.SurfaceFor(vm.Viewport.CurrentPage)!));
-            Assert.False(IsWithin(HitAt(view, besideStrip), rail));
+            var indicator = rail.IndicatorButton.TranslatePoint(
+                new Point(rail.IndicatorButton.ActualWidth / 2, rail.IndicatorButton.ActualHeight / 2), rail);
+            Assert.Equal(RailZone.Strip, rail.ZoneAt(strip));
+            Assert.Equal(RailZone.Indicator, rail.ZoneAt(indicator));
+
+            // The rail is shown, yet the pen in its strip and on the indicator reaches the page surface and inks:
+            // nothing of the rail hit-tests, and the router leaves the pen alone.
+            foreach (var point in new[] { strip, indicator })
+            {
+                Assert.True(IsWithin(HitAt(view, point), surface), point.ToString());
+                Assert.False(IsWithin(HitAt(view, point), rail));
+                Assert.False(view.RoutePointerDown(point, PointerKind.Pen));
+                Assert.False(rail.IsDragging);
+                Assert.False(rail.IsEditing);
+            }
+
+            // A finger or the mouse in the strip goes to the rail (a drag starts), on the indicator opens the field.
+            Assert.True(view.RoutePointerDown(strip, PointerKind.Finger));
+            Assert.True(rail.IsDragging);
+            view.RoutePointerUp();
+            Assert.False(rail.IsDragging);
+            Assert.True(view.RoutePointerDown(strip, PointerKind.Mouse));
+            Assert.True(rail.IsDragging);
+            view.RoutePointerUp();
+            Assert.True(view.RoutePointerDown(indicator, PointerKind.Finger));
+            Assert.True(rail.IsEditing);
+            rail.CancelGoToPage();
+
+            // Hidden: a finger at the edge is the document's (it pans, and shows the rail).
+            rail.HideNow();
+            Assert.False(view.RoutePointerDown(strip, PointerKind.Finger));
+            Assert.False(rail.IsDragging);
 
             // Dragging: the bubble beside the knob is shown, but the page under it still takes the pen.
             rail.PointerDown(rail.KnobHeight / 2);
@@ -469,7 +667,12 @@ public sealed class ScrollRailTests : IDisposable
             }
 
             Assert.Equal(names.Count, names.Values.Distinct().Count());
-            Assert.Equal(Strings.RailLabel, AutomationProperties.GetName(view.Rail.Strip));
+            Assert.Equal(names[0], UIElementAutomationPeer.CreatePeerForElement(view.SurfaceFor(0)!).GetName());
+
+            // The rail's names reach UI Automation: they sit on elements that have a peer.
+            Assert.Equal(Strings.RailLabel, UIElementAutomationPeer.CreatePeerForElement(view.Rail).GetName());
+            Assert.Equal(
+                Strings.PageIndicatorLabel, UIElementAutomationPeer.CreatePeerForElement(view.Rail.IndicatorButton).GetName());
         });
     }
 
@@ -498,6 +701,26 @@ public sealed class ScrollRailTests : IDisposable
                 window.Close();
             }
         });
+    }
+
+    private static T? FindDescendant<T>(DependencyObject root)
+        where T : DependencyObject
+    {
+        // The logical tree: the panel's content is there even before the expander's template is applied.
+        foreach (var child in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())
+        {
+            if (child is T match)
+            {
+                return match;
+            }
+
+            if (FindDescendant<T>(child) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     private static RailTimings ThemeTimings()

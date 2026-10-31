@@ -71,6 +71,7 @@ public partial class DocumentView : UserControl
     private Vector _panRemainder;
     private (Point Position, int Time)? _tapStart;
     private (Point Position, int Time)? _lastTap;
+    private int? _railTouchId;
 
     public DocumentView()
     {
@@ -80,7 +81,6 @@ public partial class DocumentView : UserControl
         _bitmaps = NewBitmapCoordinator();
         Rail.PreviewSource = (pageIndex, ct) => _bitmaps.GetPreviewAsync(pageIndex, ct); // the current coordinator
         Rail.CanScroll = () => !AnyInking();
-        Rail.WheelScroll = delta => ScrollByWheel(delta, horizontal: false);
         _editorTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = DocumentViewportViewModel.CurrentPageDelay };
         _editorTimer.Tick += (_, _) => FlushEditorLoads();
         DataContextChanged += (_, e) => Attach(e.NewValue as MainViewModel);
@@ -405,11 +405,6 @@ public partial class DocumentView : UserControl
             return;
         }
 
-        if (e.VerticalChange != 0)
-        {
-            Rail.NotifyActivity(); // the rail shows while the document scrolls (UI-07)
-        }
-
         if (e.ViewportWidthChange != 0 || e.ViewportHeightChange != 0)
         {
             // Resize (or first layout): the view model refits in fit-width mode and publishes the position to show.
@@ -421,6 +416,11 @@ public partial class DocumentView : UserControl
         if (e.ExtentWidthChange != 0 || e.ExtentHeightChange != 0 || _pendingOffsets is not null)
         {
             return; // the view applying a position: not the user's scroll
+        }
+
+        if (e.VerticalChange != 0)
+        {
+            Rail.NotifyActivity(); // the user scrolled (wheel, arrow keys): the rail shows (UI-07)
         }
 
         vm.Viewport.SetScroll(Viewport.HorizontalOffset, Viewport.VerticalOffset);
@@ -632,6 +632,10 @@ public partial class DocumentView : UserControl
             _panRemainder = new Vector(
                 Math.Clamp(targetX - newX, -_maxPanRemainderDip, _maxPanRemainderDip),
                 Math.Clamp(targetY - newY, -_maxPanRemainderDip, _maxPanRemainderDip));
+            if (translation.Y != 0)
+            {
+                Rail.NotifyActivity(); // a finger pan is the user's scrolling: the rail shows
+            }
         }
 
         if (Math.Abs(scale - 1) > _minScaleDelta && double.IsFinite(scale) && scale > 0)
@@ -672,16 +676,17 @@ public partial class DocumentView : UserControl
         if (!AnyInking()) // never move a page under a stroke being written
         {
             command.Execute(null);
+            Rail.NotifyActivity(); // keyboard navigation is the user's: the rail shows
         }
 
         return true;
     }
 
     /// <summary>
-    /// One wheel step (<paramref name="delta"/> as in the wheel event, 120 per notch, positive = up/left) scrolls the
-    /// document vertically, or horizontally for Shift+wheel, through the view model. Nothing while a page is inking.
+    /// Shift+wheel: one wheel step (<paramref name="delta"/> as in the wheel event, 120 per notch, positive = left)
+    /// pans the document horizontally through the view model. Nothing while a page is inking.
     /// </summary>
-    internal void ScrollByWheel(int delta, bool horizontal)
+    internal void PanByWheel(int delta)
     {
         if (_viewModel?.Viewport is not { Layout: { } layout } viewport || AnyInking())
         {
@@ -691,14 +696,49 @@ public partial class DocumentView : UserControl
         var lines = SystemParameters.WheelScrollLines > 0 ? SystemParameters.WheelScrollLines : _defaultWheelLines;
         var step = delta / _wheelNotch * lines * _wheelLineDip;
         var (x, y) = layout.ToOffsets(viewport.Position, viewport.ViewportWidthDip, viewport.ViewportHeightDip);
-        if (horizontal)
+        viewport.SetScroll(x - step, y);
+    }
+
+    /// <summary>
+    /// A press at <paramref name="position"/> (rail coordinates, the same as this view's). Any press outside the open
+    /// page field closes it. The pen is never taken (false: it inks on the page under it, FR-30). A finger or the
+    /// mouse in the shown rail's strip starts a drag, on its indicator opens the page field (true: the press is the
+    /// rail's); a finger near the edge of a hidden rail shows it and still pans (false).
+    /// </summary>
+    internal bool RoutePointerDown(Point position, PointerKind kind)
+    {
+        if (Rail.IsEditing && !Rail.IsOnGoToPageBox(position))
         {
-            viewport.SetScroll(x - step, y);
+            Rail.CancelGoToPage();
         }
-        else
+
+        if (kind == PointerKind.Pen)
         {
-            viewport.SetScroll(x, y - step);
+            return false;
         }
+
+        switch (Rail.ZoneAt(position))
+        {
+            case RailZone.Strip:
+                return Rail.PointerDown(Rail.TrackYAt(position)) || AnyInking(); // while inking: taken, nothing moves
+            case RailZone.Indicator:
+                Rail.OpenGoToPage();
+                return true;
+            default:
+                if (IsNearRail(position))
+                {
+                    Rail.NotifyActivity(); // shown for the next press; this one is the document's
+                }
+
+                return false;
+        }
+    }
+
+    /// <summary>The finger or mouse on the rail lifts (or loses capture): the drag ends.</summary>
+    internal void RoutePointerUp()
+    {
+        _railTouchId = null;
+        Rail.PointerUp();
     }
 
     private void OnPreviewMouseWheel(object? sender, MouseWheelEventArgs e)
@@ -714,7 +754,7 @@ public partial class DocumentView : UserControl
             if ((modifiers & ModifierKeys.Shift) != 0)
             {
                 e.Handled = true; // the scroll bars are hidden: Shift+wheel pans sideways with a plain mouse
-                ScrollByWheel(e.Delta, horizontal: true);
+                PanByWheel(e.Delta);
             }
 
             return; // the plain wheel scrolls vertically in the scroll viewer
@@ -729,27 +769,130 @@ public partial class DocumentView : UserControl
         vm.Viewport.ZoomAt(Math.Pow(_wheelStepFactor, e.Delta / _wheelNotch), e.GetPosition(Viewport));
     }
 
-    /// <summary>The mouse (not the pen hovering) near the right edge shows the rail (UI-07).</summary>
-    private void OnPreviewMouseMove(object? sender, MouseEventArgs e)
+    private bool IsNearRail(Point position) => position.X >= Rail.ActualWidth - Rail.Strip.Width;
+
+    /// <summary>A real mouse press (not promoted from the pen or a finger): maybe the rail's.</summary>
+    private void OnHostMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.StylusDevice is null && IsNearRail(e.GetPosition(this)))
+        if (e.StylusDevice is not null)
         {
-            Rail.NotifyActivity();
+            return; // promoted from the pen or a finger: handled by their own events
+        }
+
+        if (RoutePointerDown(e.GetPosition(Rail), PointerKind.Mouse))
+        {
+            e.Handled = true;
+            if (Rail.IsDragging)
+            {
+                Host.CaptureMouse();
+            }
         }
     }
 
-    private bool IsNearRail(Point position) => position.X >= ActualWidth - Rail.Strip.Width;
+    /// <summary>The mouse drags the knob, or hovers: near the edge it shows the rail and over it keeps it.</summary>
+    private void OnHostMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.StylusDevice is not null)
+        {
+            return; // the pen hovering on its way to ink, or a finger
+        }
+
+        var position = e.GetPosition(Rail);
+        if (Rail.IsDragging && _railTouchId is null && Host.IsMouseCaptured)
+        {
+            Rail.PointerMove(Rail.TrackYAt(position));
+            return;
+        }
+
+        if (IsNearRail(position))
+        {
+            Rail.NotifyActivity();
+        }
+
+        Rail.SetHover(Rail.ZoneAt(position) != RailZone.None);
+    }
+
+    private void OnHostMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.StylusDevice is null && _railTouchId is null && Rail.IsDragging)
+        {
+            e.Handled = true;
+            Host.ReleaseMouseCapture(); // LostMouseCapture ends the drag
+            RoutePointerUp();
+        }
+    }
+
+    private void OnHostLostMouseCapture(object sender, MouseEventArgs e)
+    {
+        if (_railTouchId is null && Rail.IsDragging)
+        {
+            RoutePointerUp();
+        }
+    }
+
+    private void OnHostMouseLeave(object sender, MouseEventArgs e) => Rail.SetHover(false);
+
+    /// <summary>A finger press: in the shown rail's strip or on its indicator it is the rail's (never panned).</summary>
+    private void OnHostTouchDown(object? sender, TouchEventArgs e)
+    {
+        var kind = IsPenInput() ? PointerKind.Pen : PointerKind.Finger;
+        if (kind == PointerKind.Pen || Rail.IsDragging)
+        {
+            return; // the pen's press is routed by PreviewStylusDown; a second finger during a drag is ignored
+        }
+
+        if (RoutePointerDown(e.GetTouchPoint(Rail).Position, kind))
+        {
+            e.Handled = true; // not promoted to the mouse, never seen by the scroll viewer's manipulation
+            if (Rail.IsDragging)
+            {
+                _railTouchId = e.TouchDevice.Id;
+                Host.CaptureTouch(e.TouchDevice); // the host is not manipulation-enabled: no pan starts
+            }
+        }
+    }
+
+    private void OnHostTouchMove(object? sender, TouchEventArgs e)
+    {
+        if (e.TouchDevice.Id == _railTouchId)
+        {
+            e.Handled = true;
+            Rail.PointerMove(Rail.TrackYAt(e.GetTouchPoint(Rail).Position));
+        }
+    }
+
+    private void OnHostTouchUp(object? sender, TouchEventArgs e)
+    {
+        if (e.TouchDevice.Id == _railTouchId)
+        {
+            e.Handled = true;
+            Host.ReleaseTouchCapture(e.TouchDevice);
+            RoutePointerUp();
+        }
+    }
+
+    private void OnHostLostTouchCapture(object? sender, TouchEventArgs e)
+    {
+        if (e.TouchDevice.Id == _railTouchId)
+        {
+            RoutePointerUp();
+        }
+    }
+
+    /// <summary>The pen's press: never the rail's (it inks), but it closes an open page field.</summary>
+    private void OnHostStylusDown(object sender, StylusDownEventArgs e)
+    {
+        if (e.StylusDevice.TabletDevice?.Type == TabletDeviceType.Stylus)
+        {
+            RoutePointerDown(e.GetPosition(Rail), PointerKind.Pen);
+        }
+    }
 
     private void OnPreviewTouchDown(object? sender, TouchEventArgs e)
     {
         if (IsPenInput())
         {
             return; // only fingers tap; the pen never zooms
-        }
-
-        if (IsNearRail(e.GetTouchPoint(this).Position))
-        {
-            Rail.NotifyActivity(); // a finger near the edge shows the rail (it still pans the document)
         }
 
         _touches.Add(e.TouchDevice.Id);
