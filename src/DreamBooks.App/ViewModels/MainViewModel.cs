@@ -9,6 +9,7 @@ using DreamBooks.Core.Geometry;
 using DreamBooks.Core.Ink;
 using DreamBooks.Core.Journal;
 using DreamBooks.Core.Layout;
+using DreamBooks.Core.Marks;
 using DreamBooks.Core.Model;
 using DreamBooks.Core.Undo;
 using DreamBooks.Pdf;
@@ -67,6 +68,16 @@ public sealed class MainViewModel : ObservableObject
     private string? _journalWarning;
     private bool _listenerFailed;
 
+    // Marks (FR-100..FR-103): a new index per document, live tracking of loaded pages, and a background scan over
+    // the viewer's current renderer, rebuilt when a save swaps it. The scan is paused while a stroke or eraser
+    // gesture is live and while a save runs (the two pauses nest).
+    private readonly MarkRecognizer _markRecognizer = new();
+    private MarkIndex? _markIndex;
+    private MarkTracker? _markTracker;
+    private MarkScanner? _markScanner;
+    private bool _scanPausedForInk;
+    private bool _scanPausedForSave;
+
     /// <param name="dialogs">The dialogs.</param>
     /// <param name="recovery">
     /// Where journals and document locks live (FR-84); null disables crash recovery and the single-writer lock
@@ -89,7 +100,10 @@ public sealed class MainViewModel : ObservableObject
         ZoomVm = new ZoomViewModel();
         Viewport = new DocumentViewportViewModel(ZoomVm, _scheduler) { PageNavigator = NavigateToPageAsync };
         Viewport.PositionChanged += OnViewportPositionChanged;
+        Marks = new MarksViewModel(Viewport, _scheduler);
+        ZoomVm.PropertyChanged += OnZoomPropertyChanged;
         OpenDocument = OpenedDocument.OpenPdfAsync;
+        MarkSourceFactory = static opened => opened.Viewer?.Current is { } renderer ? new MarkPageSource(renderer) : null;
         SaveService = new DocumentSaveService(new PdfDocumentSaver(), dialogs);
 
         // Navigation stays available while a save runs (the earlier lock is gone): pages that cannot be loaded
@@ -128,6 +142,9 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>The multi-page view state: layout, position, current page, history, fit width.</summary>
     public DocumentViewportViewModel Viewport { get; }
 
+    /// <summary>The marks of the open document: list, previous/next mark (FR-101..FR-103).</summary>
+    public MarksViewModel Marks { get; }
+
     /// <summary>The open document, or null.</summary>
     public DocumentSession? Session
     {
@@ -162,6 +179,7 @@ public sealed class MainViewModel : ObservableObject
         {
             if (SetProperty(ref _isSaving, value))
             {
+                SetScanPause(ref _scanPausedForSave, value);
                 OpenPdfCommand.NotifyCanExecuteChanged();
                 SaveCommand.NotifyCanExecuteChanged();
                 SaveAsCommand.NotifyCanExecuteChanged();
@@ -274,6 +292,21 @@ public sealed class MainViewModel : ObservableObject
     internal DocumentSaveService SaveService { get; set; }
 
     /// <summary>
+    /// Test seam: the mark scan's source for a document's current renderer, asked at open and after every renderer
+    /// swap; null (no renderer: released during a save, or a test source) means no scan for now.
+    /// </summary>
+    internal Func<OpenedDocument, IMarkPageSource?> MarkSourceFactory { get; set; }
+
+    /// <summary>Test seam: the scan's pause between pages; the scanner's default when null.</summary>
+    internal TimeSpan? MarkScanIdleGap { get; set; }
+
+    /// <summary>Test hook: the mark index of the open document.</summary>
+    internal MarkIndex? MarkIndexForTest => _markIndex;
+
+    /// <summary>Test hook: the scan running over the current renderer, if any.</summary>
+    internal MarkScanner? MarkScannerForTest => _markScanner;
+
+    /// <summary>
     /// Whether the window may close (FR-85): waits for a running save, then, with unsaved changes, asks
     /// Save / Don't save / Cancel. Save closes only if the save succeeded; Don't save raises
     /// <see cref="DiscardRequested"/>. Never throws.
@@ -292,11 +325,13 @@ public sealed class MainViewModel : ObservableObject
                 RaiseDiscardRequested();
                 await CloseJournalAsync(userDiscarded: true);
                 ReleaseLock();
+                StopMarks();
                 return true;
             case UnsavedChanges.Resolved:
                 await PersistViewAsync();
                 await CloseJournalAsync(userDiscarded: false);
                 ReleaseLock();
+                StopMarks();
                 return true;
             default:
                 return false;
@@ -1010,6 +1045,7 @@ public sealed class MainViewModel : ObservableObject
         CancelErase();
         _pendingSettle?.Dispose();
         _pendingSettle = null;
+        StopMarks(); // before anything of the previous document goes: nothing scans or tracks into the new index
         if (Session is { } previous)
         {
             previous.CurrentPageChanged -= OnCurrentPageChanged;
@@ -1053,6 +1089,112 @@ public sealed class MainViewModel : ObservableObject
         ShowCurrentPage();
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
+        StartMarks(session);
+    }
+
+    /// <summary>
+    /// A new document: a new index, the tracker for its loaded pages (it recognises those already loaded at once),
+    /// the list, then the scan over the current renderer around the current page.
+    /// </summary>
+    private void StartMarks(DocumentSession session)
+    {
+        _markIndex = new MarkIndex(session.PageCount);
+        _markTracker = new MarkTracker(session, _markRecognizer, _markIndex);
+        Marks.Attach(_markIndex);
+        StartScan();
+    }
+
+    /// <summary>
+    /// A scan over the document's current renderer, into the current index: pages already scanned (by an earlier scan
+    /// over a replaced renderer, or tracked live) are skipped, so a renderer swap loses no marks and loads no page twice.
+    /// No scan while there is no renderer (a plain Save released it); the reopened one starts the next.
+    /// </summary>
+    private void StartScan()
+    {
+        if (_markIndex is not { } index || _document is not { } document || Session is not { } session)
+        {
+            return;
+        }
+
+        IMarkPageSource? source;
+        try
+        {
+            source = MarkSourceFactory(document);
+        }
+#pragma warning disable CA1031 // Marks are an aid: without a source there is simply no scan.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            source = null;
+        }
+
+        // A source of another page count would not match the index (a save never changes it): no scan then.
+        if (source is null || source.PageCount != session.PageCount)
+        {
+            Marks.SetScanner(null);
+            return;
+        }
+
+        var scanner = new MarkScanner(source, _markRecognizer, index, isBusy: null, MarkScanIdleGap);
+        if (_scanPausedForInk)
+        {
+            scanner.Pause();
+        }
+
+        if (_scanPausedForSave)
+        {
+            scanner.Pause();
+        }
+
+        _markScanner = scanner;
+        scanner.Start(Math.Max(session.CurrentPageIndex, 0));
+        Marks.SetScanner(scanner);
+    }
+
+    private void StopScan()
+    {
+        var scanner = _markScanner;
+        _markScanner = null;
+        scanner?.Dispose();
+        Marks.SetScanner(null);
+    }
+
+    /// <summary>The document goes (close or swap): the scan and the tracker stop before the index is dropped.</summary>
+    private void StopMarks()
+    {
+        StopScan();
+        _markTracker?.Dispose();
+        _markTracker = null;
+        _markIndex = null;
+        Marks.Attach(null);
+    }
+
+    /// <summary>Takes one pause on the scan when <paramref name="paused"/> turns on, gives it back when it turns off.</summary>
+    private void SetScanPause(ref bool flag, bool paused)
+    {
+        if (flag == paused)
+        {
+            return;
+        }
+
+        flag = paused;
+        if (paused)
+        {
+            _markScanner?.Pause();
+        }
+        else
+        {
+            _markScanner?.Resume();
+        }
+    }
+
+    /// <summary>The zoom is locked exactly while a stroke or an eraser gesture is live: the scan waits meanwhile.</summary>
+    private void OnZoomPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ZoomViewModel.IsLocked))
+        {
+            SetScanPause(ref _scanPausedForInk, ZoomVm.IsLocked);
+        }
     }
 
     private static async Task ReleaseQuietlyAsync(
@@ -1401,14 +1543,23 @@ public sealed class MainViewModel : ObservableObject
         if (ReferenceEquals(sender, _viewer))
         {
             OnPropertyChanged(nameof(Renderer));
+
+            // The scan reads through one renderer: it follows the swap (stopped while released, resumed over the
+            // reopened one with the same index, so the pages already scanned stay and are not loaded again).
+            StopScan();
+            StartScan();
         }
     }
 
     private void OnCurrentPageChanged(object? sender, EventArgs e)
     {
-        if (ReferenceEquals(sender, Session))
+        if (sender is DocumentSession session && ReferenceEquals(session, Session))
         {
             ShowCurrentPage(); // also after undo or redo navigated to another page
+
+            // Only settled page changes and jumps reach here (the viewport debounces scrolling): the scan goes on
+            // around the page being read.
+            _markScanner?.Recentre(Math.Max(session.CurrentPageIndex, 0));
         }
     }
 

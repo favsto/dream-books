@@ -178,6 +178,24 @@ internal static class Strings
 
     public static string Back => Get(nameof(Back));
 
+    /// <summary>Page of a mark in the marks list: the 1-based page number ("pag. 12").</summary>
+    public static string MarkPageLabelFormat => Get(nameof(MarkPageLabelFormat));
+
+    /// <summary>Empty state of the marks list: what counts as a mark (FR-100, FR-103).</summary>
+    public static string MarksEmpty => Get(nameof(MarksEmpty));
+
+    /// <summary>Status shown for a while when previous/next mark has nowhere to go (FR-102).</summary>
+    public static string MarksNoOther => Get(nameof(MarksNoOther));
+
+    public static string PreviousMark => Get(nameof(PreviousMark));
+
+    public static string NextMark => Get(nameof(NextMark));
+
+    public static string GoToMark => Get(nameof(GoToMark));
+
+    /// <summary>Title of the marks list panel.</summary>
+    public static string MarksList => Get(nameof(MarksList));
+
     private static string Get(string name) =>
         Manager.GetString(name, System.Globalization.CultureInfo.CurrentUICulture) ?? name;
 }

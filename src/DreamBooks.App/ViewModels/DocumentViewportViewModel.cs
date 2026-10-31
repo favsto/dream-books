@@ -7,6 +7,7 @@ using DreamBooks.App.Resources;
 using DreamBooks.App.Services;
 using DreamBooks.Core.Documents;
 using DreamBooks.Core.Layout;
+using DreamBooks.Core.Marks;
 using DreamBooks.Core.Model;
 
 namespace DreamBooks.App.ViewModels;
@@ -231,6 +232,40 @@ public sealed class DocumentViewportViewModel : ObservableObject
     /// </summary>
     public void ScrollToPage(int pageIndex, bool recordHistory) =>
         JumpToPage(pageIndex, recordHistory, CurrentPageReport.Immediate);
+
+    /// <summary>
+    /// Brings a mark into view (FR-102, FR-103): its vertical extent is centred in the window when it fits, otherwise
+    /// its top is aligned with the window's top. The zoom and the column stay. The page under the centre becomes
+    /// current at once and <see cref="Jumped"/> is raised, like go-to-page; with <paramref name="recordHistory"/> the
+    /// previous position is pushed on <see cref="History"/>. Ignored without a document or for a page outside it.
+    /// </summary>
+    public void ScrollToMark(Mark mark, bool recordHistory)
+    {
+        ArgumentNullException.ThrowIfNull(mark);
+        if (_layout is not { } layout || mark.PageIndex < 0 || mark.PageIndex >= layout.PageCount)
+        {
+            return;
+        }
+
+        var windowPt = _viewportHeightDip / (_position.Zoom * Units.DipPerPt);
+        var extentPt = Math.Max(0, mark.BottomPt - mark.TopPt);
+        var topPt = layout.PageTopPt(mark.PageIndex) + mark.TopPt;
+        if (windowPt > 0 && extentPt <= windowPt)
+        {
+            topPt -= (windowPt - extentPt) / 2;
+        }
+
+        topPt = Math.Clamp(topPt, 0, layout.TotalHeightPt);
+        var page = layout.PageAt(topPt);
+        if (recordHistory)
+        {
+            History.Push(_position);
+        }
+
+        SetPosition(Normalize(new ViewPosition(page, topPt - layout.PageTopPt(page), _position.ColumnXPt, _position.Zoom)));
+        Refresh(CurrentPageReport.Immediate, forceCurrent: null);
+        Jumped?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>
     /// The go-to-page field (FR-09): a whole page number of the document (1 to <see cref="PageCount"/>, surrounding
