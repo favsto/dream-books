@@ -6,13 +6,14 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using DreamBooks.App.Ink;
 using DreamBooks.App.Resources;
+using DreamBooks.App.Services;
 using DreamBooks.App.ViewModels;
-using DreamBooks.Core.Ink;
 using DreamBooks.Core.Layout;
-using DreamBooks.Core.Model;
+using DreamBooks.Core.Rendering;
 using DreamBooks.Pdf;
 
 namespace DreamBooks.App.Views;
@@ -29,9 +30,10 @@ namespace DreamBooks.App.Views;
 /// <remarks>
 /// A page entering the window gets a surface at once (white placeholder of the exact size, light fade-in, NFR-03),
 /// its strokes after a short debounce (<see cref="DocumentViewportViewModel.CurrentPageDelay"/>, so a fast fling
-/// loads nothing it passes) and its bitmap from <see cref="BitmapSource"/>. While a save holds the PDFium thread, loads
-/// and renders simply wait: placeholders stay and pages already loaded keep inking; when the renderer is replaced the
-/// bitmaps are asked again and failed loads retried.
+/// loads nothing it passes) and its bitmap from <see cref="PageBitmapCoordinator"/> (a preview first, then the sharp
+/// render; visible pages first). While a save holds the PDFium thread, loads and renders simply wait: placeholders stay
+/// and pages already loaded keep inking; when the renderer is replaced every bitmap is rendered again (failed ones
+/// included) and failed loads retried.
 /// </remarks>
 public partial class DocumentView : UserControl
 {
@@ -46,19 +48,17 @@ public partial class DocumentView : UserControl
     private const double _sameOffsetDip = 0.5;
     private const double _maxPanRemainderDip = 0.5;
 
-    /// <summary>The zoom must stay still this long before the bitmaps are rendered again at the new size (NFR-07).</summary>
-    private static readonly TimeSpan _renderDelay = TimeSpan.FromMilliseconds(150);
-
     private readonly Dictionary<int, PageSlot> _slots = [];
     private readonly HashSet<int> _touches = [];
-    private readonly DispatcherTimer _renderTimer;
     private readonly DispatcherTimer _editorTimer;
+    private readonly PageBitmapRenderer _pdfBitmaps = new();
+    private PageBitmapCoordinator _bitmaps;
+    private IBitmapRenderer<BitmapSource> _bitmapRenderer;
     private MainViewModel? _viewModel;
     private PageSurfacePool _pool;
     private (double X, double Y)? _pendingOffsets;
     private bool _settleQueued;
     private bool _updatingSurfaces;
-    private double _renderedZoom = double.NaN;
     private PdfRenderer? _requestedFrom;
     private Vector _panRemainder;
     private (Point Position, int Time)? _tapStart;
@@ -68,37 +68,42 @@ public partial class DocumentView : UserControl
     {
         InitializeComponent();
         _pool = NewPool(null);
-        BitmapSource = new RendererPageBitmapSource(() => _viewModel?.Renderer);
-        _renderTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = _renderDelay };
-        _renderTimer.Tick += (_, _) =>
-        {
-            _renderTimer.Stop();
-            InvalidateBitmaps();
-        };
+        _bitmapRenderer = _pdfBitmaps;
+        _bitmaps = NewBitmapCoordinator();
         _editorTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = DocumentViewportViewModel.CurrentPageDelay };
         _editorTimer.Tick += (_, _) => FlushEditorLoads();
         DataContextChanged += (_, e) => Attach(e.NewValue as MainViewModel);
         Loaded += (_, _) =>
         {
-            InvalidateBitmaps();
+            SyncBitmaps();
             ScheduleEditorLoads();
         };
         Unloaded += (_, _) =>
         {
-            _renderTimer.Stop();
             _editorTimer.Stop();
-            foreach (var slot in _slots.Values)
-            {
-                slot.CancelWork();
-            }
+            _bitmaps.SetWindow((0, -1), []); // nothing is shown: renders stop, the cache stays for a return
         };
     }
 
     /// <summary>
-    /// Where page bitmaps come from. INTERIM: <see cref="RendererPageBitmapSource"/>, one render per request through
-    /// the current renderer; the render scheduler (Task 8) replaces it here. Tests inject their own.
+    /// What draws the page bitmaps: by default the current <see cref="MainViewModel.Renderer"/> through
+    /// <see cref="PageBitmapRenderer"/>. Tests inject a fake; setting it starts over with a new scheduler.
     /// </summary>
-    internal IPageBitmapSource BitmapSource { get; set; }
+    internal IBitmapRenderer<BitmapSource> BitmapRenderer
+    {
+        get => _bitmapRenderer;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            _bitmapRenderer = value;
+            _bitmaps.Dispose();
+            _bitmaps = NewBitmapCoordinator();
+            SyncBitmaps();
+        }
+    }
+
+    /// <summary>The page bitmaps: scheduler, cache and the rail's previews (<see cref="PageBitmapCoordinator.GetPreviewAsync"/>).</summary>
+    internal PageBitmapCoordinator Bitmaps => _bitmaps;
 
     /// <summary>The surfaces in use, by page index (the retained window, plus a page kept while it is inking).</summary>
     internal IReadOnlyDictionary<int, InkSurface> ActiveSurfaces =>
@@ -110,27 +115,10 @@ public partial class DocumentView : UserControl
     internal InkSurface? SurfaceFor(int pageIndex) => _slots.TryGetValue(pageIndex, out var slot) ? slot.Surface : null;
 
     /// <summary>
-    /// Asks every visible page for a new bitmap; the one shown stays (stretched) until it arrives. The other pages of the
-    /// window drop theirs (stale, and memory) and ask again when they become visible. Called when the zoom settled, the
-    /// DPI changed or the renderer was replaced (the hook the render scheduler takes over in Task 8).
+    /// Renders every page of the window again at the current zoom (a pending zoom settle applies now); what is shown
+    /// stays, stretched, until the new bitmaps arrive. Called when the renderer was replaced; tests use it to settle.
     /// </summary>
-    internal void InvalidateBitmaps()
-    {
-        _renderTimer.Stop();
-        foreach (var slot in _slots.Values.ToArray())
-        {
-            if (IsPageVisible(slot.PageIndex))
-            {
-                RequestBitmap(slot);
-            }
-            else
-            {
-                slot.CancelRender();
-                slot.RequestedZoom = double.NaN;
-                slot.Surface.PageImage = null;
-            }
-        }
-    }
+    internal void InvalidateBitmaps() => _bitmaps.InvalidateAll();
 
     /// <summary>Starts the stroke loads of the window's pages that have no editor yet (what the debounce does).</summary>
     internal void FlushEditorLoads()
@@ -171,12 +159,40 @@ public partial class DocumentView : UserControl
     {
         base.OnDpiChanged(oldDpi, newDpi);
         ApplyPosition(); // the pages snap to the new pixel grid
-        InvalidateBitmaps(); // same DIPs, more or fewer pixels
+        _bitmaps.SetDpiScale(newDpi.DpiScaleX); // same DIPs, more or fewer pixels: rendered again at once
     }
 
     private double DeviceScale() => VisualTreeHelper.GetDpi(this).DpiScaleX;
 
-    private bool IsPageVisible(int pageIndex) => _viewModel?.Viewport.VisiblePages.Contains(pageIndex) == true;
+    private PageBitmapCoordinator NewBitmapCoordinator() =>
+        new(_bitmapRenderer, new DispatcherDelayScheduler(), SurfaceFor);
+
+    /// <summary>
+    /// Brings the bitmaps in line with the view model: renderer, document, screen scale, zoom (at once for a new
+    /// document) and the window. Each step does nothing when unchanged.
+    /// </summary>
+    private void SyncBitmaps()
+    {
+        var vm = _viewModel;
+        _pdfBitmaps.Renderer = vm?.Renderer;
+        _bitmaps.SetDocument(vm?.Viewport.Layout);
+        if (vm?.Viewport is not { Layout: not null } viewport)
+        {
+            return;
+        }
+
+        _bitmaps.SetDpiScale(DeviceScale());
+        _bitmaps.SetZoom(viewport.Position.Zoom);
+        _bitmaps.SetWindow(viewport.RetainedRange, viewport.VisiblePages);
+    }
+
+    private void UpdateBitmapWindow()
+    {
+        if (_viewModel?.Viewport is { Layout: not null } viewport)
+        {
+            _bitmaps.SetWindow(viewport.RetainedRange, viewport.VisiblePages);
+        }
+    }
 
     private PageSurfacePool NewPool(MainViewModel? viewModel) => new(() => CreateSurface(viewModel), DiscardSurface);
 
@@ -216,8 +232,9 @@ public partial class DocumentView : UserControl
         _viewModel = viewModel;
         _pool = NewPool(viewModel);
         _pendingOffsets = null;
-        _renderedZoom = double.NaN;
         _requestedFrom = viewModel?.Renderer;
+        _bitmaps.SetDocument(null); // whatever the new view model shows starts from scratch
+        SyncBitmaps();
         if (viewModel is not null)
         {
             viewModel.Viewport.PositionChanged += OnPositionChanged;
@@ -233,11 +250,11 @@ public partial class DocumentView : UserControl
 
     private void OnLayoutChanged(object? sender, EventArgs e)
     {
-        // Another document (or none): every surface goes, a live gesture on one is dropped.
+        // Another document (or none): every surface goes, a live gesture on one is dropped, every render is cancelled.
         ReleaseAll();
         _pendingOffsets = null;
-        _renderedZoom = double.NaN;
         _requestedFrom = _viewModel?.Renderer;
+        SyncBitmaps();
         ApplyPosition();
         UpdateSurfaces();
     }
@@ -256,35 +273,22 @@ public partial class DocumentView : UserControl
         }
         else if (e.PropertyName == nameof(DocumentViewportViewModel.VisiblePages))
         {
-            RequestNewlyVisibleBitmaps();
-        }
-    }
-
-    /// <summary>
-    /// Interim: a page of the window that became visible and has asked nothing since it was bound or invalidated asks
-    /// for its bitmap now (zoom changes go through the settle timer, not here, so a pinch does not flood PDFium).
-    /// </summary>
-    private void RequestNewlyVisibleBitmaps()
-    {
-        foreach (var slot in _slots.Values.ToArray())
-        {
-            if (double.IsNaN(slot.RequestedZoom) && IsPageVisible(slot.PageIndex))
-            {
-                RequestBitmap(slot);
-            }
+            UpdateBitmapWindow(); // the visible pages go first
         }
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         // A save swapped the renderer onto the saved file: same content, so the bitmaps stay until new ones arrive;
-        // stroke loads that failed while the file was released are tried again.
+        // renders and stroke loads that failed while the file was released are tried again (after repeated failures the
+        // scheduler waits for exactly this invalidation).
         // At open the renderer is announced after the layout, whose pages already asked it: not twice.
         if (e.PropertyName != nameof(MainViewModel.Renderer))
         {
             return;
         }
 
+        _pdfBitmaps.Renderer = _viewModel?.Renderer;
         if (_viewModel?.Renderer is not { } renderer)
         {
             _requestedFrom = null; // released by a save: whatever comes back is asked again
@@ -292,7 +296,7 @@ public partial class DocumentView : UserControl
         else if (!ReferenceEquals(renderer, _requestedFrom))
         {
             _requestedFrom = renderer;
-            InvalidateBitmaps();
+            _bitmaps.InvalidateAll();
             ScheduleEditorLoads();
         }
     }
@@ -324,17 +328,8 @@ public partial class DocumentView : UserControl
             slot.Surface.Scale = scale;
         }
 
-        if (position.Zoom != _renderedZoom)
-        {
-            if (!double.IsNaN(_renderedZoom))
-            {
-                // Ink is vector and rescales at once; the bitmap stays stretched until the zoom settles.
-                _renderTimer.Stop();
-                _renderTimer.Start();
-            }
-
-            _renderedZoom = position.Zoom;
-        }
+        // Ink is vector and rescales at once; the bitmaps stay stretched until the zoom settles.
+        _bitmaps.SetZoom(position.Zoom);
 
         if (viewport.ViewportWidthDip <= 0 || viewport.ViewportHeightDip <= 0)
         {
@@ -447,7 +442,6 @@ public partial class DocumentView : UserControl
                 }
 
                 _slots.Remove(slot.PageIndex);
-                slot.CancelWork();
                 PageSurfacePool.Reset(slot.Surface);
                 free.Push(slot.Surface);
             }
@@ -478,6 +472,8 @@ public partial class DocumentView : UserControl
         {
             _updatingSurfaces = false;
         }
+
+        UpdateBitmapWindow(); // pages that left are cancelled, new ones queued by distance from the visible ones
     }
 
     /// <summary>Every surface leaves (another document, another view model); live gestures are dropped.</summary>
@@ -485,7 +481,6 @@ public partial class DocumentView : UserControl
     {
         foreach (var slot in _slots.Values.ToArray())
         {
-            slot.CancelWork();
             Pages.Children.Remove(slot.Surface);
             _pool.Return(slot.Surface); // resets it, cancelling a live gesture
         }
@@ -518,10 +513,7 @@ public partial class DocumentView : UserControl
             ScheduleEditorLoads();
         }
 
-        if (IsPageVisible(pageIndex))
-        {
-            RequestBitmap(slot); // interim: off-screen pages of the window ask when they become visible
-        }
+        _bitmaps.ShowCached(pageIndex); // a page seen recently shows its bitmap at once, the others their placeholder
     }
 
     /// <summary>A very light fade-in of the white page (NFR-03); instant when Windows animations are off (NFR-32).</summary>
@@ -575,49 +567,6 @@ public partial class DocumentView : UserControl
         finally
         {
             slot.LoadingEditor = false;
-        }
-    }
-
-    /// <summary>
-    /// Asks for the page's bitmap at the current zoom. Recycling or a newer request cancels the work; a result that
-    /// still arrives is applied only if it is the latest request of a slot still bound (slot identity).
-    /// </summary>
-    private async void RequestBitmap(PageSlot slot)
-    {
-        slot.CancelRender();
-        if (_viewModel?.Viewport.Layout is not { } layout)
-        {
-            return;
-        }
-
-        var cts = new CancellationTokenSource();
-        slot.Render = cts;
-        var request = ++slot.RenderRequest;
-        var size = VirtualPagePanel.PageSizePt(layout, slot.PageIndex);
-        var zoom = _viewModel.Viewport.Position.Zoom;
-        slot.RequestedZoom = zoom;
-        try
-        {
-            var image = await BitmapSource.RenderAsync(
-                slot.PageIndex, new PageSize(size.Width, size.Height), zoom, DeviceScale(), cts.Token);
-            if (image is not null && request == slot.RenderRequest && IsBound(slot))
-            {
-                slot.Surface.PageImage = image;
-            }
-        }
-#pragma warning disable CA1031 // A bitmap source must not take the app down from this async void (NFR-11).
-        catch (Exception)
-#pragma warning restore CA1031
-        {
-        }
-        finally
-        {
-            if (ReferenceEquals(slot.Render, cts))
-            {
-                slot.Render = null;
-            }
-
-            cts.Dispose();
         }
     }
 
@@ -729,7 +678,11 @@ public partial class DocumentView : UserControl
         }
     }
 
-    /// <summary>A page of the window: its surface and the work in flight for it.</summary>
+    /// <summary>
+    /// A page of the window: its surface and its stroke load. The load is not cancelled when the page leaves (the
+    /// session keeps it; a result arriving after a rebind is dropped by slot identity). Bitmaps go through
+    /// <see cref="PageBitmapCoordinator"/>, which cancels the renders of pages that left.
+    /// </summary>
     private sealed class PageSlot(InkSurface surface, int pageIndex)
     {
         public InkSurface Surface { get; } = surface;
@@ -738,18 +691,5 @@ public partial class DocumentView : UserControl
 
         /// <summary>True while its strokes are being loaded (one load at a time).</summary>
         public bool LoadingEditor { get; set; }
-
-        public CancellationTokenSource? Render { get; set; }
-
-        /// <summary>Counts bitmap requests: only the latest one may be applied.</summary>
-        public int RenderRequest { get; set; }
-
-        /// <summary>The zoom of the last bitmap request (NaN: none since the last invalidation).</summary>
-        public double RequestedZoom { get; set; } = double.NaN;
-
-        public void CancelRender() => Render?.Cancel();
-
-        /// <summary>Recycled: stops the render; a stroke load goes on in the session and its result is dropped.</summary>
-        public void CancelWork() => Render?.Cancel();
     }
 }

@@ -1,11 +1,13 @@
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using DreamBooks.App.Ink;
 using DreamBooks.App.ViewModels;
 using DreamBooks.App.Views;
 using DreamBooks.Core.Layout;
 using DreamBooks.Core.Model;
+using DreamBooks.Core.Rendering;
 using DreamBooks.Pdf;
 using DreamBooks.Pdf.Tests;
 
@@ -118,11 +120,11 @@ public sealed class DocumentViewTests : IDisposable
     [Fact]
     public async Task Placeholder_is_shown_for_pages_without_a_bitmap()
     {
-        var bitmaps = new FakeBitmapSource();
+        var bitmaps = new FakeBitmapRenderer();
         await WithViewAsync(
             (vm, view) =>
             {
-                Assert.NotEmpty(bitmaps.Requests);
+                WpfTestThread.PumpUntil(() => bitmaps.Pending.Any(r => r.Page == 0));
                 var surface = view.SurfaceFor(0)!;
                 Assert.Null(surface.PageImage);
                 Assert.InRange(surface.RenderSize.Width - (_widthPt * surface.Scale), -0.5, 0.5);
@@ -132,10 +134,9 @@ public sealed class DocumentViewTests : IDisposable
                 Assert.True(paper.Opacity >= 1);
                 Assert.Same(Application.Current.FindResource("PagePlaceholderBrush"), paper);
 
-                bitmaps.Complete(0, BitmapOf());
-                WpfTestThread.Drain();
-                Assert.NotNull(surface.PageImage);
-                Assert.Null(view.SurfaceFor(1)!.PageImage); // retained, not visible: no bitmap asked yet (interim)
+                bitmaps.Complete(0); // its quick preview
+                WpfTestThread.PumpUntil(() => surface.PageImage is not null);
+                Assert.Null(view.SurfaceFor(view.ActiveSurfaces.Keys.Max())!.PageImage); // nothing rendered there yet
             },
             bitmaps);
     }
@@ -241,7 +242,7 @@ public sealed class DocumentViewTests : IDisposable
 
         WpfTestThread.Run(() =>
         {
-            var view = new DocumentView { BitmapSource = new FakeBitmapSource(), DataContext = vm };
+            var view = new DocumentView { BitmapRenderer = new FakeBitmapRenderer(), DataContext = vm };
             LayOut(view, 1000, 2400);
             view.FlushEditorLoads();
             var surface = view.SurfaceFor(2)!;
@@ -394,7 +395,7 @@ public sealed class DocumentViewTests : IDisposable
         {
             WpfTestThread.Run(() =>
             {
-                var view = new DocumentView { BitmapSource = new FakeBitmapSource(), DataContext = vm };
+                var view = new DocumentView { BitmapRenderer = new FakeBitmapRenderer(), DataContext = vm };
                 LayOut(view, 1000, 800);
 
                 var layout = vm.Viewport.Layout!;
@@ -443,62 +444,63 @@ public sealed class DocumentViewTests : IDisposable
     }
 
     [Fact]
-    public async Task Interim_renderer_bitmaps_arrive_for_the_visible_pages()
+    public async Task Pdf_bitmaps_arrive_sharp_for_the_window_through_the_scheduler()
     {
         await WithViewAsync(
             (vm, view) =>
             {
-                // The screen scale is the test machine's; the first bitmap may be at the zoom before fit width applied.
-                var (width, height) = RendererPageBitmapSource.PixelSize(new PageSize(_widthPt, _heightPt), vm.ZoomVm.Zoom, view.Pages.DpiScale);
-                WpfTestThread.PumpUntil(() => view.SurfaceFor(0)!.PageImage is System.Windows.Media.Imaging.BitmapSource { PixelWidth: var w } && w == width);
-                var image = (System.Windows.Media.Imaging.BitmapSource)view.SurfaceFor(0)!.PageImage!;
-                Assert.Equal(width, image.PixelWidth);
+                // The real renderer: the screen scale is the test machine's.
+                var (width, height) = PageBitmapRenderer.SharpSize(new PageSize(_widthPt, _heightPt), vm.ZoomVm.Zoom, view.Pages.DpiScale);
+                WpfTestThread.PumpUntil(() => view.SurfaceFor(0)!.PageImage is BitmapSource { PixelWidth: var w } && w == width);
+                var image = (BitmapSource)view.SurfaceFor(0)!.PageImage!;
                 Assert.Equal(height, image.PixelHeight);
-                Assert.Null(view.SurfaceFor(2)!.PageImage); // retained, not visible
+                WpfTestThread.PumpUntil(() => view.ActiveSurfaces.Values.All(s => s.PageImage is not null)); // neighbours too
             },
             bitmaps: null);
     }
 
     [Fact]
-    public void Interim_render_size_is_capped_on_its_longest_side()
+    public void Sharp_render_size_is_capped_on_its_longest_side()
     {
         var a4 = new PageSize(_widthPt, _heightPt);
-        Assert.Equal(RenderSizePolicy.Compute(a4, 1, 1.5), RendererPageBitmapSource.PixelSize(a4, 1, 1.5));
+        Assert.Equal(RenderSizePolicy.Compute(a4, 1, 1.5), PageBitmapRenderer.SharpSize(a4, 1, 1.5));
 
-        var (width, height) = RendererPageBitmapSource.PixelSize(a4, 8, 2);
-        Assert.Equal(RendererPageBitmapSource.MaxLongSidePx, height);
+        var (width, height) = PageBitmapRenderer.SharpSize(a4, 8, 2);
+        Assert.Equal(PageBitmapRenderer.MaxLongSidePx, height);
         Assert.Equal(_widthPt / _heightPt, (double)width / height, 3); // same proportions, stretched to the page
 
-        var (wide, low) = RendererPageBitmapSource.PixelSize(new PageSize(5000, 300), 1, 1);
-        Assert.Equal(RendererPageBitmapSource.MaxLongSidePx, wide);
+        var (wide, low) = PageBitmapRenderer.SharpSize(new PageSize(5000, 300), 1, 1);
+        Assert.Equal(PageBitmapRenderer.MaxLongSidePx, wide);
         Assert.True(low >= 1);
     }
 
     [Fact]
-    public async Task Interim_bitmaps_are_asked_only_for_visible_pages()
+    public async Task Bitmaps_are_asked_for_the_retained_window_only_visible_pages_first()
     {
-        var bitmaps = new FakeBitmapSource();
+        var bitmaps = new FakeBitmapRenderer { Auto = true };
         await WithViewAsync(
             (vm, view) =>
             {
-                var everVisible = new HashSet<int>(vm.Viewport.VisiblePages);
-                Assert.Equal(vm.Viewport.VisiblePages.Order(), bitmaps.Requests.Select(r => r.Page).Distinct().Order());
+                Idle(view);
+                var everRetained = new HashSet<int>(Retained(vm));
+                Assert.Contains(bitmaps.Requests[0].Page, vm.Viewport.VisiblePages);
 
                 for (var page = 1; page < 12; page += 2)
                 {
                     ScrollTo(view, view.Pages.PageRect(page).Top + 300);
-                    everVisible.UnionWith(vm.Viewport.VisiblePages);
-                    foreach (var visible in vm.Viewport.VisiblePages)
-                    {
-                        Assert.Contains(bitmaps.Requests, r => r.Page == visible);
-                    }
+                    everRetained.UnionWith(Retained(vm));
+                    Idle(view);
+                    Assert.All(vm.Viewport.VisiblePages, visible => Assert.NotNull(view.SurfaceFor(visible)!.PageImage));
                 }
 
-                Assert.All(bitmaps.Requests, r => Assert.Contains(r.Page, everVisible));
+                Assert.All(bitmaps.Requests, r => Assert.Contains(r.Page, everRetained));
 
-                bitmaps.Requests.Clear();
-                view.InvalidateBitmaps(); // e.g. the zoom settled
-                Assert.Equal(vm.Viewport.VisiblePages.Order(), bitmaps.Requests.Select(r => r.Page).Order());
+                var before = bitmaps.Requests.Length;
+                view.InvalidateBitmaps(); // e.g. the renderer was replaced
+                Idle(view);
+                var again = bitmaps.Requests.Skip(before).ToArray();
+                Assert.Equal(Retained(vm).Order(), again.Select(r => r.Page).Order());
+                Assert.All(again.Take(vm.Viewport.VisiblePages.Count), r => Assert.Contains(r.Page, vm.Viewport.VisiblePages));
             },
             bitmaps);
     }
@@ -506,16 +508,17 @@ public sealed class DocumentViewTests : IDisposable
     [Fact]
     public async Task Bitmap_that_completes_after_its_surface_was_rebound_is_not_applied()
     {
-        var bitmaps = new FakeBitmapSource { HonourCancellation = false }; // a render that finishes anyway
+        var bitmaps = new FakeBitmapRenderer { HonourCancellation = false }; // a render that finishes anyway
         await WithViewAsync(
             (vm, view) =>
             {
                 var surface = view.SurfaceFor(0)!;
-                Assert.Contains(bitmaps.Requests, r => r.Page == 0);
+                WpfTestThread.PumpUntil(() => bitmaps.Pending.Any(r => r.Page == 0));
 
                 ScrollTo(view, view.Pages.PageRect(20).Top);
                 Assert.NotEqual(0, VirtualPagePanel.GetPageIndex(surface)); // rebound to another page (or spare)
-                bitmaps.CompleteAll(0, BitmapOf());
+                bitmaps.CompleteAll(0);
+                WpfTestThread.PumpUntil(() => bitmaps.Pending.Any(r => r.Page >= 18)); // page 0's result was handled
                 WpfTestThread.Drain();
 
                 Assert.Null(surface.PageImage);
@@ -541,7 +544,7 @@ public sealed class DocumentViewTests : IDisposable
 
         WpfTestThread.Run(() =>
         {
-            var view = new DocumentView { BitmapSource = new FakeBitmapSource(), DataContext = vm };
+            var view = new DocumentView { BitmapRenderer = new FakeBitmapRenderer(), DataContext = vm };
             LayOut(view, 1000, 800);
             view.FlushEditorLoads();
             var surface = view.SurfaceFor(2)!;
@@ -638,7 +641,7 @@ public sealed class DocumentViewTests : IDisposable
 
         WpfTestThread.Run(() =>
         {
-            var view = new DocumentView { BitmapSource = new FakeBitmapSource(), DataContext = vm };
+            var view = new DocumentView { BitmapRenderer = new FakeBitmapRenderer(), DataContext = vm };
             LayOut(view, 1000, 2400);
             foreach (var zoom in new[] { 0.5, 1.4 })
             {
@@ -707,7 +710,7 @@ public sealed class DocumentViewTests : IDisposable
     [Fact]
     public async Task Ink_stays_registered_with_the_pixel_aligned_bitmap()
     {
-        var bitmaps = new FakeBitmapSource();
+        var bitmaps = new FakeBitmapRenderer { Auto = true };
         await WithViewAsync(
             (vm, view) =>
             {
@@ -717,12 +720,8 @@ public sealed class DocumentViewTests : IDisposable
                     vm.ZoomVm.Zoom = zoom;
                     Settle(view);
                     ScrollTo(view, view.Pages.PageRect(2).Top + 37.3, x: 11.7);
-                    view.InvalidateBitmaps();
-                    foreach (var shown in vm.Viewport.VisiblePages)
-                    {
-                        bitmaps.CompleteAll(shown, BitmapOf());
-                    }
-
+                    view.InvalidateBitmaps(); // the zoom settles now
+                    Idle(view);
                     Settle(view);
                     foreach (var page in vm.Viewport.VisiblePages)
                     {
@@ -736,11 +735,12 @@ public sealed class DocumentViewTests : IDisposable
                         // The bitmap layer covers the surface exactly, and is asked at exactly its pixel size (1:1).
                         Assert.Equal(surface.RenderSize, surface.BitmapLayer.RenderSize);
                         Assert.Equal(default, surface.BitmapLayer.TranslatePoint(default, surface));
+                        var pixels = ((int)Math.Round(surface.RenderSize.Width * dpi), (int)Math.Round(surface.RenderSize.Height * dpi));
                         var request = bitmaps.Requests.Last(r => r.Page == page);
-                        Assert.Equal(
-                            ((int)Math.Round(surface.RenderSize.Width * dpi), (int)Math.Round(surface.RenderSize.Height * dpi)),
-                            RendererPageBitmapSource.PixelSize(request.Size, request.Zoom, request.DpiScale));
-                        Assert.Equal(dpi, request.DpiScale);
+                        Assert.Equal(pixels, (request.Width, request.Height));
+                        var shown = Assert.IsAssignableFrom<BitmapSource>(surface.PageImage);
+                        Assert.Equal(pixels, (shown.PixelWidth, shown.PixelHeight));
+                        Assert.False(view.Bitmaps.Scheduler!.TryGet(page, out var cached) && view.Bitmaps.Scheduler.IsStale(page, cached!));
 
                         // The ink layer shares the surface origin and maps page points with the exact scale: its far
                         // edge is within half a pixel of the bitmap's.
@@ -754,13 +754,13 @@ public sealed class DocumentViewTests : IDisposable
             bitmaps);
     }
 
-    private Task WithViewAsync(Action<MainViewModel, DocumentView> test) => WithViewAsync(test, new FakeBitmapSource());
+    private Task WithViewAsync(Action<MainViewModel, DocumentView> test) => WithViewAsync(test, new FakeBitmapRenderer());
 
     /// <summary>
     /// Opens a 30-page generated PDF in a real view model, then runs the test on a view laid out at 1000 x 800 DIPs.
-    /// <paramref name="bitmaps"/> null keeps the view's own bitmap source (the interim renderer path).
+    /// <paramref name="bitmaps"/> null keeps the view's own renderer (PDFium through <see cref="PageBitmapRenderer"/>).
     /// </summary>
-    private async Task WithViewAsync(Action<MainViewModel, DocumentView> test, IPageBitmapSource? bitmaps)
+    private async Task WithViewAsync(Action<MainViewModel, DocumentView> test, IBitmapRenderer<BitmapSource>? bitmaps)
     {
         var path = Path.Combine(_dir, "doc.pdf");
         TestPdfFactory.Write(path, Enumerable.Repeat((_widthPt, _heightPt), _pageCount).ToArray());
@@ -773,7 +773,7 @@ public sealed class DocumentViewTests : IDisposable
                 var view = new DocumentView();
                 if (bitmaps is not null)
                 {
-                    view.BitmapSource = bitmaps;
+                    view.BitmapRenderer = bitmaps;
                 }
 
                 view.DataContext = vm;
@@ -858,14 +858,19 @@ public sealed class DocumentViewTests : IDisposable
     private static void MouseUp(InkSurface surface) =>
         surface.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left) { RoutedEvent = Mouse.MouseUpEvent });
 
-    private static ImageSource BitmapOf()
+    /// <summary>Until no render is running or due and every bitmap event was delivered.</summary>
+    private static void Idle(DocumentView view)
     {
-        var bitmap = System.Windows.Media.Imaging.BitmapSource.Create(
-            1, 1, 96, 96, PixelFormats.Bgra32, null, new byte[] { 255, 255, 255, 255 }, 4);
-        bitmap.Freeze();
-        return bitmap;
+        var scheduler = view.Bitmaps.Scheduler!;
+        WpfTestThread.PumpUntil(() => scheduler.WhenIdleAsync().IsCompleted);
+        WpfTestThread.Drain();
     }
 
+    private static IEnumerable<int> Retained(MainViewModel vm)
+    {
+        var (first, last) = vm.Viewport.RetainedRange;
+        return Enumerable.Range(first, last - first + 1);
+    }
 
     /// <summary>A page point (in points) under a viewport point, from the exact layout and the real scroll offsets.</summary>
     private static Point PagePointUnder(DocumentView view, int page, Point viewportPoint)
@@ -899,40 +904,4 @@ public sealed class DocumentViewTests : IDisposable
 
     private static void AssertWholePixels(double value) =>
         Assert.True(Math.Abs(value - Math.Round(value)) < 1e-6, $"{value} is not a whole device pixel");
-
-    /// <summary>
-    /// Bitmaps on demand: every request waits until the test completes it; several may be pending per page. With
-    /// <see cref="HonourCancellation"/> a cancelled request ends with no bitmap, as a real source would.
-    /// </summary>
-    private sealed class FakeBitmapSource : IPageBitmapSource
-    {
-        public bool HonourCancellation { get; init; } = true;
-
-        public List<Request> Requests { get; } = [];
-
-        public Task<ImageSource?> RenderAsync(int pageIndex, PageSize pageSize, double zoom, double dpiScale, CancellationToken ct)
-        {
-            var request = new Request(pageIndex, pageSize, zoom, dpiScale, new TaskCompletionSource<ImageSource?>());
-            Requests.Add(request);
-            if (HonourCancellation)
-            {
-                ct.Register(() => request.Completion.TrySetResult(null));
-            }
-
-            return request.Completion.Task;
-        }
-
-        public void Complete(int pageIndex, ImageSource image) =>
-            Requests.Last(r => r.Page == pageIndex).Completion.TrySetResult(image);
-
-        public void CompleteAll(int pageIndex, ImageSource image)
-        {
-            foreach (var request in Requests.Where(r => r.Page == pageIndex))
-            {
-                request.Completion.TrySetResult(image);
-            }
-        }
-
-        public sealed record Request(int Page, PageSize Size, double Zoom, double DpiScale, TaskCompletionSource<ImageSource?> Completion);
-    }
 }
