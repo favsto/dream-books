@@ -4,6 +4,7 @@ using DreamBooks.Core.Rendering;
 
 namespace DreamBooks.Core.Tests.Rendering;
 
+[Collection(nameof(RenderSchedulerCollection))]
 public class RenderSchedulerTests
 {
     private static readonly TimeSpan _timeout = TimeSpan.FromSeconds(10);
@@ -162,24 +163,24 @@ public class RenderSchedulerTests
         Assert.True(s.TryGet(0, out var old));
         Assert.Equal(RenderQuality.Sharp, old!.Quality);
 
-        s.InvalidateAll();
-        s.SetWanted([Req(0, 0, sharp: 150, preview: 10)]);
+        var callsBefore = renderer.CallCount;
+
+        // Zoom: invalidation and new sizes in one atomic step.
+        s.SetWanted([Req(0, 0, sharp: 150, preview: 10)], invalidateAll: true);
 
         // No blank page: the old bitmap is still there, flagged stale, to be shown stretched.
         Assert.True(s.TryGet(0, out var stale));
         Assert.Same(old, stale);
         Assert.True(s.IsStale(0, stale!));
 
-        // InvalidateAll re-queued the page at the old size; the new sharp size cancels that render.
-        var outdated = await renderer.NextCallAsync();
-        Assert.Equal(100, outdated.Width);
-        Assert.True(outdated.Token.IsCancellationRequested);
-
-        // Something is cached already, so the scheduler goes straight to the sharp render.
+        // Something is cached already, so the scheduler goes straight to the sharp render, and never
+        // starts one at the old size.
         var call = await renderer.NextCallAsync();
         Assert.Equal(150, call.Width);
+        Assert.False(call.Token.IsCancellationRequested);
         call.Succeed();
         await s.WhenIdleAsync().WaitAsync(_timeout);
+        Assert.Equal(callsBefore + 1, renderer.CallCount);
 
         Assert.True(s.TryGet(0, out var fresh));
         Assert.Equal(150, fresh!.PixelWidth);
@@ -269,6 +270,86 @@ public class RenderSchedulerTests
     }
 
     [Fact]
+    public async Task A_wanted_page_older_in_the_LRU_survives_a_newer_unwanted_one()
+    {
+        var renderer = new FakeRenderer();
+        using var s = Create(renderer, budget: 200); // two 10x10 bitmaps
+
+        s.SetWanted([Req(0, 0), Req(1, 1)]);
+        await CompleteAllAsync(renderer, s);
+        Assert.True(s.TryGet(1, out _)); // page 1 is now more recent than page 0
+
+        s.SetWanted([Req(0, 0), Req(2, 1)]);
+        await CompleteAllAsync(renderer, s);
+
+        Assert.Equal(200, s.CachedBytes);
+        Assert.False(s.TryGet(1, out _)); // newer, but unwanted
+        Assert.True(s.TryGet(0, out var kept)); // older, but wanted
+        Assert.Equal(RenderQuality.Sharp, kept!.Quality);
+        Assert.True(s.TryGet(2, out _));
+    }
+
+    [Fact]
+    public async Task A_neighbour_with_nothing_cached_is_never_left_blank_when_over_budget()
+    {
+        var renderer = new FakeRenderer();
+        using var s = Create(renderer, budget: 150);
+
+        // Previews disabled; the two visible pages alone exceed the budget.
+        s.SetWanted([Req(0, 0), Req(1, 0), Req(2, 1)]);
+        await CompleteAllAsync(renderer, s);
+
+        Assert.True(s.TryGet(2, out var neighbour));
+        Assert.Equal(RenderQuality.Sharp, neighbour!.Quality);
+        Assert.Equal(3, renderer.CallCount);
+    }
+
+    [Fact]
+    public async Task Pages_that_leave_the_window_while_scrolling_are_cancelled()
+    {
+        var renderer = new FakeRenderer { HonourCancellation = false };
+        using var s = Create(renderer);
+        var events = Record(s);
+
+        s.SetWanted([Req(0, 0), Req(1, 1)]);
+        var inFlight = await renderer.NextCallAsync();
+        for (var top = 1; top <= 20; top++)
+        {
+            Assert.Equal(top - 1, inFlight.PageIndex);
+            s.SetWanted([Req(top, 0), Req(top + 1, 1)]);
+            Assert.True(inFlight.Token.IsCancellationRequested);
+            inFlight.Succeed(); // ignored cancellation: the result must still be discarded
+            inFlight = await renderer.NextCallAsync();
+        }
+
+        Assert.Equal(20, inFlight.PageIndex);
+        Assert.False(inFlight.Token.IsCancellationRequested);
+        Assert.Equal(0, s.CachedCount);
+        Assert.Empty(events);
+        inFlight.Succeed();
+        await CompleteAllAsync(renderer, s);
+        Assert.Equal([20, 21], events.Select(e => e.PageIndex).Order());
+    }
+
+    [Fact]
+    public async Task A_throwing_sizeOf_counts_as_a_failure_and_does_not_stop_the_pump()
+    {
+        var renderer = new FakeRenderer();
+        using var s = new RenderScheduler<FakeBitmap>(
+            renderer,
+            b => b.PageIndex == 0 ? throw new InvalidOperationException("boom") : PixelBytes(b),
+            1_000_000,
+            () => null);
+
+        s.SetWanted([Req(0, 0), Req(1, 1)]);
+        await CompleteAllAsync(renderer, s);
+
+        Assert.False(s.TryGet(0, out _));
+        Assert.True(s.TryGet(1, out _));
+        Assert.Equal(2, renderer.CallCount);
+    }
+
+    [Fact]
     public async Task Neighbours_keep_previews_only_when_the_wanted_set_exceeds_the_budget()
     {
         var renderer = new FakeRenderer();
@@ -340,7 +421,8 @@ public class RenderSchedulerTests
         TaskScheduler.UnobservedTaskException += OnUnobserved;
         try
         {
-            var renderer = new FakeRenderer { AutoComplete = true };
+            // Every tenth page fails to render; every tenth step the top page is invalidated.
+            var renderer = new FakeRenderer { AutoComplete = true, FailPage = page => page % 10 == 3 };
             const long budget = 40 * 400; // forty sharp bitmaps of 20x20
             using (var s = Create(renderer, budget))
             {
@@ -353,6 +435,11 @@ public class RenderSchedulerTests
                     }
 
                     s.SetWanted(window);
+                    if (top % 10 == 0)
+                    {
+                        s.InvalidatePage(top);
+                    }
+
                     if (top % 50 == 0)
                     {
                         await s.WhenIdleAsync().WaitAsync(_timeout);
@@ -361,10 +448,17 @@ public class RenderSchedulerTests
 
                 await s.WhenIdleAsync().WaitAsync(_timeout);
 
-                Assert.True(s.CachedBytes <= budget);
-                Assert.True(s.CachedCount <= budget / 100);
+                Assert.True(s.CachedBytes <= budget, $"{s.CachedBytes} bytes");
                 Assert.Equal(0, renderer.InFlight);
-                Assert.True(renderer.CallCount <= 2 * 1006, $"{renderer.CallCount} renders");
+
+                // Pages never re-enter the window, so each one costs at most a preview and a sharp render
+                // (a failing page: a first attempt and one retry), plus one re-render per InvalidatePage.
+                Assert.True(renderer.CallCount <= (2 * 1000) + 100, $"{renderer.CallCount} renders");
+
+                // Internal bookkeeping is bounded by the window and the cache, not by the pages scrolled.
+                Assert.True(
+                    s.TrackedPageCount <= (2 * s.CachedCount) + 2,
+                    $"{s.TrackedPageCount} tracked for {s.CachedCount} cached");
                 Assert.True(s.TryGet(999, out var last));
                 Assert.Equal(RenderQuality.Sharp, last!.Quality);
             }
@@ -484,6 +578,8 @@ public class RenderSchedulerTests
 
         public bool AutoComplete { get; init; }
 
+        public Func<int, bool>? FailPage { get; init; }
+
         public int CallCount => Volatile.Read(ref _callCount);
 
         public int InFlight => Volatile.Read(ref _inFlight);
@@ -498,7 +594,7 @@ public class RenderSchedulerTests
                 {
                     await Task.Yield();
                     ct.ThrowIfCancellationRequested();
-                    return new FakeBitmap(pageIndex, pixelWidth, pixelHeight);
+                    return FailPage?.Invoke(pageIndex) == true ? null : new FakeBitmap(pageIndex, pixelWidth, pixelHeight);
                 }
 
                 var call = new RenderCall(pageIndex, pixelWidth, pixelHeight, ct, HonourCancellation);

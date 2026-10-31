@@ -10,16 +10,19 @@ namespace DreamBooks.Core.Rendering;
 /// <para><b>Threading.</b> Every public member is thread-safe; the view calls <see cref="SetWanted"/>,
 /// <see cref="TryGet"/> and the invalidation methods from the UI thread while renders complete on
 /// thread-pool threads. All state is guarded by one lock that is never held while user code (the renderer,
-/// event handlers, cancellation callbacks) runs, except the pure <c>sizeOf</c> function.</para>
+/// event handlers, cancellation callbacks, <c>sizeOf</c>) runs. A throwing <c>sizeOf</c> counts as a
+/// failed render.</para>
 /// <para><b>One render at a time.</b> PDFium has a single thread, so two concurrent renders would only
 /// queue behind each other there while hiding the priority order from the scheduler. A newly urgent page
-/// therefore waits at most for the render in progress; a render that became useless (page no longer
+/// therefore waits at most for the render in progress (a neighbour's sharp render that is still wanted
+/// is allowed to finish); a render that became useless (page no longer
 /// wanted, generation changed, sharp size changed) is cancelled at once and its result discarded.</para>
 /// <para><b>Order.</b> Wanted pages are served by <see cref="RenderRequest.Priority"/> (lower first), then
 /// previews before sharp renders within the same priority, then page index. A page with nothing cached
 /// gets a preview first (unless the request disables it); a page gets a sharp render when its cached
 /// bitmap is not a sharp bitmap of the current generation at the requested sharp size.</para>
-/// <para><b>Generations and stale bitmaps.</b> <see cref="InvalidateAll"/> and
+/// <para><b>Generations and stale bitmaps.</b> <see cref="InvalidateAll"/>, <see cref="SetWanted"/> with
+/// <c>invalidateAll</c> (use it when the invalidation brings new sizes: zoom, DPI) and
 /// <see cref="InvalidatePage"/> give the affected pages a new generation. Their old bitmaps stay cached
 /// (no blank page) and are reported as stale by <see cref="IsStale"/> — i.e. their
 /// <see cref="CachedBitmap{TBitmap}.Generation"/> differs from <see cref="GetGeneration"/> — until a new
@@ -28,16 +31,24 @@ namespace DreamBooks.Core.Rendering;
 /// <para><b>Budget.</b> After each change the cache evicts the least recently used bitmaps of pages that
 /// are not wanted until it is within <c>byteBudget</c>. Bitmaps of wanted pages are never evicted (that
 /// would blank a page or make it render again in a loop). If the wanted set alone would exceed the budget,
-/// pages with a priority above 0 keep their preview and do not get a sharp render; visible pages
-/// (priority 0) always get one, so the budget may be exceeded only by what is visible.</para>
+/// pages with a priority above 0 that already have a bitmap keep it and do not get a sharp render. Visible
+/// pages (priority 0) always get one, and a wanted page with nothing cached always gets a first render (its
+/// preview, or its sharp render when previews are disabled), so no wanted page is left blank and the
+/// budget may be exceeded only by what is visible plus one first bitmap per wanted page.</para>
 /// <para><b>Failures.</b> A renderer returning <see langword="null"/> (or throwing anything other than a
 /// requested cancellation) marks the page as failed: it is retried once at the next
 /// <see cref="SetWanted"/>, and after a second failure only after <see cref="InvalidateAll"/> or
 /// <see cref="InvalidatePage"/>, or when it leaves and re-enters the wanted set. There is never a tight
-/// retry loop.</para>
+/// retry loop. After repeated <see langword="null"/> results a page therefore waits for
+/// <see cref="InvalidateAll"/> or <see cref="InvalidatePage"/> (or <see cref="SetWanted"/> with
+/// <c>invalidateAll</c>): the save and renderer-swap path must invalidate, or failed pages keep their
+/// placeholder.</para>
 /// <para><b>Events.</b> <see cref="Rendered"/> is posted to the <see cref="SynchronizationContext"/>
 /// captured at construction, or raised inline on the render's thread-pool thread when there is none.
-/// Events still queued when the scheduler is disposed are dropped. The scheduler never disposes bitmaps; it
+/// Events still queued when the scheduler is disposed are dropped. An event is created when its bitmap is
+/// stored and delivered afterwards, so it may arrive for a page that has meanwhile left the wanted set or
+/// been evicted: consumers must ignore <see cref="Rendered"/> events for pages they no longer show, and use
+/// the event's bitmap (or <see cref="TryGet"/> again) instead of assuming the page is still cached. The scheduler never disposes bitmaps; it
 /// only drops its references.</para>
 /// </remarks>
 public sealed class RenderScheduler<TBitmap> : IDisposable
@@ -119,7 +130,13 @@ public sealed class RenderScheduler<TBitmap> : IDisposable
     /// Replaces the wanted set. Pages no longer wanted are cancelled and become eviction candidates; new
     /// ones are queued by priority. A page listed twice keeps its most urgent request.
     /// </summary>
-    public void SetWanted(IReadOnlyList<RenderRequest> wanted)
+    /// <param name="wanted">The pages the view needs now, with their sizes and priorities.</param>
+    /// <param name="invalidateAll">
+    /// Also does what <see cref="InvalidateAll"/> does, atomically with the new wanted set. Use it for a
+    /// zoom or DPI change, whose new sizes come together with the invalidation: no render is ever started
+    /// at the old size, so exactly one render per page follows, at the new size.
+    /// </param>
+    public void SetWanted(IReadOnlyList<RenderRequest> wanted, bool invalidateAll = false)
     {
         ArgumentNullException.ThrowIfNull(wanted);
 
@@ -130,6 +147,11 @@ public sealed class RenderScheduler<TBitmap> : IDisposable
             if (_disposed)
             {
                 return;
+            }
+
+            if (invalidateAll)
+            {
+                BumpAllGenerations();
             }
 
             _wanted.Clear();
@@ -155,6 +177,7 @@ public sealed class RenderScheduler<TBitmap> : IDisposable
             }
 
             forgotten?.ForEach(page => _failures.Remove(page));
+            PrunePageGenerations();
 
             toCancel = TakeObsoleteCurrent();
             Evict();
@@ -220,9 +243,7 @@ public sealed class RenderScheduler<TBitmap> : IDisposable
                 return;
             }
 
-            _generation = ++_generationCounter;
-            _pageGenerations.Clear();
-            _failures.Clear();
+            BumpAllGenerations();
             toCancel = TakeObsoleteCurrent();
             step = NextStep();
         }
@@ -294,8 +315,51 @@ public sealed class RenderScheduler<TBitmap> : IDisposable
         }
     }
 
+    /// <summary>Number of entries in the internal per-page dictionaries (tests: they must stay bounded).</summary>
+    internal int TrackedPageCount
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _wanted.Count + _cache.Count + _failures.Count + _pageGenerations.Count;
+            }
+        }
+    }
+
     private long GenerationOf(int pageIndex) =>
         _pageGenerations.TryGetValue(pageIndex, out var generation) ? generation : _generation;
+
+    /// <summary>Under the lock: new generation for every page; failures get a fresh start.</summary>
+    private void BumpAllGenerations()
+    {
+        _generation = ++_generationCounter;
+        _pageGenerations.Clear();
+        _failures.Clear();
+    }
+
+    /// <summary>
+    /// Under the lock: drops per-page generations of pages that are neither wanted nor cached; nothing can
+    /// be compared against them any more, so the dictionary stays bounded by the window and the cache.
+    /// </summary>
+    private void PrunePageGenerations()
+    {
+        if (_pageGenerations.Count == 0)
+        {
+            return;
+        }
+
+        List<int>? unused = null;
+        foreach (var page in _pageGenerations.Keys)
+        {
+            if (!_wanted.ContainsKey(page) && !_cache.ContainsKey(page))
+            {
+                (unused ??= []).Add(page);
+            }
+        }
+
+        unused?.ForEach(page => _pageGenerations.Remove(page));
+    }
 
     /// <summary>
     /// Under the lock: marks the render in progress as obsolete when its result could no longer be used,
@@ -418,7 +482,9 @@ public sealed class RenderScheduler<TBitmap> : IDisposable
             return null;
         }
 
-        if (request.Priority > 0)
+        // Budget guard for neighbours that already show something: a page with nothing cached always gets
+        // a render, so a wanted page is never left blank.
+        if (request.Priority > 0 && entry is not null)
         {
             if (wantedBytes < 0)
             {
@@ -435,7 +501,7 @@ public sealed class RenderScheduler<TBitmap> : IDisposable
             var estimate = (long)Math.Ceiling((double)request.SharpWidth * request.SharpHeight * _bytesPerPixel);
             if (wantedBytes - (entry?.Bytes ?? 0) + estimate > _byteBudget)
             {
-                return null; // keep the preview: the wanted set alone would not fit
+                return null; // keep what is shown: the wanted set alone would not fit
             }
         }
 
@@ -473,6 +539,11 @@ public sealed class RenderScheduler<TBitmap> : IDisposable
         {
             _cachedBytes -= entry.Bytes;
         }
+
+        if (!_wanted.ContainsKey(pageIndex))
+        {
+            _pageGenerations.Remove(pageIndex); // nothing left to compare against
+        }
     }
 
     /// <summary>Outside the lock: starts the claimed render or releases the idle waiter.</summary>
@@ -490,6 +561,7 @@ public sealed class RenderScheduler<TBitmap> : IDisposable
     private async Task RenderAsync(Job job)
     {
         TBitmap? result = default;
+        var bytes = 0L;
         var failed = false;
         try
         {
@@ -497,6 +569,11 @@ public sealed class RenderScheduler<TBitmap> : IDisposable
                 .RenderAsync(job.PageIndex, job.Width, job.Height, job.Token)
                 .ConfigureAwait(false);
             failed = result is null;
+            if (result is not null)
+            {
+                // Outside the lock; a throwing sizeOf counts as a failed render, like a throwing renderer.
+                bytes = Math.Max(0, _sizeOf(result));
+            }
         }
         catch (OperationCanceledException) when (job.Token.IsCancellationRequested)
         {
@@ -509,10 +586,10 @@ public sealed class RenderScheduler<TBitmap> : IDisposable
             failed = true;
         }
 
-        Complete(job, result, failed);
+        Complete(job, failed ? default : result, bytes, failed);
     }
 
-    private void Complete(Job job, TBitmap? result, bool failed)
+    private void Complete(Job job, TBitmap? result, long bytes, bool failed)
     {
         RenderedEventArgs<TBitmap>? args = null;
         Step step;
@@ -532,7 +609,7 @@ public sealed class RenderScheduler<TBitmap> : IDisposable
             }
             else if (useful && result is not null)
             {
-                args = Store(job, result);
+                args = Store(job, result, bytes);
             }
 
             if (args is not null)
@@ -581,7 +658,7 @@ public sealed class RenderScheduler<TBitmap> : IDisposable
         }
     }
 
-    private RenderedEventArgs<TBitmap>? Store(Job job, TBitmap result)
+    private RenderedEventArgs<TBitmap>? Store(Job job, TBitmap result, long bytes)
     {
         if (job.Quality == RenderQuality.Preview
             && _cache.TryGetValue(job.PageIndex, out var existing)
@@ -591,7 +668,6 @@ public sealed class RenderScheduler<TBitmap> : IDisposable
             return null; // never downgrade a current sharp bitmap
         }
 
-        var bytes = Math.Max(0, _sizeOf(result));
         var pixels = (long)job.Width * job.Height;
         if (pixels > 0 && bytes > 0)
         {
@@ -630,6 +706,14 @@ public sealed class RenderScheduler<TBitmap> : IDisposable
 
     private void RaiseIfAlive(RenderedEventArgs<TBitmap> args)
     {
+        var handler = Rendered;
+        if (handler is null)
+        {
+            return;
+        }
+
+        // Checked right before invoking. Without a context, a Dispose racing on another thread may still
+        // let this one event through; with the UI context both run on the dispatcher and cannot race.
         lock (_lock)
         {
             if (_disposed)
@@ -638,7 +722,7 @@ public sealed class RenderScheduler<TBitmap> : IDisposable
             }
         }
 
-        Rendered?.Invoke(this, args);
+        handler(this, args);
     }
 
     private readonly record struct Step(Job? Job, TaskCompletionSource? Idle);
