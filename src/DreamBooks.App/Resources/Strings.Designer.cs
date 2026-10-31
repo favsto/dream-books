@@ -154,6 +154,9 @@ internal static class Strings
 
     public static string JournalWarningLabel => Get(nameof(JournalWarningLabel));
 
+    /// <summary>Page indicator: page number, page count, zoom percent ("12 / 48 · 125%").</summary>
+    public static string PageIndicatorFormat => Get(nameof(PageIndicatorFormat));
+
     private static string Get(string name) =>
         Manager.GetString(name, System.Globalization.CultureInfo.CurrentUICulture) ?? name;
 }

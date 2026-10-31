@@ -99,4 +99,5 @@
   <data name="WarnJournalListenerFailed" xml:space="preserve"><value>Un'operazione sul diario delle modifiche non è riuscita.</value></data>
   <data name="JournalWarningLabel" xml:space="preserve"><value>Avviso sul diario di ripristino</value></data>
   <data name="NoticeNotSavable" xml:space="preserve"><value>Questo PDF è protetto: non è possibile salvare le annotazioni nel file.</value></data>
+  <data name="PageIndicatorFormat" xml:space="preserve"><value>{0} / {1} · {2}%</value></data>
 </root>

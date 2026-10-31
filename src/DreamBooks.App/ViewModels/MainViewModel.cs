@@ -4,11 +4,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DreamBooks.App.Resources;
 using DreamBooks.App.Services;
-using DreamBooks.Core.Commands;
 using DreamBooks.Core.Documents;
 using DreamBooks.Core.Geometry;
 using DreamBooks.Core.Ink;
 using DreamBooks.Core.Journal;
+using DreamBooks.Core.Layout;
 using DreamBooks.Core.Model;
 using DreamBooks.Core.Undo;
 using DreamBooks.Pdf;
@@ -16,21 +16,34 @@ using DreamBooks.Pdf;
 namespace DreamBooks.App.ViewModels;
 
 /// <summary>
-/// Window state over one <see cref="DocumentSession"/>: the current page, the document's undo history
-/// (shared by all its pages, FR-62), the eraser gesture, the notices, and saving: Save, Save as, the dirty
-/// mark and the unsaved-changes question on close or on opening another document (FR-80, FR-85, FR-89).
-/// Strokes live in the session, so they survive page changes (FR-83).
+/// Window state over one <see cref="DocumentSession"/>: the multi-page view state (<see cref="Viewport"/>), the
+/// current page, the document's undo history (shared by all its pages, FR-62), the eraser gesture (on any loaded
+/// page), the notices, the remembered position (FR-04), and saving: Save, Save as, the dirty mark and the
+/// unsaved-changes question on close or on opening another document (FR-80, FR-85, FR-89). Strokes live in the
+/// session, so they survive page changes (FR-83).
 /// </summary>
 /// <remarks>
-/// At most one save runs at a time (<see cref="IsSaving"/>); while it runs, drawing and erasing go on, but
-/// page navigation, opening and saving again are disabled. Strokes drawn during a save stay unsaved.
+/// At most one save runs at a time (<see cref="IsSaving"/>); while it runs, drawing, erasing, undo and page
+/// navigation go on, but opening and saving again are disabled. Strokes drawn during a save stay unsaved. A page
+/// whose strokes are loaded during the save takes its baseline from the file as it was, which is what the save
+/// writes for a page it did not capture; during the brief release of a plain Save such a load fails and is
+/// reported like any failed page load (nothing is applied).
 /// </remarks>
 public sealed class MainViewModel : ObservableObject
 {
+    /// <summary>Delay after the last movement before the position is journalled and remembered (FR-04).</summary>
+    public static readonly TimeSpan ViewSettleDelay = TimeSpan.FromMilliseconds(500);
+
     private readonly IFileDialogService _dialogs;
+    private readonly ViewPositionStore? _positions;
+    private readonly IDelayScheduler _scheduler;
 
     // Stands in for the session's history while no document is open: never executed into, so always empty.
     private readonly UndoManager _noDocumentUndo = new();
+    private IDisposable? _pendingSettle;
+    private Task _positionWrites = Task.CompletedTask;
+    private bool _positionsPruned;
+    private PageEditor? _activeErasePage;
     private DocumentSession? _session;
     private OpenedDocument? _document;
     private IViewerHandle? _viewer;
@@ -58,27 +71,44 @@ public sealed class MainViewModel : ObservableObject
     /// Where journals and document locks live (FR-84); null disables crash recovery and the single-writer lock
     /// (tests that do not exercise them).
     /// </param>
-    public MainViewModel(IFileDialogService dialogs, RecoveryStore? recovery = null)
+    /// <param name="positions">Where the last position of each document is remembered (FR-04); null disables it.</param>
+    /// <param name="scheduler">Debounce timers; the UI thread's dispatcher when null.</param>
+    public MainViewModel(
+        IFileDialogService dialogs,
+        RecoveryStore? recovery = null,
+        ViewPositionStore? positions = null,
+        IDelayScheduler? scheduler = null)
     {
         ArgumentNullException.ThrowIfNull(dialogs);
         _dialogs = dialogs;
+        _positions = positions;
+        _scheduler = scheduler ?? new DispatcherDelayScheduler();
         Recovery = recovery is null ? null : new RecoveryService(recovery, dialogs);
         Tools = new ToolsViewModel();
         ZoomVm = new ZoomViewModel();
+        Viewport = new DocumentViewportViewModel(ZoomVm, _scheduler) { PageNavigator = NavigateToPageAsync };
+        Viewport.PositionChanged += OnViewportPositionChanged;
         OpenDocument = OpenedDocument.OpenPdfAsync;
         SaveService = new DocumentSaveService(new PdfDocumentSaver(), dialogs);
 
+        // Navigation stays available while a save runs (the earlier lock is gone): pages that cannot be loaded
+        // meanwhile show their placeholder, and the commands may overlap.
         OpenPdfCommand = new AsyncRelayCommand(OpenPdfAsync, () => !IsSaving);
-        GoToPageCommand = new AsyncRelayCommand<int>(GoToPageAsync, _ => !IsSaving);
-        PreviousPageCommand = new AsyncRelayCommand(() => GoToPageAsync(PageNumber - 1), () => !IsSaving);
-        NextPageCommand = new AsyncRelayCommand(() => GoToPageAsync(PageNumber + 1), () => !IsSaving);
+        GoToPageCommand = new AsyncRelayCommand<int>(GoToPageAsync, AsyncRelayCommandOptions.AllowConcurrentExecutions);
+        PreviousPageCommand = new AsyncRelayCommand(
+            () => GoToPageAsync(Viewport.CurrentPage), AsyncRelayCommandOptions.AllowConcurrentExecutions);
+        NextPageCommand = new AsyncRelayCommand(
+            () => GoToPageAsync(Viewport.CurrentPage + 2), AsyncRelayCommandOptions.AllowConcurrentExecutions);
         UndoCommand = new AsyncRelayCommand(UndoAsync, () => Session is not null && Undo.CanUndo);
         RedoCommand = new AsyncRelayCommand(RedoAsync, () => Session is not null && Undo.CanRedo);
         SaveCommand = new AsyncRelayCommand(() => SaveCoreAsync(saveAs: false), CanSave);
         SaveAsCommand = new AsyncRelayCommand(() => SaveCoreAsync(saveAs: true), CanSave);
     }
 
-    /// <summary>Raised after a different page (or document) became current.</summary>
+    /// <summary>
+    /// Raised after a different page (or document) became current, or the current page got its editor. Compatibility
+    /// for the single-page view; the multi-page view follows <see cref="Viewport"/>.
+    /// </summary>
     public event EventHandler? PageChanged;
 
     /// <summary>Raised after a successful Save or Save as (the session is already marked saved).</summary>
@@ -100,6 +130,9 @@ public sealed class MainViewModel : ObservableObject
 
     public ZoomViewModel ZoomVm { get; }
 
+    /// <summary>The multi-page view state: layout, position, current page, history, fit width.</summary>
+    public DocumentViewportViewModel Viewport { get; }
+
     /// <summary>The open document, or null.</summary>
     public DocumentSession? Session
     {
@@ -110,6 +143,10 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>The current document's undo history; an empty, inert one when no document is open.</summary>
     public UndoManager Undo => Session?.Undo ?? _noDocumentUndo;
 
+    /// <summary>
+    /// The editor of the current page (the page under the viewport centre), or null while that page's strokes are not
+    /// loaded. Every loaded page has its own editor (<see cref="EnsureEditorAsync"/>); this one serves the panel.
+    /// </summary>
     public PageEditor? Editor
     {
         get => _editor;
@@ -131,9 +168,6 @@ public sealed class MainViewModel : ObservableObject
             if (SetProperty(ref _isSaving, value))
             {
                 OpenPdfCommand.NotifyCanExecuteChanged();
-                GoToPageCommand.NotifyCanExecuteChanged();
-                PreviousPageCommand.NotifyCanExecuteChanged();
-                NextPageCommand.NotifyCanExecuteChanged();
                 SaveCommand.NotifyCanExecuteChanged();
                 SaveAsCommand.NotifyCanExecuteChanged();
             }
@@ -205,8 +239,9 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Zoom and scroll offsets to apply once after a restore from the journal (FR-04); null for a document opened
-    /// without one. The zoom is already applied to <see cref="ZoomVm"/>; the view applies the scroll offsets.
+    /// Compatibility for the single-page view (removed with it): the journalled zoom and the raw scroll numbers of a
+    /// restore from the journal (FR-04); null for a document opened without one. The zoom is already applied to
+    /// <see cref="ZoomVm"/>; the multi-page view uses <see cref="DocumentViewportViewModel.Position"/> instead.
     /// </summary>
     public RestoredView? ViewToRestore
     {
@@ -223,6 +258,16 @@ public sealed class MainViewModel : ObservableObject
         get => _activeErase;
         private set => SetProperty(ref _activeErase, value);
     }
+
+    /// <summary>The editor of the page the live eraser gesture belongs to, or null (one gesture at a time).</summary>
+    public PageEditor? ActiveErasePage
+    {
+        get => _activeErasePage;
+        private set => SetProperty(ref _activeErasePage, value);
+    }
+
+    /// <summary>Test hook: completes when the queued position-store writes are done.</summary>
+    internal Task PositionWritesForTest => _positionWrites;
 
     public IAsyncRelayCommand OpenPdfCommand { get; }
 
@@ -265,11 +310,13 @@ public sealed class MainViewModel : ObservableObject
         switch (await ResolveUnsavedChangesAsync())
         {
             case UnsavedChanges.Discard:
+                await PersistViewAsync();
                 RaiseDiscardRequested();
                 await CloseJournalAsync(userDiscarded: true);
                 ReleaseLock();
                 return true;
             case UnsavedChanges.Resolved:
+                await PersistViewAsync();
                 await CloseJournalAsync(userDiscarded: false);
                 ReleaseLock();
                 return true;
@@ -279,8 +326,10 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// The view settled on a position (debounced by the view): journalled so a crash restarts there (FR-04),
-    /// only while there are unsaved changes or a journal already exists.
+    /// Compatibility for the single-page view (removed with it): the view settled on a position (debounced by the
+    /// view) and the numbers are journalled as given, only while there are unsaved changes or a journal already
+    /// exists. The multi-page view needs no call: <see cref="Viewport"/> positions are journalled after
+    /// <see cref="ViewSettleDelay"/> with page-relative offsets in points.
     /// </summary>
     public void ReportViewState(int pageIndex, double zoom, double scrollX, double scrollY)
     {
@@ -358,19 +407,66 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Starts an eraser gesture with the selected mode (FR-31). Zoom stays locked until it ends. No-op
-    /// without a page or while a gesture is already live.
+    /// Loads a page's strokes (once) and returns its editor, e.g. for a page entering the view. When the page is the
+    /// current one, <see cref="Editor"/> follows. Throws <see cref="OperationCanceledException"/> without a document,
+    /// or when the document was closed or replaced meanwhile; a failed load propagates.
     /// </summary>
-    public void BeginErase()
+    public async Task<PageEditor> EnsureEditorAsync(int pageIndex, CancellationToken ct = default)
     {
-        if (ActiveErase is not null || Editor is not { } editor)
+        if (Session is not { } session)
+        {
+            throw new OperationCanceledException("No document is open.");
+        }
+
+        PageEditor editor;
+        try
+        {
+            editor = await session.EnsureEditorAsync(pageIndex, ct);
+        }
+        catch (ObjectDisposedException ex)
+        {
+            throw new OperationCanceledException("The document was closed.", ex);
+        }
+
+        if (!ReferenceEquals(session, Session))
+        {
+            throw new OperationCanceledException("The document was replaced.");
+        }
+
+        RefreshCurrentEditor();
+        UpdateNotice();
+        return editor;
+    }
+
+    /// <summary>
+    /// Starts an eraser gesture with the selected mode on <paramref name="editor"/>'s page (FR-31), which need not
+    /// be the current page. Zoom stays locked until it ends. No-op while a gesture is live (on any page) or for an
+    /// editor that is not this document's.
+    /// </summary>
+    public void BeginErase(PageEditor editor)
+    {
+        ArgumentNullException.ThrowIfNull(editor);
+        if (ActiveErase is not null
+            || Session is not { } session
+            || !session.TryGetEditor(editor.Page.Index, out var own)
+            || !ReferenceEquals(own, editor))
         {
             return;
         }
 
+        ActiveErasePage = editor;
         ActiveErase = editor.BeginErase(Tools.EraserMode);
         ZoomVm.IsLocked = true;
         ErasePreviewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Compatibility for the single-page view (removed with it): erases on the current page's editor.</summary>
+    public void BeginErase()
+    {
+        if (Editor is { } editor)
+        {
+            BeginErase(editor);
+        }
     }
 
     /// <summary>Moves the eraser to a page point; the circle has the selected diameter (FR-32).</summary>
@@ -419,6 +515,7 @@ public sealed class MainViewModel : ObservableObject
     private void FinishErase()
     {
         ActiveErase = null;
+        ActiveErasePage = null;
         ZoomVm.IsLocked = false;
         ErasePreviewChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -487,6 +584,9 @@ public sealed class MainViewModel : ObservableObject
         DocumentSession? session = null;
         RestoreResult? restore = null;
         DocumentJournal? journal = null;
+        DocumentLayout layout;
+        ViewPosition? position;
+        int firstPage;
         try
         {
             opened = await OpenDocument(path, ct);
@@ -496,7 +596,8 @@ public sealed class MainViewModel : ObservableObject
             }
 
             // Everything below fails before anything is swapped, so the current document stays (NFR-11).
-            _ = opened.Source.GetPageDimensions(0);
+            // Every page size is read now, so the layout is exact from the first frame.
+            layout = BuildLayout(opened.Source);
             var fingerprint = await DocumentFingerprint.ComputeAsync(opened.Path, ct);
             session = new DocumentSession(opened.Source, opened.Path, fingerprint);
             if (Recovery is { } recovery)
@@ -519,7 +620,13 @@ public sealed class MainViewModel : ObservableObject
                 }
             }
 
-            var firstPage = restore?.LastView is { } view ? Math.Clamp(view.PageIndex, 0, session.PageCount - 1) : 0;
+            // FR-04: the journal's view (unsaved changes) wins over the remembered position of the saved file.
+            // Journal numbers are (page of the top edge, zoom, column x, y inside the page) in points; an old
+            // journal's DIP offsets are read the same way and clamped (best effort).
+            position = restore is { Status: RestoreStatus.Replayed, LastView: { } view }
+                ? new ViewPosition(view.PageIndex, view.ScrollY, view.ScrollX, view.Zoom)
+                : sameDocument ? Viewport.Position : await LoadPositionAsync(opened.Path, ct);
+            firstPage = position is { } start ? Math.Clamp(start.PageIndex, 0, session.PageCount - 1) : 0;
             await session.GoToPageAsync(firstPage, ct);
         }
         catch (OperationCanceledException)
@@ -546,6 +653,7 @@ public sealed class MainViewModel : ObservableObject
 
         if (Session is not null)
         {
+            await PersistViewAsync(); // the document being replaced remembers where it was
             if (unsaved == UnsavedChanges.Discard)
             {
                 // Only now that the new document is ready: a failed open keeps the current changes.
@@ -561,7 +669,7 @@ public sealed class MainViewModel : ObservableObject
 
         var previousSession = Session;
         var previousDocument = _document;
-        Swap(opened, session, journal, newLock ?? _lock);
+        Swap(opened, session, journal, newLock ?? _lock, layout, position, firstPage);
         ShowRestoreOutcome(restore, journalUnavailable);
         if (opened.Viewer is { Info.CanBeRewritten: false })
         {
@@ -573,6 +681,123 @@ public sealed class MainViewModel : ObservableObject
         if (previousDocument is not null)
         {
             await previousDocument.Lifetime.DisposeAsync();
+        }
+
+        await PrunePositionsOnceAsync();
+    }
+
+    private static DocumentLayout BuildLayout(IPageSource source)
+    {
+        var pages = new PageDimensions[source.PageCount];
+        for (var i = 0; i < pages.Length; i++)
+        {
+            pages[i] = source.GetPageDimensions(i);
+        }
+
+        return new DocumentLayout(pages);
+    }
+
+    /// <summary>The remembered position of a document (FR-04), read off the UI thread; null when none or unreadable.</summary>
+    private async Task<ViewPosition?> LoadPositionAsync(string path, CancellationToken ct)
+    {
+        if (_positions is not { } store)
+        {
+            return null;
+        }
+
+        var stored = await Task.Run(() => store.TryLoad(path), ct);
+        return stored?.Position;
+    }
+
+    /// <summary>Once per run, after the first successful open: old and excess remembered positions go.</summary>
+    private async Task PrunePositionsOnceAsync()
+    {
+        if (_positionsPruned || _positions is not { } store)
+        {
+            return;
+        }
+
+        _positionsPruned = true;
+        try
+        {
+            await Task.Run(() => store.Prune());
+        }
+#pragma warning disable CA1031 // Pruning is housekeeping: a failure changes nothing for the user.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+        }
+    }
+
+    private void OnViewportPositionChanged(object? sender, EventArgs e)
+    {
+        if (Session is null)
+        {
+            return;
+        }
+
+        _pendingSettle?.Dispose();
+        _pendingSettle = _scheduler.Schedule(ViewSettleDelay, () =>
+        {
+            _pendingSettle = null;
+            QueueViewPersistence();
+        });
+    }
+
+    /// <summary>
+    /// The view settled (or the document is closing): the journal gets the position (page of the top edge, zoom,
+    /// column x, y inside the page, in points; only while it records, FR-84) and the position store remembers it
+    /// (FR-04). Never throws.
+    /// </summary>
+    private void QueueViewPersistence()
+    {
+        _pendingSettle?.Dispose();
+        _pendingSettle = null;
+        if (Session is not { } session || Viewport.Layout is null)
+        {
+            return;
+        }
+
+        var position = Viewport.Position;
+        if (!double.IsFinite(position.YPt) || !double.IsFinite(position.ColumnXPt)
+            || !double.IsFinite(position.Zoom) || position.Zoom <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _journal?.RecordView(position.PageIndex, position.Zoom, position.ColumnXPt, position.YPt);
+        }
+#pragma warning disable CA1031 // A journal failure is reported through FaultChanged, never thrown from a timer.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+        }
+
+        if (_positions is { } store)
+        {
+            var path = session.Path;
+            _positionWrites = _positionWrites.ContinueWith(
+                _ => store.Save(path, position),
+                CancellationToken.None,
+                TaskContinuationOptions.None,
+                TaskScheduler.Default);
+        }
+    }
+
+    /// <summary>Writes the current position now (close, document swap) and waits for the store. Never throws.</summary>
+    private async Task PersistViewAsync()
+    {
+        QueueViewPersistence();
+        try
+        {
+            await _positionWrites;
+        }
+#pragma warning disable CA1031 // Remembering the position is best effort; closing must go on.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
         }
     }
 
@@ -764,14 +989,12 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>Applies the journalled zoom (clamped; ignored if not finite) and publishes the scroll offsets.</summary>
+    /// <summary>
+    /// Publishes the journalled view for the single-page view (compatibility); the zoom is already applied, clamped,
+    /// by <see cref="DocumentViewportViewModel.Attach"/>.
+    /// </summary>
     private void RestoreView(ViewEntry view)
     {
-        if (double.IsFinite(view.Zoom) && view.Zoom > 0)
-        {
-            ZoomVm.Zoom = view.Zoom; // clamped to 25%..800% by the zoom model
-        }
-
         static double Offset(double value) => double.IsFinite(value) && value > 0 ? value : 0;
         ViewToRestore = new RestoredView(ZoomVm.Zoom, Offset(view.ScrollX), Offset(view.ScrollY));
     }
@@ -780,12 +1003,22 @@ public sealed class MainViewModel : ObservableObject
         string.Equals(System.IO.Path.GetFullPath(a), System.IO.Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Makes a ready session current in one synchronous step: no half-switched state is observable.</summary>
-    private void Swap(OpenedDocument opened, DocumentSession session, DocumentJournal? journal, DocumentLock? documentLock)
+    private void Swap(
+        OpenedDocument opened,
+        DocumentSession session,
+        DocumentJournal? journal,
+        DocumentLock? documentLock,
+        DocumentLayout layout,
+        ViewPosition? position,
+        int firstPage)
     {
         CancelErase();
+        _pendingSettle?.Dispose();
+        _pendingSettle = null;
         if (Session is { } previous)
         {
             previous.CurrentPageChanged -= OnCurrentPageChanged;
+            previous.RevealRequested -= OnRevealRequested;
             previous.Undo.StateChanged -= OnUndoStateChanged;
             previous.DirtyChanged -= OnDirtyChanged;
         }
@@ -802,7 +1035,9 @@ public sealed class MainViewModel : ObservableObject
         AttachJournal(journal);
         ViewToRestore = null;
         Session = session;
+        Viewport.Attach(session, layout, position, firstPage);
         session.CurrentPageChanged += OnCurrentPageChanged;
+        session.RevealRequested += OnRevealRequested;
         session.Undo.StateChanged += OnUndoStateChanged;
         session.DirtyChanged += OnDirtyChanged;
         if (_viewer is { } viewer)
@@ -858,20 +1093,26 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    private async Task GoToPageAsync(int pageNumber)
+    /// <summary>Go to page (1-based, clamped): the viewport scrolls at once and records Back; the page then loads.</summary>
+    private Task GoToPageAsync(int pageNumber) => Viewport.GoToPageAsync(pageNumber);
+
+    /// <summary>
+    /// The viewport jumped to a page: it becomes current with its editor once its strokes are loaded. Works while a
+    /// save runs (the load may wait for the PDFium thread, or fail during a plain Save's release: then the error line
+    /// says so and the page stays without an editor).
+    /// </summary>
+    private async Task NavigateToPageAsync(int pageIndex)
     {
-        // Disabled while saving: a page load would queue behind the write on the PDFium thread, and a plain
-        // Save has the file released for a moment.
-        if (IsSaving || Session is not { } session || pageNumber < 1 || pageNumber > PageCount || pageNumber == PageNumber)
+        if (Session is not { } session)
         {
             return;
         }
 
-        CancelErase();
+        CancelErase(); // a jump scrolls the page under the eraser away
         try
         {
             // No confirmation and no undo clearing: the page's strokes stay in the session.
-            await session.GoToPageAsync(pageNumber - 1);
+            await session.GoToPageAsync(pageIndex);
         }
         catch (Exception)
         {
@@ -889,13 +1130,15 @@ public sealed class MainViewModel : ObservableObject
 
         try
         {
-            await ShowPageOfAsync(session, session.Undo.PeekUndo());
+            // Loads the page of the change if needed, then raises RevealRequested (OnRevealRequested).
             await session.UndoAsync();
         }
         catch (Exception)
         {
             ReportFailure(session); // the page of the change could not be loaded
         }
+
+        RefreshCurrentEditor();
     }
 
     private async Task RedoAsync()
@@ -907,29 +1150,25 @@ public sealed class MainViewModel : ObservableObject
 
         try
         {
-            await ShowPageOfAsync(session, session.Undo.PeekRedo());
             await session.RedoAsync();
         }
         catch (Exception)
         {
             ReportFailure(session);
         }
+
+        RefreshCurrentEditor();
     }
 
-    /// <summary>
-    /// The single-page view shows the page an undo or redo is about to change, as before the session raised
-    /// <see cref="DocumentSession.RevealRequested"/> instead of navigating (replaced by scrolling in the
-    /// multi-page view).
-    /// </summary>
-    private static async Task ShowPageOfAsync(DocumentSession session, IUndoableCommand? command)
+    /// <summary>An undo or redo changed a page: scroll to it only when none of it is in view (FR-62).</summary>
+    private void OnRevealRequested(object? sender, RevealRequestedEventArgs e)
     {
-        if (command is IPageCommand { PageIndex: var index }
-            && index != session.CurrentPageIndex
-            && index >= 0
-            && index < session.PageCount)
+        if (!ReferenceEquals(sender, Session) || Viewport.VisiblePages.Contains(e.PageIndex))
         {
-            await session.GoToPageAsync(index);
+            return;
         }
+
+        Viewport.ScrollToPage(e.PageIndex, recordHistory: false);
     }
 
     private void ReportFailure(DocumentSession session)
@@ -1183,19 +1422,47 @@ public sealed class MainViewModel : ObservableObject
         RedoCommand.NotifyCanExecuteChanged();
     }
 
+    /// <summary>
+    /// The current page may have got its editor without a page change (a load for the view, an undo): the session
+    /// raises nothing then, so <see cref="Editor"/> is re-read here.
+    /// </summary>
+    private void RefreshCurrentEditor()
+    {
+        if (Session is { } session && !ReferenceEquals(session.CurrentEditor, Editor))
+        {
+            ShowCurrentPage();
+        }
+    }
+
+    /// <summary>
+    /// Publishes the current page. A live eraser gesture is not touched: it belongs to its own page, which may stay
+    /// in view while the centre moves on.
+    /// </summary>
     private void ShowCurrentPage()
     {
-        CancelErase();
         var session = Session;
         var editor = session?.CurrentEditor;
         Editor = editor;
 
-        // The page was built from the source's single-source dimensions, so the view's page frame and the
-        // strokes use the same numbers (FR-26).
-        PageSize = editor is null ? default : new PageSize(editor.Page.WidthPt, editor.Page.HeightPt);
+        // Page sizes come from the source's single-source dimensions, so the view's page frame and the
+        // strokes use the same numbers (FR-26), with or without an editor.
+        PageSize = editor is not null ? new PageSize(editor.Page.WidthPt, editor.Page.HeightPt)
+            : session is { CurrentPageIndex: >= 0 } ? SizeOf(session.CurrentPageIndex)
+            : default;
         PageNumber = session is { CurrentPageIndex: >= 0 } ? session.CurrentPageIndex + 1 : 0;
         UpdateNotice();
         PageChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private PageSize SizeOf(int pageIndex)
+    {
+        if (_document is not { } document)
+        {
+            return default;
+        }
+
+        var dimensions = document.Source.GetPageDimensions(pageIndex);
+        return new PageSize(dimensions.WidthPt, dimensions.HeightPt);
     }
 
     private void UpdateNotice()

@@ -59,6 +59,26 @@ public class ZoomViewModelTests
     }
 
     [Fact]
+    public void Fit_width_mode_is_on_after_FitWidth_and_off_after_any_manual_zoom()
+    {
+        var zoom = new ZoomViewModel();
+        Assert.False(zoom.IsFitWidth);
+
+        zoom.FitWidth(1000, 600);
+        Assert.True(zoom.IsFitWidth);
+        zoom.ZoomInCommand.Execute(null);
+        Assert.False(zoom.IsFitWidth);
+
+        zoom.FitWidth(1000, 600);
+        zoom.ZoomAt(1.1);
+        Assert.False(zoom.IsFitWidth);
+
+        zoom.FitWidth(1000, 600);
+        zoom.Zoom = zoom.Zoom; // even the same value is a manual choice
+        Assert.False(zoom.IsFitWidth);
+    }
+
+    [Fact]
     public void Locked_zoom_ignores_every_zoom_request()
     {
         var zoom = new ZoomViewModel { IsLocked = true };

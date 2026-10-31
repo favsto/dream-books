@@ -165,7 +165,7 @@ public sealed class SaveCommandsTests : IDisposable
     }
 
     [Fact]
-    public async Task Navigation_commands_are_disabled_while_saving()
+    public async Task Navigation_and_drawing_go_on_while_saving()
     {
         var vm = await OpenAsync(new MainViewModel(_dialogs), pages: 3);
         await vm.GoToPageCommand.ExecuteAsync(2);
@@ -174,16 +174,17 @@ public sealed class SaveCommandsTests : IDisposable
         var saving = vm.SaveCommand.ExecuteAsync(null);
         await _writer.Started.Task;
 
-        Assert.False(vm.PreviousPageCommand.CanExecute(null));
-        Assert.False(vm.NextPageCommand.CanExecute(null));
-        Assert.False(vm.GoToPageCommand.CanExecute(3));
-        await vm.GoToPageCommand.ExecuteAsync(3); // a direct call is ignored too
-        Assert.Equal(2, vm.PageNumber);
+        Assert.True(vm.PreviousPageCommand.CanExecute(null)); // no navigation lock during a save any more
+        Assert.True(vm.NextPageCommand.CanExecute(null));
+        Assert.True(vm.GoToPageCommand.CanExecute(3));
+        await vm.GoToPageCommand.ExecuteAsync(3);
+        Assert.Equal(3, vm.PageNumber);
 
         Draw(vm); // drawing continues during the write
         _writer.Gate.SetResult();
         await saving;
 
+        Assert.True(vm.IsDirty); // the stroke drawn during the save is not in the file
         Assert.True(vm.PreviousPageCommand.CanExecute(null));
         Assert.True(vm.NextPageCommand.CanExecute(null));
         Assert.True(vm.GoToPageCommand.CanExecute(3));

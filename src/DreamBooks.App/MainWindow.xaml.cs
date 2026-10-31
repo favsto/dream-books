@@ -9,7 +9,8 @@ namespace DreamBooks.App;
 
 public partial class MainWindow : Window
 {
-    private readonly MainViewModel _viewModel = new(new FileDialogService(), new RecoveryStore(RecoveryRoot()));
+    private readonly MainViewModel _viewModel = new(
+        new FileDialogService(), new RecoveryStore(RecoveryRoot()), new ViewPositionStore(PositionsRoot()));
 
     // Set once the view model allowed closing, so the second Close() goes through.
     private bool _closeAllowed;
@@ -25,6 +26,10 @@ public partial class MainWindow : Window
     /// <summary>Journals and document locks: <c>%LOCALAPPDATA%\DreamBooks\recovery</c> (FR-84), outside the user's folders.</summary>
     internal static string RecoveryRoot() =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DreamBooks", "recovery");
+
+    /// <summary>Last position per document: <c>%LOCALAPPDATA%\DreamBooks\positions</c> (FR-04), outside the user's folders.</summary>
+    internal static string PositionsRoot() =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DreamBooks", "positions");
 
     /// <summary>
     /// Startup recovery (FR-86), once the window is up so its questions have an owner: reopens the document of
