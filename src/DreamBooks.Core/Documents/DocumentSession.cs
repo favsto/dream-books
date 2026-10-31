@@ -11,9 +11,11 @@ namespace DreamBooks.Core.Documents;
 /// (FR-62, FR-83, NFR-02).
 /// </summary>
 /// <remarks>
-/// Mutation and events belong to one thread (the UI thread). <see cref="EnsurePageAsync"/> may be awaited
-/// concurrently: callers share one load per page, which runs without the callers' tokens so that one
-/// caller cancelling does not cancel the load for the others; a failed load is not cached.
+/// Mutation and events belong to one thread (the UI thread). <see cref="EnsurePageAsync"/> and
+/// <see cref="EnsureEditorAsync"/> may be awaited concurrently: callers share one load per page, which runs
+/// without the callers' tokens so that one caller cancelling does not cancel the load for the others; a failed
+/// load is not cached. Every loaded page can have an editor, so several visible pages can be edited at once;
+/// all editors share <see cref="Undo"/> (FR-26, FR-62).
 /// </remarks>
 public sealed class DocumentSession : IDisposable
 {
@@ -39,7 +41,17 @@ public sealed class DocumentSession : IDisposable
         Undo.CommandApplied += OnCommandApplied;
     }
 
+    /// <summary>
+    /// Raised when <see cref="CurrentPageIndex"/> changes, or when <see cref="GoToPageAsync"/> gives the current
+    /// page its editor.
+    /// </summary>
     public event EventHandler? CurrentPageChanged;
+
+    /// <summary>
+    /// Raised after an undo or redo changed a page: the view brings that page into sight if it is not visible.
+    /// Undo and redo never change <see cref="CurrentPageIndex"/> themselves.
+    /// </summary>
+    public event EventHandler<RevealRequestedEventArgs>? RevealRequested;
 
     public event EventHandler? DirtyChanged;
 
@@ -53,10 +65,14 @@ public sealed class DocumentSession : IDisposable
     /// <summary>The document's own undo history (capacity 500), created and owned by the session.</summary>
     public UndoManager Undo { get; }
 
-    /// <summary>Index of the page shown, or -1 before the first <see cref="GoToPageAsync"/>.</summary>
+    /// <summary>
+    /// Index of the page the view considers current, or -1 before the first <see cref="GoToPageAsync"/> or
+    /// <see cref="SetCurrentPageFromView"/>.
+    /// </summary>
     public int CurrentPageIndex { get; private set; } = -1;
 
-    public PageEditor? CurrentEditor { get; private set; }
+    /// <summary>The editor of the current page, or null while that page has no editor yet.</summary>
+    public PageEditor? CurrentEditor => TryGetEditor(CurrentPageIndex, out var editor) ? editor : null;
 
     /// <summary>True when some loaded page's stroke Id sequence differs from its loaded or last saved one.</summary>
     public bool IsDirty => _isDirty;
@@ -117,6 +133,42 @@ public sealed class DocumentSession : IDisposable
         return (await load.WaitAsync(ct)).Page;
     }
 
+    /// <summary>The editor of an already loaded page, without loading anything.</summary>
+    public bool TryGetEditor(int pageIndex, out PageEditor? editor)
+    {
+        lock (_gate)
+        {
+            return _editors.TryGetValue(pageIndex, out editor);
+        }
+    }
+
+    /// <summary>
+    /// Returns the page's editor, loading its strokes the first time only. One editor per page, the same
+    /// instance <see cref="GoToPageAsync"/> uses; all editors share <see cref="Undo"/>.
+    /// </summary>
+    public async Task<PageEditor> EnsureEditorAsync(int pageIndex, CancellationToken ct = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ValidatePageIndex(pageIndex);
+        if (TryGetEditor(pageIndex, out var existing))
+        {
+            return existing!;
+        }
+
+        var page = await EnsurePageAsync(pageIndex, ct);
+        lock (_gate)
+        {
+            // Concurrent callers awaited the same load: the first one back creates the editor.
+            if (!_editors.TryGetValue(pageIndex, out var editor))
+            {
+                editor = new PageEditor(page, Undo);
+                _editors[pageIndex] = editor;
+            }
+
+            return editor;
+        }
+    }
+
     /// <summary>Shows a page, loading it if needed. Never clears the undo history.</summary>
     public async Task GoToPageAsync(int pageIndex, CancellationToken ct = default)
     {
@@ -124,51 +176,56 @@ public sealed class DocumentSession : IDisposable
         ValidatePageIndex(pageIndex); // before taking a ticket: an invalid call must not supersede a valid one
 
         var ticket = ++_navigation;
-        var page = await EnsurePageAsync(pageIndex, ct);
+        var alreadyShown = pageIndex == CurrentPageIndex && CurrentEditor is not null;
+        await EnsureEditorAsync(pageIndex, ct);
         if (ticket != _navigation || _disposed)
         {
             return; // A later navigation superseded this one, or the session was closed.
         }
 
-        if (pageIndex == CurrentPageIndex && CurrentEditor is not null)
+        if (alreadyShown)
         {
             return;
         }
 
-        if (!_editors.TryGetValue(pageIndex, out var editor))
-        {
-            editor = new PageEditor(page, Undo);
-            _editors[pageIndex] = editor;
-        }
-
         CurrentPageIndex = pageIndex;
-        CurrentEditor = editor;
         CurrentPageChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Undoes the last command, first showing the page it changed.</summary>
-    public async Task<bool> UndoAsync(CancellationToken ct = default)
+    /// <summary>
+    /// Records the page the view considers current (e.g. the one at the viewport centre) without loading its
+    /// strokes and without touching the undo history. Supersedes a <see cref="GoToPageAsync"/> in flight.
+    /// Ignored once the session is disposed.
+    /// </summary>
+    public void SetCurrentPageFromView(int pageIndex)
     {
-        if (Undo.PeekUndo() is not { } command)
+        if (_disposed)
         {
-            return false;
+            return;
         }
 
-        await ShowCommandPageAsync(command, ct);
-        return Undo.Undo();
-    }
-
-    /// <summary>Redoes the next command, first showing the page it changes.</summary>
-    public async Task<bool> RedoAsync(CancellationToken ct = default)
-    {
-        if (Undo.PeekRedo() is not { } command)
+        ValidatePageIndex(pageIndex);
+        ++_navigation;
+        if (pageIndex == CurrentPageIndex)
         {
-            return false;
+            return;
         }
 
-        await ShowCommandPageAsync(command, ct);
-        return Undo.Redo();
+        CurrentPageIndex = pageIndex;
+        CurrentPageChanged?.Invoke(this, EventArgs.Empty);
     }
+
+    /// <summary>
+    /// Undoes the last command, loading its page if needed, then raises <see cref="RevealRequested"/> for that
+    /// page. The current page does not change.
+    /// </summary>
+    public Task<bool> UndoAsync(CancellationToken ct = default) => ApplyAsync(redo: false, ct);
+
+    /// <summary>
+    /// Redoes the next command, loading its page if needed, then raises <see cref="RevealRequested"/> for that
+    /// page. The current page does not change.
+    /// </summary>
+    public Task<bool> RedoAsync(CancellationToken ct = default) => ApplyAsync(redo: true, ct);
 
     /// <summary>
     /// The net change per loaded page against its baseline, ordered by page index. Removed Ids are always
@@ -270,14 +327,35 @@ public sealed class DocumentSession : IDisposable
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(pageIndex, PageCount);
     }
 
-    private async Task ShowCommandPageAsync(IUndoableCommand command, CancellationToken ct)
+    private async Task<bool> ApplyAsync(bool redo, CancellationToken ct)
     {
-        if (command is IPageCommand pageCommand
-            && pageCommand.PageIndex != CurrentPageIndex
-            && pageCommand.PageIndex >= 0
-            && pageCommand.PageIndex < PageCount)
+        while (true)
         {
-            await GoToPageAsync(pageCommand.PageIndex, ct);
+            if ((redo ? Undo.PeekRedo() : Undo.PeekUndo()) is not { } command)
+            {
+                return false;
+            }
+
+            var pageIndex = command is IPageCommand { PageIndex: var index } && index >= 0 && index < PageCount
+                ? index
+                : -1;
+            if (pageIndex >= 0 && !_disposed && !TryGetEditor(pageIndex, out _))
+            {
+                await EnsureEditorAsync(pageIndex, ct);
+                continue; // The history may have changed while the page loaded: look again.
+            }
+
+            if (!(redo ? Undo.Redo() : Undo.Undo()))
+            {
+                return false;
+            }
+
+            if (pageIndex >= 0 && !_disposed)
+            {
+                RevealRequested?.Invoke(this, new RevealRequestedEventArgs(pageIndex));
+            }
+
+            return true;
         }
     }
 

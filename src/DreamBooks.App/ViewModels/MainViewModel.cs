@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DreamBooks.App.Resources;
 using DreamBooks.App.Services;
+using DreamBooks.Core.Commands;
 using DreamBooks.Core.Documents;
 using DreamBooks.Core.Geometry;
 using DreamBooks.Core.Ink;
@@ -888,6 +889,7 @@ public sealed class MainViewModel : ObservableObject
 
         try
         {
+            await ShowPageOfAsync(session, session.Undo.PeekUndo());
             await session.UndoAsync();
         }
         catch (Exception)
@@ -905,11 +907,28 @@ public sealed class MainViewModel : ObservableObject
 
         try
         {
+            await ShowPageOfAsync(session, session.Undo.PeekRedo());
             await session.RedoAsync();
         }
         catch (Exception)
         {
             ReportFailure(session);
+        }
+    }
+
+    /// <summary>
+    /// The single-page view shows the page an undo or redo is about to change, as before the session raised
+    /// <see cref="DocumentSession.RevealRequested"/> instead of navigating (replaced by scrolling in the
+    /// multi-page view).
+    /// </summary>
+    private static async Task ShowPageOfAsync(DocumentSession session, IUndoableCommand? command)
+    {
+        if (command is IPageCommand { PageIndex: var index }
+            && index != session.CurrentPageIndex
+            && index >= 0
+            && index < session.PageCount)
+        {
+            await session.GoToPageAsync(index);
         }
     }
 
