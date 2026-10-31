@@ -130,7 +130,7 @@ public sealed class DocumentNavigationTests : IDisposable
         var line = Line(vm, 100);
         vm.Undo.Clear();
         var page1 = vm.Editor!.Page;
-        vm.BeginErase();
+        vm.BeginErase(vm.Editor!);
         vm.EraseAt(new PointD(100, 100));
 
         await vm.GoToPageCommand.ExecuteAsync(2);

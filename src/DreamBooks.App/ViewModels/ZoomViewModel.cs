@@ -67,8 +67,8 @@ public sealed class ZoomViewModel : ObservableObject
     public void ZoomAt(double factor) => Zoom = _zoom * factor;
 
     /// <summary>
-    /// Fits a page width to the viewport and turns fit-width mode on (kept for the single-page view; the multi-page
-    /// view then fits the widest page of the document instead).
+    /// Fits a page width to the viewport and turns fit-width mode on (the document view then fits the widest page of
+    /// the document instead).
     /// </summary>
     public void FitWidth(double viewportWidthDip, double pageWidthPt)
     {

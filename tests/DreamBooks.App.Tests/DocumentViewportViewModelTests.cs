@@ -740,7 +740,8 @@ public sealed class DocumentViewportViewModelTests : IDisposable
         var path = WriteFile("old-journal.pdf");
         var vm = await OpenAsync(NewVm(withRecovery: true), Pages(3), path);
         Line(vm.Editor!, 100);
-        vm.ReportViewState(1, 2.0, 30, 400); // the single-page view's numbers: DIP offsets inside page 2
+        // What the removed single-page view journalled: no fit flag, DIP offsets inside page 2.
+        vm.JournalForTest!.RecordView(1, 2.0, 30, 400);
         await vm.SimulateCrashForTestAsync();
 
         var next = await OpenAsync(NewVm(withRecovery: true), Pages(3), path);

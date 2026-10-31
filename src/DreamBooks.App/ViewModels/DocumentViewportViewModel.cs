@@ -505,7 +505,7 @@ public sealed class DocumentViewportViewModel : ObservableObject
         MoveTo(FitKeepingTop(layout), CurrentPageReport.Debounced);
     }
 
-    /// <summary>A zoom change from elsewhere (zoom buttons, the old single-page view): anchored at the viewport centre.</summary>
+    /// <summary>A zoom change from elsewhere (the panel's zoom buttons): anchored at the viewport centre.</summary>
     private void OnZoomPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(ZoomViewModel.IsFitWidth))

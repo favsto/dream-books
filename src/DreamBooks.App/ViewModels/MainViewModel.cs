@@ -63,7 +63,6 @@ public sealed class MainViewModel : ObservableObject
     private DocumentLock? _lock;
     private bool _startupRecoveryDone;
     private string? _journalWarning;
-    private RestoredView? _viewToRestore;
     private bool _listenerFailed;
 
     /// <param name="dialogs">The dialogs.</param>
@@ -106,8 +105,8 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Raised after a different page (or document) became current, or the current page got its editor. Compatibility
-    /// for the single-page view; the multi-page view follows <see cref="Viewport"/>.
+    /// Raised after a different page (or document) became current, or the current page got its editor (the panel and
+    /// tests follow it; the document view follows <see cref="Viewport"/>).
     /// </summary>
     public event EventHandler? PageChanged;
 
@@ -238,17 +237,6 @@ public sealed class MainViewModel : ObservableObject
         private set => SetProperty(ref _journalWarning, value);
     }
 
-    /// <summary>
-    /// Compatibility for the single-page view (removed with it): the journalled zoom and the raw scroll numbers of a
-    /// restore from the journal (FR-04); null for a document opened without one. The zoom is already applied to
-    /// <see cref="ZoomVm"/>; the multi-page view uses <see cref="DocumentViewportViewModel.Position"/> instead.
-    /// </summary>
-    public RestoredView? ViewToRestore
-    {
-        get => _viewToRestore;
-        private set => SetProperty(ref _viewToRestore, value);
-    }
-
     /// <summary>Crash recovery over the recovery store, or null when the view model has none.</summary>
     internal RecoveryService? Recovery { get; }
 
@@ -325,23 +313,8 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>
-    /// Compatibility for the single-page view (removed with it): the view settled on a position (debounced by the
-    /// view) and the numbers are journalled as given, only while there are unsaved changes or a journal already
-    /// exists. The multi-page view needs no call: <see cref="Viewport"/> positions are journalled after
-    /// <see cref="ViewSettleDelay"/> with page-relative offsets in points.
-    /// </summary>
-    public void ReportViewState(int pageIndex, double zoom, double scrollX, double scrollY)
-    {
-        // JSON has no NaN or infinity: a non-finite value would fail the journal write.
-        if (pageIndex < 0 || !double.IsFinite(zoom) || zoom <= 0)
-        {
-            return;
-        }
-
-        static double Offset(double value) => double.IsFinite(value) && value > 0 ? value : 0;
-        _journal?.RecordView(pageIndex, zoom, Offset(scrollX), Offset(scrollY));
-    }
+    /// <summary>Test hook: the journal of the open document (e.g. to write an entry of an older format).</summary>
+    internal DocumentJournal? JournalForTest => _journal;
 
     /// <summary>
     /// Startup recovery (FR-86), once per run: reopens the document of the most recent journal through the normal
@@ -458,15 +431,6 @@ public sealed class MainViewModel : ObservableObject
         ActiveErase = editor.BeginErase(Tools.EraserMode);
         ZoomVm.IsLocked = true;
         ErasePreviewChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    /// <summary>Compatibility for the single-page view (removed with it): erases on the current page's editor.</summary>
-    public void BeginErase()
-    {
-        if (Editor is { } editor)
-        {
-            BeginErase(editor);
-        }
     }
 
     /// <summary>Moves the eraser to a page point; the circle has the selected diameter (FR-32).</summary>
@@ -1006,11 +970,6 @@ public sealed class MainViewModel : ObservableObject
                         : Strings.NoticeRestored;
                 }
 
-                if (restore.LastView is { } view)
-                {
-                    RestoreView(view);
-                }
-
                 break;
             case RestoreStatus.Unreadable:
                 ErrorMessage = Strings.ErrorJournalUnreadable;
@@ -1029,16 +988,6 @@ public sealed class MainViewModel : ObservableObject
                 Notice = Strings.NoticeJournalDisabled;
                 break;
         }
-    }
-
-    /// <summary>
-    /// Publishes the journalled view for the single-page view (compatibility); the zoom is already applied, clamped,
-    /// by <see cref="DocumentViewportViewModel.Attach"/>.
-    /// </summary>
-    private void RestoreView(ViewEntry view)
-    {
-        static double Offset(double value) => double.IsFinite(value) && value > 0 ? value : 0;
-        ViewToRestore = new RestoredView(ZoomVm.Zoom, Offset(view.ScrollX), Offset(view.ScrollY));
     }
 
     private static bool SamePath(string a, string b) =>
@@ -1075,7 +1024,6 @@ public sealed class MainViewModel : ObservableObject
         _lock = documentLock;
         _listenerFailed = false;
         AttachJournal(journal);
-        ViewToRestore = null;
         Session = session;
         Viewport.Attach(session, layout, restored?.Position, firstPage, restored?.FitWidth ?? false);
         session.CurrentPageChanged += OnCurrentPageChanged;

@@ -196,7 +196,7 @@ public sealed class MainViewModelTests : IDisposable
             vm.Tools.EraserMode = EraserMode.WholeStroke;
             vm.Undo.Clear();
 
-            vm.BeginErase();
+            vm.BeginErase(vm.Editor!);
             Assert.NotNull(vm.ActiveErase);
             vm.EraseAt(new PointD(100, 90));
             vm.EraseAt(new PointD(100, 210)); // the sweep crosses the top and middle lines
@@ -227,14 +227,14 @@ public sealed class MainViewModelTests : IDisposable
             // 2 mm eraser (radius 2.83 pt) 8 pt from the line: no hit.
             vm.Tools.EraserMode = EraserMode.Partial;
             vm.Tools.EraserSizeMm = 2;
-            vm.BeginErase();
+            vm.BeginErase(vm.Editor!);
             vm.EraseAt(new PointD(100, 108));
             Assert.Equal([line], vm.ActiveErase!.Strokes);
             vm.EndErase();
 
             // 10 mm eraser (radius 14.2 pt) at the same spot: partial mode splits the line in two.
             vm.Tools.EraserSizeMm = 10;
-            vm.BeginErase();
+            vm.BeginErase(vm.Editor!);
             vm.EraseAt(new PointD(100, 108));
             vm.EndErase();
 
@@ -263,7 +263,7 @@ public sealed class MainViewModelTests : IDisposable
             var notifications = 0;
             vm.ErasePreviewChanged += (_, _) => notifications++;
 
-            vm.BeginErase();
+            vm.BeginErase(vm.Editor!);
             vm.EraseAt(new PointD(300, 500));
             vm.EndErase();
 
@@ -286,12 +286,12 @@ public sealed class MainViewModelTests : IDisposable
         {
             Line(vm, 100);
 
-            vm.BeginErase();
+            vm.BeginErase(vm.Editor!);
             Assert.True(vm.ZoomVm.IsLocked);
             vm.EndErase();
             Assert.False(vm.ZoomVm.IsLocked);
 
-            vm.BeginErase();
+            vm.BeginErase(vm.Editor!);
             vm.EraseAt(new PointD(100, 100));
             vm.CancelErase();
             Assert.False(vm.ZoomVm.IsLocked);
@@ -316,9 +316,9 @@ public sealed class MainViewModelTests : IDisposable
         try
         {
             Line(vm, 100);
-            vm.BeginErase();
+            vm.BeginErase(vm.Editor!);
             var session = vm.ActiveErase;
-            vm.BeginErase();
+            vm.BeginErase(vm.Editor!);
             Assert.Same(session, vm.ActiveErase);
             vm.EndErase();
         }
@@ -336,7 +336,7 @@ public sealed class MainViewModelTests : IDisposable
         try
         {
             await vm.OpenPdfCommand.ExecuteAsync(null);
-            vm.BeginErase();
+            vm.BeginErase(vm.Editor!);
 
             await vm.GoToPageCommand.ExecuteAsync(2);
 
@@ -359,7 +359,7 @@ public sealed class MainViewModelTests : IDisposable
         {
             var first = Line(vm, 100);
             Line(vm, 200);
-            vm.BeginErase();
+            vm.BeginErase(vm.Editor!);
             vm.EraseAt(new PointD(100, 100));
 
             vm.UndoCommand.Execute(null); // keyboard Ctrl+Z while the pen is down
@@ -379,7 +379,8 @@ public sealed class MainViewModelTests : IDisposable
     public void Erase_without_a_document_does_nothing()
     {
         var vm = new MainViewModel(_dialogs);
-        vm.BeginErase();
+        vm.BeginErase(new PageEditor(new Page(0, 100, 100), new DreamBooks.Core.Undo.UndoManager())); // not this document's
+        Assert.Null(vm.ActiveErasePage);
         vm.EraseAt(new PointD(1, 1));
         vm.EndErase();
         Assert.Null(vm.ActiveErase);
