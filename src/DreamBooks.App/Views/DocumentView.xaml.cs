@@ -81,7 +81,11 @@ public partial class DocumentView : UserControl
         Unloaded += (_, _) =>
         {
             _editorTimer.Stop();
-            _bitmaps.SetWindow((0, -1), []); // nothing is shown: renders stop, the cache stays for a return
+
+            // Renders stop and the cache (up to its budget) is released; the surfaces keep what they show. A view that
+            // is loaded again starts a new coordinator (Loaded), whose previews never replace those bitmaps.
+            _bitmaps.Dispose();
+            _bitmaps = NewBitmapCoordinator();
         };
     }
 

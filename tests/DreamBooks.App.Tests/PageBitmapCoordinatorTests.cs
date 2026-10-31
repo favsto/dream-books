@@ -188,22 +188,41 @@ public sealed class PageBitmapCoordinatorTests
     {
         WpfTestThread.Run(() =>
         {
-            const long budget = 4L * 1024 * 1024;
+            // A window of 6 pages does not fit: 2 visible sharp pages and 4 neighbour previews already exceed it.
+            const long budget = 3L * 1024 * 1024;
             using var f = new Fixture(300, budget) { Renderer = { Auto = true } };
             f.Open();
             var sharp = PageBitmapRenderer.SharpSize(_page, 1, 1);
+            var preview = PageBitmapRenderer.PreviewSize(_page, 1);
             var sharpBytes = (long)sharp.Width * sharp.Height * 4;
+            var previewBytes = (long)preview.Width * preview.Height * 4;
+            Assert.True((2 * sharpBytes) + (4 * previewBytes) > budget);
+            var neighboursKeptAsPreviews = 0;
             for (var top = 0; top < 300; top += 3)
             {
                 var last = Math.Min(299, top + 1);
-                f.Show(Math.Max(0, top - 2), Math.Min(299, last + 2), [top, last]);
+                var (first, end) = (Math.Max(0, top - 2), Math.Min(299, last + 2));
+                f.Show(first, end, [top, last]);
                 f.Idle();
+                var scheduler = f.Coordinator.Scheduler!;
                 Assert.True(f.ShowsSharp(top));
-                Assert.InRange(f.Coordinator.Scheduler!.CachedBytes, 0, budget + (6 * sharpBytes));
-                Assert.InRange(f.Coordinator.Scheduler.CachedCount, 0, 16);
+                Assert.True(f.ShowsSharp(last));
+
+                // Over budget: nothing outside the window is kept, and the neighbours get no sharp render (the guard).
+                Assert.InRange(scheduler.CachedCount, 1, end - first + 1);
+                Assert.InRange(scheduler.CachedBytes, 0, budget + (2 * sharpBytes) + ((end - first + 1) * previewBytes));
+                for (var page = first; page <= end; page++)
+                {
+                    if (page != top && page != last && scheduler.TryGet(page, out var cached) && cached!.Quality == RenderQuality.Preview)
+                    {
+                        neighboursKeptAsPreviews++;
+                    }
+                }
+
                 Assert.InRange(f.Coordinator.PreviewBytes, 0, PageBitmapCoordinator.PreviewCacheBudget);
             }
 
+            Assert.True(neighboursKeptAsPreviews > 100, $"{neighboursKeptAsPreviews} neighbours kept as previews");
             Assert.InRange(f.Renderer.Requests.Length, 1, 300 * 3);
         });
     }
@@ -285,7 +304,8 @@ public sealed class PageBitmapCoordinatorTests
 
             // A very tall page keeps its preview small.
             var (w, h) = PageBitmapRenderer.PreviewSize(new PageSize(100, 20_000), 2);
-            Assert.InRange((long)w * h, 1, 600L * 600 * 4);
+            Assert.InRange(w, 1, 600); // within a box 300 DIPs wide and twice as tall, at the screen scale
+            Assert.Equal(1200, h);
         });
     }
 
@@ -308,6 +328,133 @@ public sealed class PageBitmapCoordinatorTests
 
             Assert.True(f.Renderer.Requests.Length > 4);
             Assert.All(f.Renderer.Requests, r => Assert.NotEqual(ui, r.ThreadId));
+        });
+    }
+
+    [Fact]
+    public void Pages_entering_the_window_while_a_zoom_settles_get_only_previews()
+    {
+        WpfTestThread.Run(() =>
+        {
+            using var f = new Fixture(30) { Renderer = { Auto = true } };
+            f.Open();
+            f.Show(0, 2, [0]);
+            f.Idle();
+            var count = f.Renderer.Requests.Length;
+
+            f.Coordinator.SetZoom(2); // a pinch: the settle is pending
+            f.Show(5, 9, [6, 7]); // new pages come into view during the gesture
+            f.Idle();
+            var preview = PageBitmapRenderer.PreviewSize(_page, 1);
+            var during = f.Renderer.Requests.Skip(count).ToArray();
+            Assert.NotEmpty(during);
+            Assert.All(during, r => Assert.Equal((preview.Width, preview.Height), (r.Width, r.Height)));
+            Assert.All(Enumerable.Range(5, 5), page => Assert.NotNull(f.Surfaces[page].PageImage)); // never blank
+
+            count = f.Renderer.Requests.Length;
+            f.Delays.Advance(150); // settled: one sharp render per page, at the new size only
+            f.Idle();
+            var sharp2 = PageBitmapRenderer.SharpSize(_page, 2, 1);
+            var after = f.Renderer.Requests.Skip(count).ToArray();
+            Assert.All(after, r => Assert.Equal((sharp2.Width, sharp2.Height), (r.Width, r.Height)));
+            Assert.Equal(Enumerable.Range(5, 5), after.Select(r => r.Page).Order());
+            Assert.True(f.ShowsSharp(6));
+            Assert.True(f.ShowsSharp(7));
+        });
+    }
+
+    [Fact]
+    public void A_zoom_change_before_anything_sharp_is_shown_applies_at_once()
+    {
+        WpfTestThread.Run(() =>
+        {
+            using var f = new Fixture(30);
+            f.Open(); // e.g. a provisional zoom before the first layout
+            f.Show(0, 0, [0]);
+            f.WaitForPending(0);
+
+            f.Coordinator.SetZoom(2); // fit width computed at the first layout: nothing to keep stretched
+            Assert.Equal(0, f.Delays.Pending);
+            f.Renderer.Auto = true;
+            f.Renderer.CompletePending();
+            f.Idle();
+            var sharp2 = PageBitmapRenderer.SharpSize(_page, 2, 1);
+            var sharp1 = PageBitmapRenderer.SharpSize(_page, 1, 1);
+            Assert.DoesNotContain(f.Renderer.Requests, r => r.Width == sharp1.Width);
+            Assert.Equal(sharp2.Width, ((BitmapSource)f.Surfaces[0].PageImage!).PixelWidth);
+        });
+    }
+
+    [Fact]
+    public void A_preview_delivered_after_a_dpi_change_does_not_enter_the_rail_cache()
+    {
+        WpfTestThread.Run(() =>
+        {
+            using var f = new Fixture(30);
+            f.Open();
+            f.Show(0, 0, [0]);
+            f.WaitForPending(0);
+            f.Renderer.Complete(0); // the preview at the old scale: stored, its event not yet delivered
+            var scheduler = f.Coordinator.Scheduler!;
+            Assert.True(SpinWait.SpinUntil(() => scheduler.CachedCount == 1, 5000));
+
+            f.Coordinator.SetDpiScale(2);
+            WpfTestThread.PumpUntil(() => f.Surfaces[0].PageImage is not null); // the late event (shown, stretched)
+
+            Assert.Equal(0, f.Coordinator.PreviewBytes);
+        });
+    }
+
+    [Fact]
+    public void Rail_previews_are_shared_per_page_and_the_latest_request_wins()
+    {
+        WpfTestThread.Run(() =>
+        {
+            using var f = new Fixture(30);
+            f.Open();
+            var a = f.Coordinator.GetPreviewAsync(5, CancellationToken.None);
+            var b = f.Coordinator.GetPreviewAsync(5, CancellationToken.None);
+            var first = f.WaitForPending(5);
+            WpfTestThread.Drain();
+            Assert.Single(f.Renderer.Requests, r => r.Page == 5); // one render for both callers
+
+            var c = f.Coordinator.GetPreviewAsync(6, CancellationToken.None); // the knob moved on
+            WpfTestThread.PumpUntil(() => first.Token.IsCancellationRequested && a.IsCompleted && b.IsCompleted);
+            Assert.Null(a.Result);
+            Assert.Null(b.Result);
+
+            f.WaitForPending(6);
+            f.Renderer.Complete(6);
+            var preview = PageBitmapRenderer.PreviewSize(_page, 1);
+            Assert.Equal(preview.Width, Await(c)!.PixelWidth);
+            Assert.Single(f.Renderer.Requests, r => r.Page == 6);
+        });
+    }
+
+    [Fact]
+    public void A_cancelled_rail_request_leaves_no_stuck_entry()
+    {
+        WpfTestThread.Run(() =>
+        {
+            using var f = new Fixture(30) { Renderer = { HonourCancellation = false } }; // the render finishes anyway
+            f.Open();
+            using var cts = new CancellationTokenSource();
+            var a = f.Coordinator.GetPreviewAsync(5, cts.Token);
+            var first = f.WaitForPending(5);
+
+            cts.Cancel(); // the only caller gave up: the render is cancelled too
+            WpfTestThread.PumpUntil(() => a.IsCompleted);
+            Assert.Null(a.Result);
+            Assert.True(first.Token.IsCancellationRequested);
+
+            var b = f.Coordinator.GetPreviewAsync(5, CancellationToken.None); // not joined to the abandoned render
+            WpfTestThread.PumpUntil(() => f.Renderer.Requests.Count(r => r.Page == 5) == 2);
+            f.Renderer.Complete(5);
+            Assert.NotNull(Await(b));
+
+            f.Renderer.CompleteAll(5); // the abandoned render ends late: harmless
+            WpfTestThread.Drain();
+            Assert.Same(b.Result, Await(f.Coordinator.GetPreviewAsync(5, CancellationToken.None)));
         });
     }
 

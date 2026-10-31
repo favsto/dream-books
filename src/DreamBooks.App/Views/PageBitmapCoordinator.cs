@@ -55,6 +55,8 @@ internal sealed class PageBitmapCoordinator : IDisposable
     private double _targetZoom = double.NaN;
     private double _dpiScale = 1;
     private IDisposable? _settle;
+    private RailRender? _rail;
+    private bool _sharpShown;
     private long _previewBytes;
     private long _previewClock;
     private bool _disposed;
@@ -136,8 +138,11 @@ internal sealed class PageBitmapCoordinator : IDisposable
             return;
         }
 
-        if (double.IsNaN(_zoom))
+        if (double.IsNaN(_zoom) || !_sharpShown)
         {
+            // Nothing sharp on screen yet (a new document, or fit width computed at its first layout): nothing to keep
+            // stretched, so the zoom applies at once instead of rendering at a provisional one first.
+            CancelSettle();
             _zoom = _targetZoom = zoom;
             Push(invalidateAll: false);
             return;
@@ -149,8 +154,13 @@ internal sealed class PageBitmapCoordinator : IDisposable
         }
 
         _targetZoom = zoom;
+        var starting = _settle is null;
         _settle?.Dispose();
         _settle = _delays.Schedule(ZoomSettleDelay, SettleZoom);
+        if (starting)
+        {
+            Push(invalidateAll: false); // previews only from now on: no sharp render at a size about to be obsolete
+        }
     }
 
     /// <summary>The screen scale (device pixels per DIP) changed: every page is rendered again at once.</summary>
@@ -195,9 +205,14 @@ internal sealed class PageBitmapCoordinator : IDisposable
 
     /// <summary>
     /// A small, low-resolution bitmap of a page (<see cref="PageBitmapRenderer.PreviewSize"/>) for the scroll rail's
-    /// bubble, cached; null when there is no document, the page does not exist or the render failed or was cancelled.
-    /// Never throws.
+    /// bubble, cached; null when there is no document, the page does not exist, the render failed, or the request was
+    /// cancelled or superseded. Never throws. Call it on the UI thread.
     /// </summary>
+    /// <remarks>
+    /// At most one rail render is in flight: callers asking for the same page share it, a request for another page
+    /// cancels it (the latest wins, so scrubbing never queues PDFium work), and it is cancelled when every caller
+    /// waiting for it has cancelled. A cancelled render is never joined again, nor cached.
+    /// </remarks>
     public async Task<BitmapSource?> GetPreviewAsync(int pageIndex, CancellationToken ct)
     {
         if (_disposed || _layout is not { } layout || pageIndex < 0 || pageIndex >= layout.PageCount)
@@ -219,26 +234,30 @@ internal sealed class PageBitmapCoordinator : IDisposable
             return null;
         }
 
-        var document = _document;
-        var dpiScale = _dpiScale;
-        BitmapSource? bitmap;
+        if (_rail is not { } rail || rail.PageIndex != pageIndex || rail.Cancellation.IsCancellationRequested)
+        {
+            _rail?.Cancellation.Cancel(); // the latest request wins
+            rail = new RailRender(pageIndex);
+            _rail = rail;
+            rail.Render = RenderRailPreviewAsync(rail, size);
+        }
+
+        rail.Waiters++;
         try
         {
-            bitmap = await Task.Run(() => _renderer.RenderAsync(pageIndex, size.Width, size.Height, ct), ct);
+            return await rail.Render.WaitAsync(ct);
         }
-#pragma warning disable CA1031 // The rail shows no preview rather than failing (NFR-11).
-        catch (Exception)
-#pragma warning restore CA1031
+        catch (OperationCanceledException)
         {
             return null;
         }
-
-        if (bitmap is not null && document == _document && dpiScale == _dpiScale && !_disposed)
+        finally
         {
-            AddPreview(pageIndex, bitmap);
+            if (--rail.Waiters == 0 && !rail.Render.IsCompleted)
+            {
+                rail.Cancellation.Cancel(); // nobody waits for it any more
+            }
         }
-
-        return bitmap;
     }
 
     public void Dispose()
@@ -250,6 +269,42 @@ internal sealed class PageBitmapCoordinator : IDisposable
 
         ReleaseDocument();
         _disposed = true;
+    }
+
+    /// <summary>The rail render of <paramref name="rail"/>; never faults. Continues on the UI thread.</summary>
+    private async Task<BitmapSource?> RenderRailPreviewAsync(RailRender rail, (int Width, int Height) size)
+    {
+        var document = _document;
+        var dpiScale = _dpiScale;
+        var token = rail.Cancellation.Token;
+        BitmapSource? bitmap;
+        try
+        {
+            bitmap = await Task.Run(() => _renderer.RenderAsync(rail.PageIndex, size.Width, size.Height, token), token);
+        }
+#pragma warning disable CA1031 // The rail shows no preview rather than failing (NFR-11).
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            bitmap = null;
+        }
+
+        if (ReferenceEquals(_rail, rail))
+        {
+            _rail = null;
+        }
+
+        if (token.IsCancellationRequested)
+        {
+            return null; // superseded or abandoned: a late result is neither cached nor handed out
+        }
+
+        if (bitmap is not null && document == _document && dpiScale == _dpiScale && !_disposed)
+        {
+            AddPreview(rail.PageIndex, bitmap);
+        }
+
+        return bitmap;
     }
 
     private static long SizeOf(BitmapSource bitmap) =>
@@ -276,6 +331,9 @@ internal sealed class PageBitmapCoordinator : IDisposable
             _scheduler = null;
         }
 
+        _rail?.Cancellation.Cancel();
+        _rail = null;
+        _sharpShown = false;
         _layout = null;
         _document++;
         _retained = (0, -1);
@@ -329,11 +387,21 @@ internal sealed class PageBitmapCoordinator : IDisposable
                 continue;
             }
 
-            var sharp = PageBitmapRenderer.SharpSize(size, _zoom, _dpiScale);
             var preview = PageBitmapRenderer.PreviewSize(size, _dpiScale);
-            if (preview.Width >= sharp.Width || preview.Height >= sharp.Height)
+            (int Width, int Height) sharp;
+            if (_settle is not null)
             {
-                preview = (0, 0); // no smaller than the sharp render: go straight to it
+                // A zoom is settling: the applied zoom is about to be obsolete. Pages with nothing yet get their
+                // preview only; the settle renders them sharp once, at the new size.
+                sharp = (0, 0);
+            }
+            else
+            {
+                sharp = PageBitmapRenderer.SharpSize(size, _zoom, _dpiScale);
+                if (preview.Width >= sharp.Width || preview.Height >= sharp.Height)
+                {
+                    preview = (0, 0); // no smaller than the sharp render: go straight to it
+                }
             }
 
             requests.Add(new RenderRequest(page, PriorityOf(page), sharp.Width, sharp.Height, preview.Width, preview.Height));
@@ -366,15 +434,26 @@ internal sealed class PageBitmapCoordinator : IDisposable
             return; // an event of a document that is gone
         }
 
-        if (e.Quality == RenderQuality.Preview)
+        var isPreview = e.Quality == RenderQuality.Preview;
+        if (isPreview
+            && !scheduler.IsStale(e.PageIndex, e.Bitmap)
+            && _layout is { } layout
+            && PreviewSizeOf(layout, e.PageIndex) == (e.Bitmap.PixelWidth, e.Bitmap.PixelHeight))
         {
-            AddPreview(e.PageIndex, e.Bitmap.Bitmap);
+            AddPreview(e.PageIndex, e.Bitmap.Bitmap); // only at the current screen scale (a late event may be older)
         }
 
         if (_surfaceFor(e.PageIndex) is not { } surface)
         {
             return; // the page is no longer shown
         }
+
+        if (isPreview && surface.PageImage is not null)
+        {
+            return; // never replace what is shown by a preview (e.g. a sharp bitmap kept across a reload)
+        }
+
+        _sharpShown |= !isPreview;
 
         // The cache holds the newest bitmap of the page (events may be delivered after a newer one was shown).
         surface.PageImage = scheduler.TryGet(e.PageIndex, out var cached) && cached is not null
@@ -415,6 +494,21 @@ internal sealed class PageBitmapCoordinator : IDisposable
             _previews.Clear();
             _previewBytes = 0;
         }
+    }
+
+    /// <summary>
+    /// The rail render in flight, shared by the callers waiting for its page. Touched on the UI thread only. Its
+    /// cancellation source is not disposed: it has no timer, and a late cancel must never throw.
+    /// </summary>
+    private sealed class RailRender(int pageIndex)
+    {
+        public int PageIndex { get; } = pageIndex;
+
+        public CancellationTokenSource Cancellation { get; } = new();
+
+        public Task<BitmapSource?> Render { get; set; } = Task.FromResult<BitmapSource?>(null);
+
+        public int Waiters { get; set; }
     }
 
     private sealed class PreviewEntry(BitmapSource bitmap, long bytes)

@@ -303,6 +303,9 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Test hook: the journal of the open document (e.g. to write an entry of an older format).</summary>
     internal DocumentJournal? JournalForTest => _journal;
 
+    /// <summary>Test hook: the viewer whose renderer a save releases and reopens.</summary>
+    internal IViewerHandle? ViewerForTest => _viewer;
+
     /// <summary>
     /// Startup recovery (FR-86), once per run: reopens the document of the most recent journal through the normal
     /// open path (lock, restore, notices). If that file is gone, says so and offers to discard the journal; the

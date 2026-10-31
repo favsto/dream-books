@@ -18,7 +18,7 @@ internal sealed class FakeBitmapRenderer : IBitmapRenderer<BitmapSource>
     public bool Auto { get; set; }
 
     /// <summary>A cancelled request ends with no bitmap, as a real renderer would (otherwise it finishes anyway).</summary>
-    public bool HonourCancellation { get; init; } = true;
+    public bool HonourCancellation { get; set; } = true;
 
     /// <summary>Pages whose renders return null (e.g. while a save has the file released).</summary>
     public Func<int, bool>? Fails { get; set; }

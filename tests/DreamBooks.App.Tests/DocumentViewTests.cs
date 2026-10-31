@@ -460,6 +460,65 @@ public sealed class DocumentViewTests : IDisposable
     }
 
     [Fact]
+    public async Task Bitmaps_come_back_after_a_plain_save_swaps_the_renderer()
+    {
+        await WithViewAsync(
+            (vm, view) =>
+            {
+                var viewer = vm.ViewerForTest!;
+                Idle(view);
+                Assert.All(vm.Viewport.VisiblePages, page => Assert.True(ShowsCurrentSharp(view, page), $"page {page}"));
+
+                // A plain Save releases the file: pages entering the window meanwhile cannot be rendered.
+                Wait(viewer.ReleaseAsync());
+                Assert.Null(vm.Renderer);
+                ScrollTo(view, view.Pages.PageRect(12).Top);
+                Idle(view);
+                ScrollTo(view, view.Pages.PageRect(12).Top + 20); // their one retry fails too: they wait
+                Idle(view);
+                var failed = vm.Viewport.VisiblePages.ToArray();
+                Assert.All(failed, page => Assert.Null(view.SurfaceFor(page)!.PageImage)); // placeholders
+
+                // The renderer comes back on the saved file: the failed pages and the earlier ones render again.
+                Wait(viewer.ReopenAsync(Path.Combine(_dir, "doc.pdf"), CancellationToken.None));
+                Assert.NotNull(vm.Renderer);
+                Idle(view);
+                Assert.All(failed, page => Assert.True(ShowsCurrentSharp(view, page), $"page {page}"));
+
+                ScrollTo(view, 0);
+                Idle(view);
+                Assert.True(ShowsCurrentSharp(view, 0));
+            },
+            bitmaps: null);
+    }
+
+    [Fact]
+    public async Task Bitmaps_are_released_when_the_view_unloads_and_come_back_when_it_loads()
+    {
+        var bitmaps = new FakeBitmapRenderer { Auto = true };
+        await WithViewAsync(
+            (vm, view) =>
+            {
+                Idle(view);
+                var before = view.Bitmaps;
+                var surface = view.SurfaceFor(0)!;
+                var shown = surface.PageImage;
+                Assert.True(before.Scheduler!.CachedBytes > 0);
+
+                view.RaiseEvent(new RoutedEventArgs(FrameworkElement.UnloadedEvent));
+                Assert.Null(before.Scheduler); // disposed: the cache is gone
+                Assert.NotSame(before, view.Bitmaps);
+                Assert.Same(shown, surface.PageImage); // nothing blanks
+
+                view.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent));
+                Idle(view);
+                Assert.Same(surface, view.SurfaceFor(0));
+                Assert.True(ShowsCurrentSharp(view, 0));
+            },
+            bitmaps);
+    }
+
+    [Fact]
     public void Sharp_render_size_is_capped_on_its_longest_side()
     {
         var a4 = new PageSize(_widthPt, _heightPt);
@@ -864,6 +923,19 @@ public sealed class DocumentViewTests : IDisposable
         var scheduler = view.Bitmaps.Scheduler!;
         WpfTestThread.PumpUntil(() => scheduler.WhenIdleAsync().IsCompleted);
         WpfTestThread.Drain();
+    }
+
+    private static bool ShowsCurrentSharp(DocumentView view, int page) =>
+        view.Bitmaps.Scheduler is { } scheduler
+        && scheduler.TryGet(page, out var cached)
+        && cached!.Quality == RenderQuality.Sharp
+        && !scheduler.IsStale(page, cached)
+        && ReferenceEquals(view.SurfaceFor(page)?.PageImage, cached.Bitmap);
+
+    private static void Wait(Task task)
+    {
+        WpfTestThread.PumpUntil(() => task.IsCompleted);
+        task.GetAwaiter().GetResult();
     }
 
     private static IEnumerable<int> Retained(MainViewModel vm)
