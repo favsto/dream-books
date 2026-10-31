@@ -38,6 +38,7 @@ public sealed class MarkScanner : IDisposable
     private readonly List<int> _queue = [];
     private TaskCompletionSource _resumed = CompletedSignal();
     private TaskCompletionSource _idle = CompletedSignal();
+    private int _pageCount;
     private int _pauses;
     private bool _started;
     private bool _completed;
@@ -105,10 +106,11 @@ public sealed class MarkScanner : IDisposable
             }
 
             _started = true;
-            _queue.AddRange(Enumerable.Range(0, _source.PageCount));
+            _pageCount = _source.PageCount; // read once: Recentre must never call into the source
+            _queue.AddRange(Enumerable.Range(0, _pageCount));
             Reorder(centrePage);
             _idle = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            token = _cts.Token; // under the lock: Dispose disposes the source only after setting _disposed
+            token = _cts.Token; // under the lock, together with the _disposed check
         }
 
         _ = Task.Run(() => RunAsync(token), CancellationToken.None);
@@ -187,10 +189,10 @@ public sealed class MarkScanner : IDisposable
             _disposed = true;
         }
 
-        // Outside the lock: cancellation may run the scan's continuations inline. A cancelled source stays
-        // safe to query after disposal, which is all the scan does with its token from here on.
+        // Outside the lock: cancellation may run the scan's continuations inline. The token source is deliberately
+        // not disposed (it has no timer, so there is nothing to release): the load in flight may still hold the
+        // token, and every use of it, WaitHandle included, stays valid.
         _cts.Cancel();
-        _cts.Dispose();
     }
 
     private static TaskCompletionSource CompletedSignal()
@@ -358,7 +360,7 @@ public sealed class MarkScanner : IDisposable
     // Must be called with the lock held. Scan order: centre, centre+1, centre-1, centre+2, ...; stored reversed.
     private void Reorder(int centrePage)
     {
-        var centre = Math.Clamp(centrePage, 0, Math.Max(_source.PageCount - 1, 0));
+        var centre = Math.Clamp(centrePage, 0, Math.Max(_pageCount - 1, 0));
         _queue.Sort((a, b) => Key(b, centre).CompareTo(Key(a, centre)));
     }
 

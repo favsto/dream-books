@@ -61,9 +61,12 @@ public sealed class DocumentSession : IDisposable
     /// finishes loading. Unlike the other events it may be raised off the UI thread: an edit raises it on the
     /// thread that changed the page (synchronously, inside the command); a load raises it on the context of the
     /// call that started the load (the UI thread for the app's loads, a pool thread otherwise), never while the
-    /// session's lock is held. Handlers must be thread-safe, cheap and must not throw: an exception from a
-    /// handler of a load notification is swallowed, the load itself succeeded. Nothing is raised after
-    /// <see cref="Dispose"/>; unloaded pages are not listened to.
+    /// session's lock is held. Handlers must be thread-safe and cheap. An exception from a handler is swallowed
+    /// (on both paths) and the remaining handlers still run, so a faulty subscriber can never break the edit,
+    /// its undo step or dirty tracking. Unloaded pages are not listened to. Nothing is raised once
+    /// <see cref="Dispose"/> has returned, with one threading limit: the disposed check and the invocation are
+    /// not atomic, so a notification raised on another thread (a load completing on a pool thread) that passed
+    /// the check just before <see cref="Dispose"/> ran may still reach its handlers after it returned.
     /// </summary>
     public event EventHandler<PageStrokesChangedEventArgs>? PageStrokesChanged;
 
@@ -439,14 +442,7 @@ public sealed class DocumentSession : IDisposable
             return; // A failed load is reported to its callers, who await it; nothing changed.
         }
 
-        try
-        {
-            RaisePageStrokesChanged(pageIndex);
-        }
-        catch (Exception)
-        {
-            // Nobody awaits this notification: a throwing handler must not leave an unobserved exception.
-        }
+        RaisePageStrokesChanged(pageIndex);
     }
 
     private void OnPageStrokesChanged(object? sender, EventArgs e)
@@ -465,9 +461,25 @@ public sealed class DocumentSession : IDisposable
             disposed = _disposed;
         }
 
-        if (!disposed)
+        if (disposed || PageStrokesChanged is not { } handlers)
         {
-            PageStrokesChanged?.Invoke(this, new PageStrokesChangedEventArgs(pageIndex));
+            return;
+        }
+
+        // Each handler on its own, and none may throw out of here: on the edit path this runs inside
+        // command.Do(), and an exception would keep the command out of the undo history and the page out of
+        // dirty tracking and the save, although the page already changed. On the load path nobody awaits it.
+        var args = new PageStrokesChangedEventArgs(pageIndex);
+        foreach (var handler in handlers.GetInvocationList().Cast<EventHandler<PageStrokesChangedEventArgs>>())
+        {
+            try
+            {
+                handler(this, args);
+            }
+            catch (Exception)
+            {
+                // Derived data (marks) may go stale for this page; the document itself stays consistent.
+            }
         }
     }
 

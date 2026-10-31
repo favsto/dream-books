@@ -2,9 +2,11 @@ using DreamBooks.Core.Documents;
 using DreamBooks.Core.Geometry;
 using DreamBooks.Core.Ink;
 using DreamBooks.Core.Model;
+using DreamBooks.Core.Tests.Marks;
 
 namespace DreamBooks.Core.Tests.Documents;
 
+[Collection(nameof(MarkScannerCollection))]
 public class DocumentSessionPageEventsTests
 {
     private static readonly DocumentFingerprint _fingerprint = new(100, 200, new string('a', 64));
@@ -84,14 +86,63 @@ public class DocumentSessionPageEventsTests
     [Fact]
     public async Task A_failed_load_raises_nothing_and_leaves_no_unobserved_exception()
     {
-        var source = new FakePageSource(2) { FailNext = new IOException("damaged") };
-        using var session = Open(source);
-        var raised = Record(session);
+        var unobserved = 0;
+        void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e) => Interlocked.Increment(ref unobserved);
+        TaskScheduler.UnobservedTaskException += OnUnobserved;
+        try
+        {
+            var source = new FakePageSource(2) { FailNext = new IOException("damaged") };
+            using (var session = Open(source))
+            {
+                var raised = Record(session);
 
-        await Assert.ThrowsAsync<IOException>(() => session.EnsurePageAsync(1));
-        await session.EnsurePageAsync(1); // not cached: loads again
+                await Assert.ThrowsAsync<IOException>(() => session.EnsurePageAsync(1));
+                await session.EnsurePageAsync(1); // not cached: loads again
+                Assert.Equal([1], raised);
 
-        Assert.Equal([1], raised);
+                // Every caller gives up waiting, then the load fails: nobody else awaits it.
+                source.Gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                source.FailNext = new IOException("damaged later");
+                using var cts = new CancellationTokenSource();
+                var waiting = session.EnsurePageAsync(0, cts.Token);
+                cts.Cancel();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiting);
+                source.Gate.SetResult();
+                await Task.Delay(50);
+                Assert.Equal([1], raised);
+            }
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            Assert.Equal(0, Volatile.Read(ref unobserved));
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= OnUnobserved;
+        }
+    }
+
+    [Fact]
+    public async Task A_throwing_handler_never_breaks_the_edit_its_undo_or_dirty_tracking()
+    {
+        using var session = Open(new FakePageSource(2));
+        var editor = await session.EnsureEditorAsync(1);
+        session.PageStrokesChanged += (_, _) => throw new InvalidOperationException("a faulty subscriber");
+        var after = Record(session); // a later subscriber still hears about the change
+
+        Assert.True(editor.CommitStroke([P(20, 50), P(200, 50)], InkTool.Pen, _black, 2));
+
+        Assert.True(session.Undo.CanUndo);
+        Assert.True(session.IsDirty);
+        Assert.Equal([1], session.GetChanges().Select(c => c.PageIndex));
+        Assert.Equal([1], after);
+
+        Assert.True(await session.UndoAsync());
+        Assert.False(session.IsDirty);
+        Assert.True(await session.RedoAsync());
+        Assert.True(session.IsDirty);
+        Assert.Equal([1, 1, 1], after);
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition)

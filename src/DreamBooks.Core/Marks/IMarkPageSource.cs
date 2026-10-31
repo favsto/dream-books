@@ -5,6 +5,7 @@ namespace DreamBooks.Core.Marks;
 /// <summary>Read access to the stored strokes of every page, for the background mark scan.</summary>
 public interface IMarkPageSource
 {
+    /// <summary>Read once, when the scan starts, possibly on the UI thread: must be a cheap cached value.</summary>
     int PageCount { get; }
 
     PageDimensions GetPageDimensions(int pageIndex);

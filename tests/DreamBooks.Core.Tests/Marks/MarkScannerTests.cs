@@ -81,6 +81,41 @@ public class MarkScannerTests
     }
 
     [Fact]
+    public async Task Calling_Start_again_recentres_and_does_not_start_a_second_scan()
+    {
+        var gate = NewGate();
+        var source = new FakeMarkPageSource(10) { Gate = p => p == 0 ? gate.Task : null };
+        using var scanner = Create(source, new MarkIndex(10));
+
+        scanner.Start(0);
+        Assert.Equal(0, await source.NextStartedAsync());
+        scanner.Start(7);
+        gate.SetResult();
+        await scanner.WhenIdleAsync().WaitAsync(_timeout);
+
+        Assert.Equal([0, 7, 8, 6, 9, 5, 4, 3, 2, 1], source.Loads);
+        Assert.Equal(1, source.MaxInFlight);
+    }
+
+    [Fact]
+    public async Task A_document_without_pages_completes_at_once()
+    {
+        var source = new FakeMarkPageSource(0);
+        var progress = 0;
+        using var scanner = Create(source, new MarkIndex(0));
+        scanner.Progress += (_, _) => progress++;
+
+        scanner.Start(0);
+        scanner.Recentre(3);
+        await scanner.WhenIdleAsync().WaitAsync(_timeout);
+
+        Assert.True(scanner.IsCompleted);
+        Assert.Empty(source.Loads);
+        Assert.Equal(0, progress);
+        Assert.Equal(0, scanner.ProcessedCount);
+    }
+
+    [Fact]
     public async Task Pages_with_no_annotations_are_skipped_without_recognition()
     {
         var metrics = new CountingLineMetrics();
