@@ -98,3 +98,14 @@ The exact classification constants after trying them on generated fixtures and a
 - App: view-model tests (marks list, next/previous with history, search state machine), thumbnail pipeline with fakes, rail tick layout math; STA smoke tests (panel open/close, no pen interception, virtualisation of the thumbnail list).
 - Integration on the real book copy (skip when absent): scan time, memory, ticks count.
 - Manual checklist for Fausto (Italian), written at the end of each stage.
+
+## 10. Answers to the builder check (my calls unless stated)
+
+1. **Tuning the mark rule.** Defaults in section 4 are accepted for 3b-1. No sample of Fausto's pages is available to the builder; tuning happens on the device: the recogniser constants live in one `MarkRules` class and the first on-device checklist asks him to draw his usual lines and report missed/false marks. The builder must make the rule tolerant rather than tight (prefer a few false marks over missed ones).
+2. **Tool on strokes.** `InkStroke.Tool` (`InkTool`) exists. The recogniser accepts only the pen tool; highlighter strokes (3c) are never margin lines and are handled by the separate highlighter source later.
+3. **Foreign annotations.** The pre-check counts annotations with our private key only; pages with only other apps' annotations are skipped without JSON parsing. If PDFium has no cheap way to tell, the builder reads the annotation subtype (ink) first and our key second, and reports the measured cost.
+4. **Persisted index.** Conditional task inside 3b-1, built only if the measured scan of the 1,076-page copy exceeds ~5 s; otherwise in-memory only.
+5. **Left-edge panel shell.** 3b-1 builds the shell as a real reusable component (title, close, swipe-from-edge opening, pen-transparent) hosting the marks list; 3b-2 adds the Pages tab to it. No temporary panel.
+6. **Search highlight layering.** In 3a each page surface has the PDF bitmap layer below the ink layer (`InkSurface.PageImage` under `CustomInkLayer`), so a highlight layer slots between them. If that layering turns out wrong, the builder reports it and uses a separate overlay drawn under the ink with `Multiply`-like opacity.
+7. **Rotated pages.** "Vertical" and "outer margin" are measured in the **displayed orientation** (the model already stores strokes in page space as displayed, including `/Rotate` and CropBox). A rotated page therefore uses the same rule as an upright one.
+8. **Hotkeys.** The only binding in 3a is Alt+Left (Back) plus PgUp/PgDn/Home/End, Ctrl +/−. Alt+Up/Alt+Down, F2/Shift+F2 and Ctrl+F are free.
