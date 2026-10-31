@@ -10,11 +10,6 @@ public class DocumentLayoutTests
     private static DocumentLayout Uniform(int n, double w = 600, double h = 800)
         => new(Enumerable.Repeat(new PageDimensions(w, h), n).ToArray());
 
-    private static (double X, double Y) DocPoint(DocumentLayout l, ViewPosition p, double anchorX, double anchorY, double vw)
-    {
-        double s = p.Zoom * Units.DipPerPt;
-        return (p.ColumnXPt + ((anchorX - (vw / 2)) / s), l.PageTopPt(p.PageIndex) + p.YPt + (anchorY / s));
-    }
 
     [Fact]
     public void Tops_accumulate_page_heights_and_gaps()
@@ -102,28 +97,73 @@ public class DocumentLayoutTests
         }
     }
 
+    // Document point (page points) under a viewport point, derived only from scroll offsets.
+    private static (double X, double Y) DocPointFromOffsets(DocumentLayout l, double ox, double oy, double ax, double ay, double zoom, double vw)
+    {
+        double s = zoom * Units.DipPerPt;
+        double margin = (l.ExtentWidthDip(zoom, vw) - (l.ColumnWidthPt * s)) / 2;
+        return ((ox + ax - margin) / s, (oy + ay) / s);
+    }
+
     [Fact]
     public void ZoomAt_keeps_the_anchor_point_within_half_a_pixel()
     {
-        var l = Uniform(30, 500, 700);
+        var l = new DocumentLayout(Enumerable.Range(0, 30).Select(i => new PageDimensions(300 + (i % 4 * 60), 700)).ToArray());
         var rnd = new Random(7);
         const double vw = 800;
         const double vh = 600;
-        for (int i = 0; i < 50; i++)
+        int checkedCases = 0;
+        for (int i = 0; i < 400 && checkedCases < 50; i++)
         {
-            double z0 = 0.25 + (rnd.NextDouble() * 4);
-            double z1 = 0.25 + (rnd.NextDouble() * 7.5);
-            ViewPosition start = l.ToPosition(rnd.NextDouble() * 200, 5000 + (rnd.NextDouble() * 5000), vw, z0);
+            double z0 = 0.25 + (rnd.NextDouble() * 3);
+            double z1 = 0.25 + (rnd.NextDouble() * 3);
+            double maxX0 = Math.Max(0, l.ExtentWidthDip(z0, vw) - vw);
+            double ox0 = rnd.NextDouble() * maxX0;
+            double oy0 = rnd.NextDouble() * (l.ExtentHeightDip(z0) - vh);
             double ax = rnd.NextDouble() * vw;
             double ay = rnd.NextDouble() * vh;
+            ViewPosition start = l.ToPosition(ox0, oy0, vw, z0);
             ViewPosition next = l.ZoomAt(start, z1, ax, ay, vw);
-            var before = DocPoint(l, start, ax, ay, vw);
-            var after = DocPoint(l, next, ax, ay, vw);
-            double halfPixelPt = 0.5 / (z1 * Units.DipPerPt);
+
+            // Skip cases where the extent would clamp the target offsets.
+            double s1 = z1 * Units.DipPerPt;
+            double rawY = (l.PageTopPt(next.PageIndex) + next.YPt) * s1;
+            double rawX = (next.ColumnXPt * s1) + ((l.ExtentWidthDip(z1, vw) - (l.ColumnWidthPt * s1)) / 2) - (vw / 2);
+            double maxX1 = Math.Max(0, l.ExtentWidthDip(z1, vw) - vw);
+            if (rawY < 0 || rawY > l.ExtentHeightDip(z1) - vh || rawX < 0 || rawX > maxX1)
+            {
+                continue;
+            }
+
+            (double ox1, double oy1) = l.ToOffsets(next, vw, vh);
+            var before = DocPointFromOffsets(l, ox0, oy0, ax, ay, z0, vw);
+            var after = DocPointFromOffsets(l, ox1, oy1, ax, ay, z1, vw);
+            double halfPixelPt = 0.5 / s1;
             Assert.InRange(Math.Abs(before.X - after.X), 0, halfPixelPt);
             Assert.InRange(Math.Abs(before.Y - after.Y), 0, halfPixelPt);
             Assert.Equal(z1, next.Zoom);
+            checkedCases++;
         }
+
+        Assert.True(checkedCases >= 20, $"only {checkedCases} unclamped cases");
+    }
+
+    [Fact]
+    public void ZoomAt_with_a_viewport_wider_than_the_column_keeps_the_anchor_on_screen()
+    {
+        var l = Uniform(6, 400, 600); // column 400 pt = 533 dip at 100%
+        const double vw = 1000;
+        const double vh = 500;
+        ViewPosition start = l.ToPosition(0, 1500, vw, 1); // margin applies, x clamped at 0
+        const double ax = 600;
+        const double ay = 250;
+        (double ox0, double oy0) = l.ToOffsets(start, vw, vh);
+        ViewPosition next = l.ZoomAt(start, 2.5, ax, ay, vw); // 1333 dip column: scrollable, margin gone
+        (double ox1, double oy1) = l.ToOffsets(next, vw, vh);
+        var before = DocPointFromOffsets(l, ox0, oy0, ax, ay, 1, vw);
+        var after = DocPointFromOffsets(l, ox1, oy1, ax, ay, 2.5, vw);
+        Assert.Equal(before.X, after.X, 6);
+        Assert.Equal(before.Y, after.Y, 6);
     }
 
     [Fact]
@@ -143,12 +183,88 @@ public class DocumentLayoutTests
 
         double endY = l.ExtentHeightDip(1) - vh;
         ViewPosition atEnd = l.ToPosition(0, endY, vw, 1);
-        ViewPosition zoomedEnd = l.ZoomAt(atEnd, 0.5, vw / 2, vh, vw);
-        var before = DocPoint(l, atEnd, vw / 2, vh, vw);
-        var after = DocPoint(l, zoomedEnd, vw / 2, vh, vw);
-        Assert.Equal(before.Y, after.Y, 6);
-        (_, double ey) = l.ToOffsets(zoomedEnd, vw, vh);
-        Assert.InRange(ey, 0, l.ExtentHeightDip(0.5));
+
+        // Zooming in with the anchor at the bottom edge lands exactly on the new end, anchor held.
+        ViewPosition zoomedIn = l.ZoomAt(atEnd, 2, 0, vh, vw);
+        (double ix, double iy) = l.ToOffsets(zoomedIn, vw, vh);
+        Assert.Equal(l.ExtentHeightDip(2) - vh, iy, 6);
+        Assert.Equal(
+            DocPointFromOffsets(l, 0, endY, 0, vh, 1, vw).Y,
+            DocPointFromOffsets(l, ix, iy, 0, vh, 2, vw).Y,
+            6);
+
+        // Zooming out with the anchor at the top would scroll past the end: clamped to the new end.
+        ViewPosition zoomedOut = l.ZoomAt(atEnd, 0.5, 0, 0, vw);
+        (_, double oy) = l.ToOffsets(zoomedOut, vw, vh);
+        Assert.Equal(l.ExtentHeightDip(0.5) - vh, oy, 6);
+
+        // Mid-document (unclamped) the anchor holds.
+        double midY = l.ExtentHeightDip(1) / 2;
+        ViewPosition mid = l.ToPosition(0, midY, vw, 1);
+        ViewPosition midNext = l.ZoomAt(mid, 2, 0, 100, vw);
+        (double mx, double my) = l.ToOffsets(midNext, vw, vh);
+        Assert.Equal(
+            DocPointFromOffsets(l, 0, midY, 0, 100, 1, vw).Y,
+            DocPointFromOffsets(l, mx, my, 0, 100, 2, vw).Y,
+            6);
+    }
+
+    [Fact]
+    public void ZoomAt_clamps_the_new_zoom()
+    {
+        var l = Uniform(3);
+        ViewPosition p = l.ToPosition(0, 100, 800, 1);
+        Assert.Equal(LayoutConstants.MaxZoom, l.ZoomAt(p, 100, 0, 0, 800).Zoom);
+        Assert.Equal(LayoutConstants.MinZoom, l.ZoomAt(p, 0.001, 0, 0, 800).Zoom);
+        Assert.Equal(LayoutConstants.MinZoom, l.ZoomAt(p, -3, 0, 0, 800).Zoom);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void Invalid_zoom_is_rejected_by_ToPosition_and_ToOffsets(double zoom)
+    {
+        var l = Uniform(3);
+        Assert.Throws<ArgumentOutOfRangeException>(() => l.ToPosition(0, 0, 800, zoom));
+        Assert.Throws<ArgumentOutOfRangeException>(() => l.ToOffsets(new ViewPosition(0, 0, 0, zoom), 800, 600));
+    }
+
+    [Fact]
+    public void An_offset_inside_a_gap_round_trips_with_negative_YPt()
+    {
+        var l = Uniform(3);
+        const double zoom = 1.5;
+        double scale = zoom * Units.DipPerPt;
+        ViewPosition p = l.ToPosition(0, (l.PageTopPt(1) - 4) * scale, 800, zoom);
+        Assert.Equal(1, p.PageIndex);
+        Assert.Equal(-4, p.YPt, 9);
+        (_, double oy) = l.ToOffsets(p, 800, 600);
+        Assert.Equal((l.PageTopPt(1) - 4) * scale, oy, 6);
+    }
+
+    [Theory]
+    [InlineData(0.25, 600)]
+    [InlineData(1, 500)]
+    [InlineData(2.5, 900)]
+    public void Horizontal_offsets_with_and_without_margin_round_trip(double zoom, double vw)
+    {
+        var l = Uniform(3, 600, 800);
+        double maxX = Math.Max(0, l.ExtentWidthDip(zoom, vw) - vw);
+        foreach (double f in new[] { 0.0, 0.3, 1.0 })
+        {
+            double ox = maxX * f;
+            ViewPosition p = l.ToPosition(ox, 123, vw, zoom);
+            (double rx, _) = l.ToOffsets(p, vw, 400);
+            Assert.Equal(ox, rx, 6);
+        }
+
+        if (maxX == 0)
+        {
+            // Column narrower than the viewport: offset 0 puts the column centre under the viewport centre.
+            Assert.Equal(l.ColumnWidthPt / 2, l.ToPosition(0, 0, vw, zoom).ColumnXPt, 6);
+        }
     }
 
     [Fact]
@@ -173,18 +289,24 @@ public class DocumentLayoutTests
     public void Ten_thousand_pages_of_mixed_sizes_perform_in_microseconds()
     {
         var l = new DocumentLayout(Enumerable.Range(0, 10_000).Select(i => new PageDimensions(400 + (i % 5 * 50), 600 + (i % 7 * 40))).ToArray());
-        var rnd = new Random(1);
         int sink = 0;
-        var sw = Stopwatch.StartNew();
-        for (int i = 0; i < 10_000; i++)
+        long elapsedMs = 0;
+        for (int pass = 0; pass < 2; pass++) // first pass warms up the JIT
         {
-            double y = rnd.NextDouble() * l.TotalHeightPt;
-            sink += l.PageAt(y);
-            sink += l.VisibleRange(y, 1000).Last;
+            var rnd = new Random(1);
+            var sw = Stopwatch.StartNew();
+            for (int i = 0; i < 10_000; i++)
+            {
+                double y = rnd.NextDouble() * l.TotalHeightPt;
+                sink += l.PageAt(y);
+                sink += l.VisibleRange(y, 1000).Last;
+            }
+
+            sw.Stop();
+            elapsedMs = sw.ElapsedMilliseconds;
         }
 
-        sw.Stop();
-        Assert.True(sw.ElapsedMilliseconds < 50, $"took {sw.ElapsedMilliseconds} ms (sink {sink})");
+        Assert.True(elapsedMs < 50, $"took {elapsedMs} ms (sink {sink})");
     }
 
     [Theory]

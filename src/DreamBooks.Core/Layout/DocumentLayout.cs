@@ -121,6 +121,7 @@ public sealed class DocumentLayout
 
     public ViewPosition ToPosition(double offsetXDip, double offsetYDip, double viewportWidthDip, double zoom)
     {
+        ValidateZoom(zoom);
         double scale = zoom * Units.DipPerPt;
         double yPt = offsetYDip / scale;
         int page = PageAt(yPt);
@@ -131,6 +132,7 @@ public sealed class DocumentLayout
 
     public (double OffsetXDip, double OffsetYDip) ToOffsets(ViewPosition p, double viewportWidthDip, double viewportHeightDip)
     {
+        ValidateZoom(p.Zoom);
         double scale = p.Zoom * Units.DipPerPt;
         double extentW = ExtentWidthDip(p.Zoom, viewportWidthDip);
         double extentH = ExtentHeightDip(p.Zoom);
@@ -147,6 +149,8 @@ public sealed class DocumentLayout
     /// </summary>
     public ViewPosition ZoomAt(ViewPosition current, double newZoom, double anchorXDip, double anchorYDip, double viewportWidthDip)
     {
+        ValidateZoom(current.Zoom);
+        newZoom = double.IsNaN(newZoom) ? current.Zoom : Math.Clamp(newZoom, LayoutConstants.MinZoom, LayoutConstants.MaxZoom);
         double oldScale = current.Zoom * Units.DipPerPt;
         double newScale = newZoom * Units.DipPerPt;
         double fromCentre = anchorXDip - (viewportWidthDip / 2);
@@ -156,6 +160,14 @@ public sealed class DocumentLayout
         double centreColX = anchorColX - (fromCentre / newScale);
         int page = PageAt(topYPt);
         return new ViewPosition(page, topYPt - _tops[page], centreColX, newZoom);
+    }
+
+    private static void ValidateZoom(double zoom)
+    {
+        if (!double.IsFinite(zoom) || zoom <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(zoom), zoom, "Zoom must be a positive finite number.");
+        }
     }
 
     // Left margin of the column inside the extent when the column is narrower than the viewport.
