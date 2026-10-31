@@ -163,6 +163,42 @@ public sealed class ViewPositionStoreTests : IDisposable
     }
 
     [Fact]
+    public void Prune_keeps_a_file_it_cannot_read_because_someone_holds_it()
+    {
+        var store = NewStore();
+        store.Save(@"C:\Books\One.pdf", new ViewPosition(1, 0, 0, 1));
+        var file = FileFor(@"C:\Books\One.pdf");
+
+        // A writer (or a virus scanner) holds the file without read sharing, but allows deletion.
+        using (new FileStream(file, FileMode.Open, FileAccess.ReadWrite, FileShare.Delete))
+        {
+            store.Prune();
+        }
+
+        Assert.True(File.Exists(file));
+        Assert.NotNull(store.TryLoad(@"C:\Books\One.pdf"));
+    }
+
+    [Fact]
+    public void Prune_sweeps_temp_files_older_than_a_day_left_by_a_crash()
+    {
+        var store = NewStore();
+        store.Save(@"C:\Books\One.pdf", new ViewPosition(1, 0, 0, 1));
+        var old = Path.Combine(_root, "orphan-old.tmp");
+        var recent = Path.Combine(_root, "orphan-recent.tmp");
+        File.WriteAllText(old, "x");
+        File.WriteAllText(recent, "x");
+        File.SetLastWriteTimeUtc(old, _now.AddDays(-2));
+        File.SetLastWriteTimeUtc(recent, _now.AddHours(-1)); // may be a save in progress
+
+        store.Prune();
+
+        Assert.False(File.Exists(old));
+        Assert.True(File.Exists(recent));
+        Assert.NotNull(store.TryLoad(@"C:\Books\One.pdf"));
+    }
+
+    [Fact]
     public async Task Save_is_atomic_a_reader_never_sees_a_torn_file()
     {
         var store = NewStore();

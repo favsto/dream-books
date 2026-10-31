@@ -17,6 +17,9 @@ public sealed class ViewPositionStore
     private const string _extension = ".json";
     private const string _tempExtension = ".tmp";
 
+    /// <summary>A temporary file older than this is an orphan of a crashed save (a save lasts milliseconds).</summary>
+    private static readonly TimeSpan _orphanTempAge = TimeSpan.FromDays(1);
+
     private readonly string _root;
     private readonly Func<DateTime> _clock;
 
@@ -91,14 +94,20 @@ public sealed class ViewPositionStore
         }
     }
 
-    /// <summary>Removes entries older than <paramref name="maxAge"/> (default 365 days), unreadable files, and the oldest entries beyond <paramref name="maxEntries"/>.</summary>
+    /// <summary>
+    /// Removes entries older than <paramref name="maxAge"/> (default 365 days), files that do not parse, the oldest entries
+    /// beyond <paramref name="maxEntries"/>, and temporary files older than a day (left by a crash during a save). A file
+    /// that cannot be read right now (held by a writer or a scanner) is left alone.
+    /// </summary>
     public void Prune(int maxEntries = 500, TimeSpan? maxAge = null)
     {
         var limit = maxAge ?? TimeSpan.FromDays(365);
         string[] files;
+        string[] temps;
         try
         {
             files = Directory.GetFiles(_root, "*" + _extension);
+            temps = Directory.GetFiles(_root, "*" + _tempExtension);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -109,7 +118,12 @@ public sealed class ViewPositionStore
         var keep = new List<(string File, DateTime Saved)>();
         foreach (var file in files)
         {
-            var stored = ReadFile(file);
+            var (stored, readable) = ReadFileOutcome(file);
+            if (!readable)
+            {
+                continue; // in use: maybe a save is replacing it right now
+            }
+
             if (stored is null || now - stored.Value.SavedUtc > limit)
             {
                 TryDelete(file);
@@ -123,6 +137,20 @@ public sealed class ViewPositionStore
         foreach (var (file, _) in keep.OrderByDescending(k => k.Saved).Skip(Math.Max(0, maxEntries)))
         {
             TryDelete(file);
+        }
+
+        foreach (var temp in temps)
+        {
+            try
+            {
+                if (now - File.GetLastWriteTimeUtc(temp) > _orphanTempAge)
+                {
+                    TryDelete(temp);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
         }
     }
 
@@ -148,23 +176,31 @@ public sealed class ViewPositionStore
         return stream.ToArray();
     }
 
-    private static StoredPosition? ReadFile(string file)
+    private static StoredPosition? ReadFile(string file) => ReadFileOutcome(file).Stored;
+
+    /// <summary>The position in a file (null when it does not parse), and whether the file could be read at all.</summary>
+    private static (StoredPosition? Stored, bool Readable) ReadFileOutcome(string file)
     {
+        byte[] bytes;
         try
         {
-            byte[] bytes;
-            using (var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-            using (var memory = new MemoryStream())
-            {
-                stream.CopyTo(memory);
-                bytes = memory.ToArray();
-            }
-
-            return Parse(bytes);
+            using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var memory = new MemoryStream();
+            stream.CopyTo(memory);
+            bytes = memory.ToArray();
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or FormatException or ArgumentException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            return null;
+            return (null, false);
+        }
+
+        try
+        {
+            return (Parse(bytes), true);
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException or ArgumentException)
+        {
+            return (null, true);
         }
     }
 
@@ -210,7 +246,6 @@ public sealed class ViewPositionStore
                 {
                     File.Move(temp, file);
                 }
-
 
                 return;
             }
