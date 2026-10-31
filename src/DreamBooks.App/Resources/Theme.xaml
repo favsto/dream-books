@@ -4,6 +4,7 @@
     <!-- Visual values are defined once here (see .claude/rules/wpf-ui.md). Minimal for the prototype. -->
     <sys:Double x:Key="TouchTarget">40</sys:Double>
     <sys:Double x:Key="PanelWidth">280</sys:Double>
+    <sys:Double x:Key="ProgressBarHeight">4</sys:Double>
     <Thickness x:Key="Gap">0,4,0,0</Thickness>
     <Thickness x:Key="SectionGap">0,12,0,0</Thickness>
 

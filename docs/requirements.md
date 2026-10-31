@@ -39,7 +39,7 @@ L'app è un'applicazione desktop nativa per Windows 11, scritta in C# su .NET (u
 | UI framework | WPF | `InkCanvas` con pressione, gomma invertita, highlighter |
 | Stile moderno | Libreria WPF UI (stile Fluent) o stili custom equivalenti | Mica, Acrylic, controlli Fluent senza riscrivere tutto |
 | Rendering PDF | PDFium tramite wrapper .NET | Rendering veloce e fedele delle pagine |
-| Scrittura PDF | PDFsharp (licenza MIT) | Salvataggio annotazioni, segnalibri, metadati |
+| Scrittura PDF | PDFium (lo stesso motore della lettura) | Salvataggio annotazioni e dati privati con riscrittura completa del file; la scrittura dei segnalibri si decide nella fase 3. PDFsharp non è usato (decisione del 30/10/2026: dopo una prova, PDFium legge e scrive senza un secondo parser che potrebbe rifiutare file che PDFium apre) |
 | Architettura | MVVM (CommunityToolkit.Mvvm) | Separazione UI e logica, testabilità |
 | Distribuzione | MSIX, con opzione installer classico | Installazione pulita e aggiornamenti |
 
@@ -249,9 +249,9 @@ Il salvataggio è il requisito più delicato: il file prodotto deve essere un PD
 | FR-81 | Il PDF salvato mostra tutte le annotazioni in qualsiasi lettore (Edge, Acrobat, browser), con lo spessore variabile della pressione preservato | Must |
 | FR-82 | Il contenuto originale del PDF (testo selezionabile, link, moduli) resta intatto | Must |
 | FR-83 | Riaprendo nell'app un PDF salvato da essa, i tratti tornano oggetti modificabili (cancellabili, selezionabili) | Must |
-| FR-84 | Salvataggio automatico di sicurezza ogni 60 s in un file di recupero separato, mai sul file originale | Must |
+| FR-84 | Diario locale delle modifiche non salvate (tratti aggiunti, cancellazioni, annulla/ripristina, posizione di lettura), scritto al termine di ogni gesto nei dati dell'app, mai sul file originale; non c'è un salvataggio automatico a tempo: salva l'utente. Il diario si svuota al salvataggio, ma conserva le modifiche fatte mentre il salvataggio era in corso; si cancella se l'utente rifiuta di salvare alla chiusura e quando il documento viene chiuso senza modifiche non salvate | Must |
 | FR-85 | Alla chiusura con modifiche non salvate: dialogo Salva / Non salvare / Annulla | Must |
-| FR-86 | Recupero dopo crash: all'avvio l'app propone di ripristinare le modifiche dal file di recupero | Should |
+| FR-86 | Recupero dopo crash: all'avvio, o aprendo il file, l'app ripristina da sola le modifiche dal diario (stessi tratti, stessa pagina, zoom e posizione), con un avviso, e il documento risulta modificato e non salvato | Should |
 | FR-87 | Esportazione "appiattita": PDF con annotazioni fuse nella pagina, non più modificabili | Should |
 | FR-88 | Esportazione di una pagina come immagine PNG | Could |
 | FR-89 | Il salvataggio avviene in background, senza bloccare la scrittura; un indicatore discreto ne mostra l'avanzamento | Should |
@@ -299,7 +299,7 @@ L'app segue il pattern MVVM su quattro livelli: ogni livello parla solo con quel
 
 &#91;embedded content: architettura · 4 livelli, 12 componenti\]
 
-Le frecce indicano le dipendenze: la View osserva i ViewModel, che usano i servizi Core, che a loro volta usano l'infrastruttura. Nessun componente della View importa PDFium o PDFsharp.
+Le frecce indicano le dipendenze: la View osserva i ViewModel, che usano i servizi Core, che a loro volta usano l'infrastruttura. Nessun componente della View importa PDFium.
 
 ### Modello dati
 
@@ -325,7 +325,7 @@ Le frecce indicano le dipendenze: la View osserva i ViewModel, che usano i servi
 Lo sviluppo procede in cinque fasi; ognuna termina con una build installabile da provare sulla Surface prima di passare alla successiva.
 
 1. **Prototipo inchiostro.** Una pagina PDF renderizzata, penna con pressione, gomma col dorso, undo/redo in memoria, zoom minimo (parte di FR-06) per verificare FR-26. Serve a validare la sensazione di scrittura.
-2. **Salvataggio e riapertura.** Salvataggio nel PDF con le due forme (visibile e modificabile), riapertura, salvataggio di sicurezza e recupero.
+2. **Salvataggio e riapertura.** Salvataggio nel PDF con le due forme (visibile e modificabile), riapertura, diario delle modifiche non salvate e recupero dopo crash; i tratti di tutte le pagine restano quando si cambia pagina.
 3. **Documento completo.** Multipagina con rendering virtualizzato, zoom, navigazione, evidenziatori, segnalibri.
 4. **Interfaccia finale.** Toolbar flottante, pannelli a scomparsa, Mica/Acrylic, animazioni, temi, schermata iniziale, impostazioni.
 5. **Rifinitura.** Selezione con lazo, prestazioni su PDF grandi, accessibilità, pacchetto MSIX.
@@ -338,7 +338,7 @@ Lo sviluppo procede in cinque fasi; ognuna termina con una build installabile da
 - [ ] Il testo originale del PDF annotato resta selezionabile e ricercabile in altri lettori
 - [ ] Scrivendo velocemente per 60 s su una pagina non si notano scatti né ritardi del tratto
 - [ ] La gomma col dorso funziona con qualunque strumento attivo e ripristina lo strumento precedente
-- [ ] Chiudendo forzatamente l'app durante la scrittura, al riavvio si recuperano le modifiche degli ultimi 60 s
+- [ ] Chiudendo forzatamente l'app durante la scrittura, al riavvio si ritrovano tutti i tratti e le cancellazioni completati, nella stessa posizione di lettura
 - [ ] Un PDF di 300 pagine scorre fluido da inizio a fine senza schermate bianche
 - [ ] Undo e redo ripercorrono correttamente una sequenza mista di 50 operazioni
 

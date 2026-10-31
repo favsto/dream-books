@@ -5,7 +5,7 @@
         xmlns:ink="clr-namespace:DreamBooks.App.Ink"
         xmlns:conv="clr-namespace:DreamBooks.App.Converters"
         xmlns:views="clr-namespace:DreamBooks.App.Views"
-        Title="{x:Static res:Strings.Panel}" Height="720" Width="1200">
+        Title="{Binding WindowTitle}" Height="720" Width="1200">
     <Window.Resources>
         <conv:EnumMatchConverter x:Key="EnumMatch" />
         <conv:InkColorToBrushConverter x:Key="ColorBrush" />
@@ -15,6 +15,8 @@
         <KeyBinding Key="Y" Modifiers="Ctrl" Command="{Binding RedoCommand}" />
         <KeyBinding Key="Z" Modifiers="Ctrl+Shift" Command="{Binding RedoCommand}" />
         <KeyBinding Key="O" Modifiers="Ctrl" Command="{Binding OpenPdfCommand}" />
+        <KeyBinding Key="S" Modifiers="Ctrl" Command="{Binding SaveCommand}" />
+        <KeyBinding Key="S" Modifiers="Ctrl+Shift" Command="{Binding SaveAsCommand}" />
     </Window.InputBindings>
     <DockPanel>
         <!-- Spartan debug panel (spec section 6); looks come in phase 4. -->
@@ -25,6 +27,32 @@
                     <!-- Open and page -->
                     <Button Content="{x:Static res:Strings.OpenPdf}" Command="{Binding OpenPdfCommand}"
                             AutomationProperties.Name="{x:Static res:Strings.OpenPdf}" HorizontalAlignment="Left" />
+
+                    <!-- Save (FR-80): the dirty mark is in the window title; the indicator shows while saving (FR-89). -->
+                    <StackPanel Orientation="Horizontal" Margin="{StaticResource Gap}">
+                        <Button x:Name="SaveButton" Content="{x:Static res:Strings.Save}" Command="{Binding SaveCommand}"
+                                AutomationProperties.Name="{x:Static res:Strings.Save}" />
+                        <Button x:Name="SaveAsButton" Content="{x:Static res:Strings.SaveAs}" Command="{Binding SaveAsCommand}"
+                                AutomationProperties.Name="{x:Static res:Strings.SaveAs}" />
+                    </StackPanel>
+                    <StackPanel x:Name="SavingIndicator" Margin="{StaticResource Gap}"
+                                AutomationProperties.Name="{x:Static res:Strings.Saving}">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSaving}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <TextBlock Text="{x:Static res:Strings.Saving}" />
+                        <!-- Animated only when Windows allows client-area animations (NFR-32). -->
+                        <ProgressBar Height="{StaticResource ProgressBarHeight}" Margin="{StaticResource Gap}"
+                                     IsIndeterminate="{DynamicResource {x:Static SystemParameters.ClientAreaAnimationKey}}"
+                                     AutomationProperties.Name="{x:Static res:Strings.Saving}" />
+                    </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="{StaticResource Gap}">
                         <Button Content="&lt;" Command="{Binding PreviousPageCommand}"
                                 AutomationProperties.Name="{x:Static res:Strings.Page}" />
@@ -36,6 +64,35 @@
                         <Button Content="&gt;" Command="{Binding NextPageCommand}"
                                 AutomationProperties.Name="{x:Static res:Strings.Page}" />
                     </StackPanel>
+
+                    <!-- Journal warning (FR-84): unsaved changes are not being recorded for recovery -->
+                    <TextBlock x:Name="JournalWarningText" Text="{Binding JournalWarning}" TextWrapping="Wrap"
+                               Margin="{StaticResource Gap}" FontWeight="SemiBold"
+                               AutomationProperties.Name="{x:Static res:Strings.JournalWarningLabel}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding JournalWarning}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <!-- Notice: annotations the app cannot edit, restored changes, journaling off (one line per document) -->
+                    <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" Margin="{StaticResource Gap}"
+                               AutomationProperties.Name="{x:Static res:Strings.NoticeLabel}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Notice}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
 
                     <!-- Tool -->
                     <StackPanel Orientation="Horizontal" Margin="{StaticResource SectionGap}">

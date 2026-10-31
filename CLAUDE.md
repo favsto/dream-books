@@ -37,14 +37,17 @@ implementation, review). Project-specific additions:
 - Ask before adding any NuGet package: only MIT, BSD or Apache-2.0 licenses
   are allowed (no AGPL, e.g. iText).
 
-## Project structure (planned)
+## Project structure
 
 - `src/DreamBooks.App/` — WPF app: views, view models, styles, resources.
   The only project that references WPF.
-- `src/DreamBooks.Core/` — domain model, InkService, UndoManager,
-  DocumentSession. No references to WPF, PDFium or PDFsharp.
-- `src/DreamBooks.Pdf/` — PdfRenderer (PDFium), PdfWriter (PDFsharp),
-  RecoveryStore.
+- `src/DreamBooks.Core/` — domain model, ink math, UndoManager,
+  DocumentSession (lazy pages, dirty tracking), stroke JSON schema, journal
+  (recorder, replayer). No references to WPF or PDFium.
+- `src/DreamBooks.Pdf/` — PDFium only: PdfRenderer (PDFium thread), stroke
+  annotations, PdfDocumentSaver and FileReplacer (verified full rewrite),
+  RecoveryStore (journals under LocalAppData). References Core. PDFsharp is
+  not used.
 - `tests/DreamBooks.Core.Tests/`, `tests/DreamBooks.Pdf.Tests/`,
   `tests/DreamBooks.App.Tests/` — xUnit.
 - `docs/` — requirements and plans.
@@ -58,8 +61,8 @@ Specific rules live in `.claude/rules/` and load automatically.
 | Runtime | .NET 10 (LTS), C# | Targets x64 and ARM64 (NFR-21); dev machine is x64 |
 | UI | WPF + WPF UI (Fluent styling) | Windows 11, Mica and Acrylic |
 | MVVM | CommunityToolkit.Mvvm | |
-| PDF rendering | PDFium via a .NET wrapper | Wrapper to be chosen in phase 1 |
-| PDF writing | PDFsharp (MIT) | Annotations, outlines, private app data |
+| PDF rendering | PDFium (own P/Invoke over bblanchon.PDFium.Win32) | One dedicated PDFium thread |
+| PDF writing | PDFium (same engine as rendering) | Full rewrite to a verified temp file; bookmarks (phase 3) decided later |
 | Tests | xUnit | |
 
 ## Commands

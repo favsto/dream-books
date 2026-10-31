@@ -22,7 +22,7 @@ Checklist:
 - Model changes go through `IUndoableCommand`
 - Coordinates stored in PDF points, not screen pixels
 - No blocking work on the UI thread
-- Safe saving: temp file then replace; originals never touched by autosave
+- Safe saving: temp file then replace; the recovery journal never touches the original file
 - No new dependency without an allowed license (MIT, BSD, Apache-2.0)
 - Tests present and sufficient; round-trip tests for save/load changes
 

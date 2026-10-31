@@ -12,11 +12,24 @@ public sealed class UndoManager
         _capacity = capacity;
     }
 
+    /// <summary>
+    /// Raised after a command was executed, undone or redone, before <see cref="StateChanged"/>.
+    /// Handlers must not throw; if one does, the exception propagates to the caller of
+    /// Execute/Undo/Redo after <see cref="StateChanged"/> has still been raised.
+    /// </summary>
+    public event EventHandler<CommandAppliedEventArgs>? CommandApplied;
+
     public event EventHandler? StateChanged;
 
     public bool CanUndo => _undo.Count > 0;
 
     public bool CanRedo => _redo.Count > 0;
+
+    /// <summary>The command the next <see cref="Undo"/> would revert, or null.</summary>
+    public IUndoableCommand? PeekUndo() => _undo.Last?.Value;
+
+    /// <summary>The command the next <see cref="Redo"/> would reapply, or null.</summary>
+    public IUndoableCommand? PeekRedo() => _redo.TryPeek(out var command) ? command : null;
 
     public void Execute(IUndoableCommand command)
     {
@@ -29,7 +42,7 @@ public sealed class UndoManager
         }
 
         _redo.Clear();
-        StateChanged?.Invoke(this, EventArgs.Empty);
+        Applied(CommandAction.Executed, command);
     }
 
     public bool Undo()
@@ -42,7 +55,7 @@ public sealed class UndoManager
         node.Value.Undo();
         _undo.RemoveLast();
         _redo.Push(node.Value);
-        StateChanged?.Invoke(this, EventArgs.Empty);
+        Applied(CommandAction.Undone, node.Value);
         return true;
     }
 
@@ -56,7 +69,7 @@ public sealed class UndoManager
         command.Do();
         _redo.Pop();
         _undo.AddLast(command);
-        StateChanged?.Invoke(this, EventArgs.Empty);
+        Applied(CommandAction.Redone, command);
         return true;
     }
 
@@ -70,5 +83,17 @@ public sealed class UndoManager
         _undo.Clear();
         _redo.Clear();
         StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void Applied(CommandAction action, IUndoableCommand command)
+    {
+        try
+        {
+            CommandApplied?.Invoke(this, new CommandAppliedEventArgs(action, command));
+        }
+        finally
+        {
+            StateChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 }

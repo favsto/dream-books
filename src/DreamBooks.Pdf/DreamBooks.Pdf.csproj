@@ -10,4 +10,8 @@
     <InternalsVisibleTo Include="DreamBooks.Pdf.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\DreamBooks.Core\DreamBooks.Core.csproj" />
+  </ItemGroup>
+
 </Project>

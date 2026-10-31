@@ -48,12 +48,55 @@
   <data name="Zoom" xml:space="preserve"><value>Zoom</value></data>
   <data name="FitWidth" xml:space="preserve"><value>Adatta larghezza</value></data>
   <data name="Panel" xml:space="preserve"><value>Pannello di prova</value></data>
-  <data name="DiscardStrokesConfirm" xml:space="preserve"><value>I tratti su questa pagina non sono salvati e andranno persi. Continuare?</value></data>
   <data name="ErrorFileNotFound" xml:space="preserve"><value>Il file non è stato trovato.</value></data>
   <data name="ErrorInvalidFormat" xml:space="preserve"><value>Il file non è un PDF valido o è danneggiato.</value></data>
   <data name="ErrorPassword" xml:space="preserve"><value>Il PDF è protetto da password: non ancora supportato.</value></data>
   <data name="ErrorUnsupported" xml:space="preserve"><value>Il PDF usa una protezione non supportata.</value></data>
   <data name="ErrorUnknown" xml:space="preserve"><value>Impossibile aprire il PDF.</value></data>
   <data name="NoDocument" xml:space="preserve"><value>Apri un PDF per iniziare</value></data>
+  <data name="NoticeLabel" xml:space="preserve"><value>Avviso</value></data>
+  <data name="NoticeUnreadableAnnotations" xml:space="preserve"><value>Alcune annotazioni di altri programmi o di versioni più recenti sono visibili ma non modificabili.</value></data>
   <data name="PdfFileFilter" xml:space="preserve"><value>File PDF (*.pdf)|*.pdf</value></data>
+  <data name="AppTitle" xml:space="preserve"><value>Dream Books</value></data>
+  <data name="WindowTitleFormat" xml:space="preserve"><value>{0} – {1}</value></data>
+  <data name="WindowTitleDirtyFormat" xml:space="preserve"><value>{0} * – {1}</value></data>
+  <data name="Save" xml:space="preserve"><value>Salva</value></data>
+  <data name="SaveAs" xml:space="preserve"><value>Salva con nome</value></data>
+  <data name="Saving" xml:space="preserve"><value>Salvataggio in corso…</value></data>
+  <data name="ErrorSaveEncrypted" xml:space="preserve"><value>Questo PDF è cifrato o ha delle restrizioni: per ora non può essere salvato. Le modifiche restano nel diario di ripristino finché non chiudi il documento rispondendo "Non salvare".</value></data>
+  <data name="ErrorSaveVerification" xml:space="preserve"><value>Il salvataggio non ha superato il controllo finale e il file non è stato toccato. Le modifiche sono ancora qui: riprova o usa Salva con nome.</value></data>
+  <data name="ErrorSaveFailed" xml:space="preserve"><value>Impossibile salvare il PDF; il file non è stato toccato. Le modifiche sono ancora qui: riprova o usa Salva con nome.</value></data>
+  <data name="ErrorSaveReplaceFailed" xml:space="preserve"><value>Impossibile sostituire il file, forse perché è aperto in un altro programma. Una copia completa e verificata con le modifiche si trova nella cartella {0} (estensione .drbk-tmp). Le modifiche sono ancora qui: riprova o usa Salva con nome.</value></data>
+  <data name="ErrorReopenAfterSave" xml:space="preserve"><value>Il PDF è stato salvato, ma non è stato possibile riaprirlo per la visualizzazione. Chiudi e riapri il documento.</value></data>
+  <data name="ErrorPageChangeFailed" xml:space="preserve"><value>Impossibile caricare la pagina.</value></data>
+  <data name="AskSaveChanges" xml:space="preserve"><value>Il documento ha modifiche non salvate. Vuoi salvarle?</value></data>
+  <data name="AnswerSave" xml:space="preserve"><value>Salva</value></data>
+  <data name="AnswerDontSave" xml:space="preserve"><value>Non salvare</value></data>
+  <data name="AnswerCancel" xml:space="preserve"><value>Annulla</value></data>
+  <data name="AskFileChanged" xml:space="preserve"><value>Il file è stato modificato da un altro programma dopo l'apertura. Se lo sovrascrivi, quelle modifiche andranno perse.</value></data>
+  <data name="AnswerOverwriteAnyway" xml:space="preserve"><value>Sovrascrivi comunque</value></data>
+  <data name="WarnSignatureInvalidation" xml:space="preserve"><value>Questo PDF contiene una firma digitale: salvandolo, la firma non sarà più valida. Vuoi continuare?</value></data>
+  <data name="AnswerSaveAnyway" xml:space="preserve"><value>Salva comunque</value></data>
+  <data name="AnswerOk" xml:space="preserve"><value>OK</value></data>
+  <data name="ErrorSaveTargetMissing" xml:space="preserve"><value>Il file originale non è più al suo posto; la copia completa e verificata si trova in {0}. Il documento resta aperto da quella copia: usa Salva con nome per salvarlo altrove.</value></data>
+  <data name="ErrorSavedStateNotUpdated" xml:space="preserve"><value>Il PDF è stato salvato, ma l'app non è riuscita ad aggiornare lo stato del documento. Chiudi e riapri il documento prima di continuare.</value></data>
+  <data name="ErrorSaveFailedAfterRelease" xml:space="preserve"><value>Il salvataggio non è riuscito. Controlla il file prima di continuare.</value></data>
+  <data name="NoticeRestored" xml:space="preserve"><value>Sono state ripristinate le modifiche non salvate della sessione precedente.</value></data>
+  <data name="NoticeRestoredSkipped" xml:space="preserve"><value>Sono state ripristinate {0} modifiche non salvate della sessione precedente; {1} non è stato possibile applicarle.</value></data>
+  <data name="NoticeJournalDisabled" xml:space="preserve"><value>Per questo documento le nuove modifiche non vengono conservate per il ripristino dopo un arresto imprevisto: salva spesso.</value></data>
+  <data name="NoticeCopyKept" xml:space="preserve"><value>Il file originale non si trova più al suo posto: la copia completa del documento è in {0}. Le modifiche non salvate sono state conservate e verranno riproposte.</value></data>
+  <data name="ErrorDocumentInUse" xml:space="preserve"><value>Questo documento è già aperto in un'altra finestra di Dream Books.</value></data>
+  <data name="ErrorJournalFileMissing" xml:space="preserve"><value>Ci sono modifiche non salvate per {0}, ma il file non si trova più in quella posizione.</value></data>
+  <data name="ErrorJournalUnreadable" xml:space="preserve"><value>Non è stato possibile leggere le modifiche non salvate di questo documento: sono conservate, ma non sono state applicate.</value></data>
+  <data name="ErrorJournalDeleteFailed" xml:space="preserve"><value>Non è stato possibile eliminare le modifiche non salvate: potrebbero ricomparire alla prossima apertura del documento.</value></data>
+  <data name="ErrorJournalRestoreFailed" xml:space="preserve"><value>Non è stato possibile ripristinare le modifiche non salvate: sono conservate e il documento è aperto senza di esse.</value></data>
+  <data name="WarnJournalFault" xml:space="preserve"><value>Le modifiche non salvate non vengono registrate nel diario di ripristino: salva il documento.</value></data>
+  <data name="AskJournalMismatch" xml:space="preserve"><value>Ci sono modifiche non salvate per questo documento, ma il file è cambiato da quando sono state fatte. Vuoi applicarle comunque?</value></data>
+  <data name="AnswerApplyAnyway" xml:space="preserve"><value>Applica comunque</value></data>
+  <data name="AnswerDiscard" xml:space="preserve"><value>Scarta</value></data>
+  <data name="AskDiscardOrphanJournal" xml:space="preserve"><value>Ci sono modifiche non salvate per {0}, ma il file non si trova più in quella posizione. Vuoi scartarle? Se le tieni, verranno applicate quando riaprirai il file da quella posizione.</value></data>
+  <data name="AnswerKeep" xml:space="preserve"><value>Tieni</value></data>
+  <data name="WarnJournalListenerFailed" xml:space="preserve"><value>Un'operazione sul diario delle modifiche non è riuscita.</value></data>
+  <data name="JournalWarningLabel" xml:space="preserve"><value>Avviso sul diario di ripristino</value></data>
+  <data name="NoticeNotSavable" xml:space="preserve"><value>Questo PDF è protetto: non è possibile salvare le annotazioni nel file.</value></data>
 </root>

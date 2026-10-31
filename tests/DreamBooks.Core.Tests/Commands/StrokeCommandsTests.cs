@@ -102,6 +102,29 @@ public class StrokeCommandsTests
         }
     }
 
+    [Fact]
+    public void Stroke_commands_expose_their_page_index_and_data()
+    {
+        var page = new Page(7, 612, 792);
+        var a = S(1);
+        var b = S(2);
+        var c = S(3);
+
+        var add = new AddStrokesCommand(page, [a, b]);
+        var erase = new EraseStrokesCommand(page, [a, b], [b, c]);
+
+        IPageCommand addCommand = add;
+        IPageCommand eraseCommand = erase;
+        Assert.Equal(7, addCommand.PageIndex);
+        Assert.Equal(7, eraseCommand.PageIndex);
+        Assert.Equal([a, b], add.Strokes);
+        Assert.Equal([a, b], erase.Before);
+        Assert.Equal([b, c], erase.After);
+        Assert.IsNotType<InkStroke[]>(add.Strokes);
+        Assert.IsNotType<InkStroke[]>(erase.Before);
+        Assert.IsNotType<InkStroke[]>(erase.After);
+    }
+
     private static void AssertSameInstances(IReadOnlyList<InkStroke> expected, IReadOnlyList<InkStroke> actual)
     {
         Assert.Equal(expected.Count, actual.Count);

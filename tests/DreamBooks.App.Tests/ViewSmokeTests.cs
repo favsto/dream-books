@@ -1,8 +1,11 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using DreamBooks.App.Ink;
+using DreamBooks.App.Resources;
+using DreamBooks.App.Services;
 using DreamBooks.App.ViewModels;
 using DreamBooks.App.Views;
 using DreamBooks.Core.Ink;
@@ -56,6 +59,96 @@ public sealed class ViewSmokeTests : IDisposable
             {
                 window.Close();
             }
+        });
+    }
+
+    [Fact]
+    public void Main_window_has_the_save_buttons_the_saving_indicator_and_the_title_binding()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var window = new MainWindow();
+            try
+            {
+                LayOut((FrameworkElement)window.Content, 1000, 700);
+                var vm = (MainViewModel)window.DataContext;
+                Assert.Same(vm.SaveCommand, window.SaveButton.Command);
+                Assert.Same(vm.SaveAsCommand, window.SaveAsButton.Command);
+                Assert.Equal(Strings.Save, AutomationProperties.GetName(window.SaveButton));
+                Assert.Equal(Strings.SaveAs, AutomationProperties.GetName(window.SaveAsButton));
+                Assert.True(window.SaveButton.MinHeight >= 40 && window.SaveAsButton.MinHeight >= 40);
+                Assert.Equal(Visibility.Collapsed, window.SavingIndicator.Visibility); // not saving
+                Assert.Equal(Strings.AppTitle, window.Title);
+                Assert.Equal(Visibility.Collapsed, window.JournalWarningText.Visibility); // no journal fault
+                Assert.Equal(Strings.JournalWarningLabel, AutomationProperties.GetName(window.JournalWarningText));
+                Assert.EndsWith(Path.Combine("DreamBooks", "recovery"), MainWindow.RecoveryRoot(), StringComparison.OrdinalIgnoreCase);
+
+                var gestures = window.InputBindings.OfType<KeyBinding>()
+                    .Select(b => (b.Key, b.Modifiers, b.Command))
+                    .ToList();
+                Assert.Contains((Key.S, ModifierKeys.Control, (ICommand)vm.SaveCommand), gestures);
+                Assert.Contains((Key.S, ModifierKeys.Control | ModifierKeys.Shift, (ICommand)vm.SaveAsCommand), gestures);
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    [Fact]
+    public void Close_decision_cancels_on_a_faulted_check_and_waits_on_a_running_one()
+    {
+        Assert.True(MainWindow.SynchronousCloseDecision(Task.FromResult(true)));
+        Assert.False(MainWindow.SynchronousCloseDecision(Task.FromResult(false)));
+        Assert.False(MainWindow.SynchronousCloseDecision(Task.FromException<bool>(new IOException("boom"))));
+        Assert.False(MainWindow.SynchronousCloseDecision(Task.FromCanceled<bool>(new CancellationToken(canceled: true))));
+        Assert.Null(MainWindow.SynchronousCloseDecision(new TaskCompletionSource<bool>().Task));
+    }
+
+    [Fact]
+    public void Dialog_defaults_are_the_safe_choice_and_escape_always_cancels()
+    {
+        var signature = FileDialogService.SignatureQuestion;
+        Assert.Equal(Strings.AnswerCancel, signature.Labels[signature.DefaultIndex]); // Enter never invalidates
+        Assert.Equal(signature.DefaultIndex, signature.CancelIndex);
+
+        var changed = FileDialogService.FileChangedQuestion;
+        Assert.Equal(Strings.AnswerCancel, changed.Labels[changed.DefaultIndex]); // Enter never overwrites
+        Assert.Equal(Strings.AnswerCancel, changed.Labels[changed.CancelIndex]);
+
+        var unsaved = FileDialogService.SaveChangesQuestion;
+        Assert.Equal(Strings.AnswerSave, unsaved.Labels[unsaved.DefaultIndex]);
+        Assert.Equal(Strings.AnswerCancel, unsaved.Labels[unsaved.CancelIndex]);
+
+        var mismatch = FileDialogService.JournalMismatchQuestion;
+        Assert.Equal(Strings.AnswerCancel, mismatch.Labels[mismatch.DefaultIndex]); // Enter neither applies nor discards
+        Assert.Equal(Strings.AnswerCancel, mismatch.Labels[mismatch.CancelIndex]);
+        Assert.Equal([Strings.AnswerApplyAnyway, Strings.AnswerDiscard, Strings.AnswerCancel], mismatch.Labels);
+
+        var orphan = FileDialogService.OrphanJournalQuestion(@"C:\Docs\a.pdf");
+        Assert.Equal(Strings.AnswerKeep, orphan.Labels[orphan.DefaultIndex]); // Enter never discards
+        Assert.Equal(Strings.AnswerKeep, orphan.Labels[orphan.CancelIndex]);
+        Assert.Contains(@"C:\Docs\a.pdf", orphan.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Choice_dialog_has_one_named_touch_sized_button_per_answer()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var dialog = new ChoiceDialog(FileDialogService.FileChangedQuestion);
+            var buttons = dialog.Buttons;
+            Assert.Equal(3, buttons.Count);
+            Assert.Equal(Strings.AnswerOverwriteAnyway, buttons[1].Content);
+            Assert.Equal(Strings.AnswerOverwriteAnyway, AutomationProperties.GetName(buttons[1]));
+            Assert.False(buttons[0].IsDefault);
+            Assert.True(buttons[2].IsDefault);
+            Assert.True(buttons[2].IsCancel);
+            Assert.All(buttons, b => Assert.True(b.MinHeight >= 40 && b.MinWidth >= 40));
+            Assert.Equal(Strings.AppTitle, dialog.Title);
+            Assert.Null(dialog.Choice);
+            dialog.Close();
         });
     }
 
@@ -329,6 +422,78 @@ public sealed class ViewSmokeTests : IDisposable
             vm.Tools.ActiveTool = AppTool.Pen;
             Assert.Equal(Visibility.Collapsed, cursor.Visibility);
         });
+    }
+
+    [Fact]
+    public async Task Page_view_shows_page_1_strokes_again_after_visiting_page_2()
+    {
+        var path = Path.Combine(_dir, "fake.pdf");
+        await File.WriteAllBytesAsync(path, [1, 2, 3]);
+        var vm = new MainViewModel(new FakeFileDialogService { NextPath = path });
+        new FakePageSource((200, 300), (400, 500)).InstallOn(vm);
+        await vm.OpenPdfCommand.ExecuteAsync(null);
+
+        WpfTestThread.Run(() =>
+        {
+            var view = new PageView { DataContext = vm };
+            LayOut(view, 1000, 1000);
+            var surface = view.Surface;
+            Assert.True(vm.Editor!.CommitStroke(_line, InkTool.Pen, vm.Tools.Color, 1));
+            var page1 = vm.Editor.Page;
+            Assert.Same(page1, surface.Page);
+            Assert.Single(surface.CustomLayer.Strokes);
+
+            // The fake source loads synchronously, so navigation completes before the call returns.
+            Assert.True(vm.GoToPageCommand.ExecuteAsync(2).IsCompletedSuccessfully);
+            WpfTestThread.Drain();
+            Assert.NotSame(page1, surface.Page);
+            Assert.Equal(400, surface.Page!.WidthPt);
+            Assert.Empty(surface.DisplayStrokes);
+            Assert.Empty(surface.CustomLayer.Strokes);
+
+            Assert.True(vm.GoToPageCommand.ExecuteAsync(1).IsCompletedSuccessfully);
+            WpfTestThread.Drain();
+            Assert.Same(page1, surface.Page);
+            Assert.Same(page1.Strokes, surface.DisplayStrokes);
+            Assert.Single(surface.CustomLayer.Strokes);
+            LayOut(view, 1000, 1000);
+        });
+    }
+
+    [Fact]
+    public async Task Page_view_applies_a_restored_position_and_reports_the_settled_view()
+    {
+        var path = Path.Combine(_dir, "fake.pdf");
+        await File.WriteAllBytesAsync(path, [1, 2, 3]);
+        var store = new RecoveryStore(Path.Combine(_dir, "recovery"));
+        var dialogs = new FakeFileDialogService { NextPath = path, SaveChangesAnswer = SaveChangesAnswer.DontSave };
+        var vm = new MainViewModel(dialogs, store);
+        new FakePageSource((600, 800)).InstallOn(vm);
+        await vm.OpenPdfCommand.ExecuteAsync(null);
+        Assert.True(vm.Editor!.CommitStroke(_line, InkTool.Pen, vm.Tools.Color, 1)); // dirty: views are journalled
+
+        WpfTestThread.Run(() =>
+        {
+            vm.ZoomVm.Zoom = 2;
+            var view = new PageView { DataContext = vm };
+            LayOut(view, 300, 300);
+
+            view.ApplyRestoredView(new RestoredView(2, 100, 150));
+            LayOut(view, 300, 300);
+            WpfTestThread.Drain();
+
+            Assert.Equal(100, view.Viewport.HorizontalOffset);
+            Assert.Equal(150, view.Viewport.VerticalOffset);
+            Assert.True(view.IsViewStateReportPending); // waits for the view to stay still
+            Assert.Equal(TimeSpan.FromMilliseconds(500), PageView.ViewStateDelay);
+
+            view.ReportViewState(); // what the timer does after 500 ms
+            Assert.False(view.IsViewStateReportPending);
+        });
+
+        var last = store.Find(path)!.Contents.Entries.OfType<DreamBooks.Core.Journal.ViewEntry>().Last();
+        Assert.Equal(new DreamBooks.Core.Journal.ViewEntry(0, 2, 100, 150), last);
+        Assert.True(await vm.CanCloseAsync());
     }
 
     [Fact]

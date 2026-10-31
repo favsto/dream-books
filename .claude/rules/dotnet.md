@@ -10,7 +10,8 @@
 - PDF rendering and saving run off the UI thread; the UI thread only handles
   pen input and drawing (NFR-04).
 - Saving writes to a temporary file and replaces the original only after a
-  successful write (NFR-10). Autosave never touches the original file (FR-84).
+  successful write (NFR-10). The recovery journal never touches the original
+  file: there is no autosave (FR-84).
 - App-private data stored in the PDF carries a schema version number.
 - Never log document content (NFR-12). The app makes no network calls (NFR-40).
 

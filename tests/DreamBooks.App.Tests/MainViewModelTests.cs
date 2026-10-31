@@ -90,7 +90,7 @@ public sealed class MainViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task Open_with_unsaved_strokes_asks_and_keeps_page_on_no()
+    public async Task Opening_another_document_after_Dont_save_replaces_the_session()
     {
         var first = WritePdf("a.pdf", (612, 792));
         var second = WritePdf("b.pdf", (300, 400));
@@ -102,21 +102,14 @@ public sealed class MainViewModelTests : IDisposable
             Draw(vm);
             var editor = vm.Editor;
             var renderer = vm.Renderer;
-            Assert.Empty(_dialogs.ConfirmMessages);
+            var session = vm.Session;
 
             _dialogs.NextPath = second;
-            _dialogs.ConfirmResult = false;
+            _dialogs.SaveChangesAnswer = Services.SaveChangesAnswer.DontSave;
             await vm.OpenPdfCommand.ExecuteAsync(null);
 
-            Assert.Equal([Strings.DiscardStrokesConfirm], _dialogs.ConfirmMessages);
-            Assert.Same(editor, vm.Editor);
-            Assert.Same(renderer, vm.Renderer);
-            Assert.Single(vm.Editor!.Page.Strokes);
-            Assert.True(vm.UndoCommand.CanExecute(null));
-
-            _dialogs.ConfirmResult = true;
-            await vm.OpenPdfCommand.ExecuteAsync(null);
-
+            Assert.Equal(1, _dialogs.SaveChangesAsks);
+            Assert.NotSame(session, vm.Session);
             Assert.NotSame(editor, vm.Editor);
             Assert.NotSame(renderer, vm.Renderer);
             Assert.Empty(vm.Editor!.Page.Strokes);
@@ -130,7 +123,7 @@ public sealed class MainViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task Page_change_with_strokes_asks_and_keeps_page_on_no()
+    public async Task Page_change_keeps_the_strokes_and_does_not_ask()
     {
         _dialogs.NextPath = WritePdf("a.pdf", (612, 792), (300, 400));
         var vm = new MainViewModel(_dialogs);
@@ -139,16 +132,13 @@ public sealed class MainViewModelTests : IDisposable
             await vm.OpenPdfCommand.ExecuteAsync(null);
             Draw(vm);
 
-            _dialogs.ConfirmResult = false;
-            await vm.GoToPageCommand.ExecuteAsync(2);
-            Assert.Equal(1, vm.PageNumber);
-            Assert.Single(vm.Editor!.Page.Strokes);
-
-            _dialogs.ConfirmResult = true;
             await vm.GoToPageCommand.ExecuteAsync(2);
             Assert.Equal(2, vm.PageNumber);
             Assert.Empty(vm.Editor!.Page.Strokes);
-            Assert.False(vm.UndoCommand.CanExecute(null));
+            Assert.True(vm.UndoCommand.CanExecute(null));
+
+            await vm.GoToPageCommand.ExecuteAsync(1);
+            Assert.Single(vm.Editor!.Page.Strokes);
         }
         finally
         {
@@ -441,7 +431,7 @@ public sealed class MainViewModelTests : IDisposable
             await vm.OpenPdfCommand.ExecuteAsync(null);
             var renderer = vm.Renderer;
             var editor = vm.Editor;
-            vm.OpenRenderer = (_, _) => throw new InvalidOperationException("boom");
+            vm.OpenDocument = (_, _) => throw new InvalidOperationException("boom");
 
             await vm.OpenPdfCommand.ExecuteAsync(null); // must not throw
 
@@ -461,7 +451,7 @@ public sealed class MainViewModelTests : IDisposable
     {
         _dialogs.NextPath = WritePdf("a.pdf", (612, 792));
         var vm = new MainViewModel(_dialogs);
-        vm.OpenRenderer = (_, _) => throw new OperationCanceledException();
+        vm.OpenDocument = (_, _) => throw new OperationCanceledException();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.OpenPdfCommand.ExecuteAsync(null));
 

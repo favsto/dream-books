@@ -1,4 +1,6 @@
 using System.Runtime.InteropServices;
+using DreamBooks.Core.Documents;
+using DreamBooks.Core.Model;
 using DreamBooks.Pdf.Interop;
 
 namespace DreamBooks.Pdf;
@@ -8,19 +10,33 @@ namespace DreamBooks.Pdf;
 /// dedicated <see cref="PdfiumThread"/> (NFR-04); open failures surface as
 /// <see cref="PdfOpenException"/> (NFR-11). Never logs document content (NFR-12).
 /// </summary>
-public sealed class PdfRenderer : IAsyncDisposable
+public sealed class PdfRenderer : IAsyncDisposable, IPageSource
 {
     private readonly PageSize[] _pageSizes;
+    private readonly PageDimensions[] _dimensions;
+
+    // Strokes read on the first touch of each page (ruling 6); PDFium thread only.
+    private readonly Dictionary<int, PageStrokes> _strokes = [];
 
     // Only read and written on the PDFium thread; 0 once closed.
     private nint _document;
     private int _disposed;
 
-    private PdfRenderer(nint document, PageSize[] pageSizes)
+    private PdfRenderer(
+        string path, nint document, PageSize[] pageSizes, PageDimensions[] dimensions, PdfDocumentInfo info)
     {
+        Path = path;
         _document = document;
         _pageSizes = pageSizes;
+        _dimensions = dimensions;
+        Info = info;
     }
+
+    /// <summary>The full path this document was opened from.</summary>
+    public string Path { get; }
+
+    /// <summary>Encryption, restrictions and signatures, read once at open.</summary>
+    public PdfDocumentInfo Info { get; }
 
     public int PageCount
     {
@@ -44,6 +60,31 @@ public sealed class PdfRenderer : IAsyncDisposable
         ArgumentOutOfRangeException.ThrowIfNegative(pageIndex);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(pageIndex, _pageSizes.Length);
         return _pageSizes[pageIndex];
+    }
+
+    /// <summary>
+    /// Displayed size of a page (visible box with rotation applied) in points, computed from
+    /// <see cref="PageGeometry"/> once at open, so this is a cheap synchronous lookup (FR-26).
+    /// </summary>
+    public PageDimensions GetPageDimensions(int pageIndex)
+    {
+        ThrowIfDisposed();
+        ArgumentOutOfRangeException.ThrowIfNegative(pageIndex);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(pageIndex, _dimensions.Length);
+        return _dimensions[pageIndex];
+    }
+
+    /// <summary>
+    /// The app's strokes on a page. Read on the first touch of the page (by this call or by a
+    /// render) and cached, so every call returns the same result whatever was rendered.
+    /// Each stroke Id appears once, the first occurrence winning.
+    /// </summary>
+    public Task<PageStrokes> LoadStrokesAsync(int pageIndex, CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
+        ArgumentOutOfRangeException.ThrowIfNegative(pageIndex);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(pageIndex, _pageSizes.Length);
+        return PdfiumThread.RunAsync(() => LoadStrokes(pageIndex), ct);
     }
 
     /// <summary>
@@ -80,6 +121,7 @@ public sealed class PdfRenderer : IAsyncDisposable
                 {
                     PdfiumNative.FPDF_CloseDocument(_document);
                     _document = 0;
+                    _strokes.Clear();
                 }
             },
             CancellationToken.None).ConfigureAwait(false);
@@ -105,6 +147,7 @@ public sealed class PdfRenderer : IAsyncDisposable
             }
 
             var sizes = new PageSize[count];
+            var dimensions = new PageDimensions[count];
             for (int i = 0; i < count; i++)
             {
                 if (PdfiumNative.FPDF_GetPageSizeByIndexF(document, i, out PdfiumNative.FS_SIZEF size) == 0)
@@ -117,14 +160,95 @@ public sealed class PdfRenderer : IAsyncDisposable
                     throw new PdfOpenException(PdfOpenError.InvalidFormat);
                 }
 
-                sizes[i] = new PageSize(size.Width, size.Height);
+                // One source: both APIs derive from the same geometry number (FR-26); the PDFium
+                // size above only decides validity.
+                dimensions[i] = ReadDimensions(document, i);
+                sizes[i] = new PageSize((float)dimensions[i].WidthPt, (float)dimensions[i].HeightPt);
             }
 
-            return new PdfRenderer(document, sizes);
+            return new PdfRenderer(path, document, sizes, dimensions, PdfDocumentInfo.Read(document));
         }
         catch
         {
             PdfiumNative.FPDF_CloseDocument(document);
+            throw;
+        }
+    }
+
+    private static PageDimensions ReadDimensions(nint document, int index)
+    {
+        nint page = PdfiumNative.FPDF_LoadPage(document, index);
+        if (page == 0)
+        {
+            throw new PdfOpenException(PdfOpenError.InvalidFormat);
+        }
+
+        try
+        {
+            PageDimensions dimensions = PageGeometry.From(page).Dimensions;
+            if (!IsValidPageSize((float)dimensions.WidthPt, (float)dimensions.HeightPt))
+            {
+                throw new PdfOpenException(PdfOpenError.InvalidFormat);
+            }
+
+            return dimensions;
+        }
+        catch (InvalidOperationException)
+        {
+            throw new PdfOpenException(PdfOpenError.InvalidFormat);
+        }
+        finally
+        {
+            PdfiumNative.FPDF_ClosePage(page);
+        }
+    }
+
+    private PageStrokes LoadStrokes(int pageIndex)
+    {
+        // Re-checked on the worker: a dispose queued earlier has already closed the document.
+        ObjectDisposedException.ThrowIf(_document == 0, this);
+        PdfiumNative.FPDF_ClosePage(LoadPageHidingStrokes(pageIndex));
+        return _strokes[pageIndex];
+    }
+
+    /// <summary>
+    /// Loads a page and, on its first touch, caches its strokes; then removes the app annotations
+    /// from the in-memory page (never saved) so they cannot be drawn. Unreadable ones stay.
+    /// The caller closes the page. PDFium thread only.
+    /// </summary>
+    private nint LoadPageHidingStrokes(int pageIndex)
+    {
+        nint page = PdfiumNative.FPDF_LoadPage(_document, pageIndex);
+        if (page == 0)
+        {
+            throw new InvalidOperationException("PDFium could not load the page.");
+        }
+
+        try
+        {
+            if (!_strokes.ContainsKey(pageIndex))
+            {
+                StrokeReadResult read = StrokeAnnotations.Read(page, PageGeometry.From(page));
+                var seen = new HashSet<Guid>();
+                var unique = new List<InkStroke>(read.Strokes.Count);
+                foreach (InkStroke stroke in read.Strokes)
+                {
+                    if (seen.Add(stroke.Id))
+                    {
+                        unique.Add(stroke);
+                    }
+                }
+
+                _strokes[pageIndex] = new PageStrokes(unique, read.UnreadableAnnotationIndexes.Count);
+            }
+
+            // Idempotent; also covers a page reloaded from a document that still holds them.
+            StrokeAnnotations.RemoveAllApp(page);
+            return page;
+        }
+        catch
+        {
+            PdfiumNative.FPDF_ClosePage(page);
             throw;
         }
     }
@@ -134,36 +258,10 @@ public sealed class PdfRenderer : IAsyncDisposable
         // Re-checked on the worker: a dispose queued earlier has already closed the document.
         ObjectDisposedException.ThrowIf(_document == 0, this);
 
-        nint page = PdfiumNative.FPDF_LoadPage(_document, pageIndex);
-        if (page == 0)
-        {
-            throw new InvalidOperationException("PDFium could not load the page.");
-        }
-
+        nint page = LoadPageHidingStrokes(pageIndex);
         try
         {
-            nint bitmap = PdfiumNative.FPDFBitmap_CreateEx(
-                pixelWidth, pixelHeight, PdfiumNative.FPDFBitmap_BGRA, 0, 0);
-            if (bitmap == 0)
-            {
-                throw new InvalidOperationException("PDFium could not allocate the page bitmap.");
-            }
-
-            try
-            {
-                PdfiumNative.FPDFBitmap_FillRect(bitmap, 0, 0, pixelWidth, pixelHeight, PdfiumNative.White);
-                PdfiumNative.FPDF_RenderPageBitmap(
-                    bitmap, page, 0, 0, pixelWidth, pixelHeight, 0, PdfiumNative.FPDF_ANNOT);
-
-                int stride = PdfiumNative.FPDFBitmap_GetStride(bitmap);
-                byte[] pixels = new byte[checked(stride * pixelHeight)];
-                Marshal.Copy(PdfiumNative.FPDFBitmap_GetBuffer(bitmap), pixels, 0, pixels.Length);
-                return new RenderedPage(pixelWidth, pixelHeight, stride, pixels);
-            }
-            finally
-            {
-                PdfiumNative.FPDFBitmap_Destroy(bitmap);
-            }
+            return RenderLoadedPage(page, pixelWidth, pixelHeight);
         }
         finally
         {
@@ -171,7 +269,44 @@ public sealed class PdfRenderer : IAsyncDisposable
         }
     }
 
-    private static PdfOpenError MapError(uint error) => error switch
+    /// <summary>
+    /// Renders an already loaded page (with annotations) onto a white BGRA bitmap.
+    /// PDFium thread only.
+    /// </summary>
+    internal static RenderedPage RenderLoadedPage(nint page, int pixelWidth, int pixelHeight) =>
+        RenderLoadedPage(page, pixelWidth, pixelHeight, withAnnotations: true);
+
+    /// <summary>
+    /// Renders an already loaded page onto a white BGRA bitmap, with or without its annotations
+    /// (FPDF_ANNOT). PDFium thread only.
+    /// </summary>
+    internal static RenderedPage RenderLoadedPage(nint page, int pixelWidth, int pixelHeight, bool withAnnotations)
+    {
+        nint bitmap = PdfiumNative.FPDFBitmap_CreateEx(
+            pixelWidth, pixelHeight, PdfiumNative.FPDFBitmap_BGRA, 0, 0);
+        if (bitmap == 0)
+        {
+            throw new InvalidOperationException("PDFium could not allocate the page bitmap.");
+        }
+
+        try
+        {
+            PdfiumNative.FPDFBitmap_FillRect(bitmap, 0, 0, pixelWidth, pixelHeight, PdfiumNative.White);
+            PdfiumNative.FPDF_RenderPageBitmap(
+                bitmap, page, 0, 0, pixelWidth, pixelHeight, 0, withAnnotations ? PdfiumNative.FPDF_ANNOT : 0);
+
+            int stride = PdfiumNative.FPDFBitmap_GetStride(bitmap);
+            byte[] pixels = new byte[checked(stride * pixelHeight)];
+            Marshal.Copy(PdfiumNative.FPDFBitmap_GetBuffer(bitmap), pixels, 0, pixels.Length);
+            return new RenderedPage(pixelWidth, pixelHeight, stride, pixels);
+        }
+        finally
+        {
+            PdfiumNative.FPDFBitmap_Destroy(bitmap);
+        }
+    }
+
+    internal static PdfOpenError MapError(uint error) => error switch
     {
         PdfiumNative.FPDF_ERR_FILE => PdfOpenError.FileNotFound,
         PdfiumNative.FPDF_ERR_FORMAT => PdfOpenError.InvalidFormat,

@@ -54,8 +54,6 @@ internal static class Strings
 
     public static string Panel => Get(nameof(Panel));
 
-    public static string DiscardStrokesConfirm => Get(nameof(DiscardStrokesConfirm));
-
     public static string ErrorFileNotFound => Get(nameof(ErrorFileNotFound));
 
     public static string ErrorInvalidFormat => Get(nameof(ErrorInvalidFormat));
@@ -67,6 +65,94 @@ internal static class Strings
     public static string ErrorUnknown => Get(nameof(ErrorUnknown));
 
     public static string NoDocument => Get(nameof(NoDocument));
+
+    public static string NoticeLabel => Get(nameof(NoticeLabel));
+
+    public static string NoticeUnreadableAnnotations => Get(nameof(NoticeUnreadableAnnotations));
+
+    public static string AppTitle => Get(nameof(AppTitle));
+
+    public static string WindowTitleFormat => Get(nameof(WindowTitleFormat));
+
+    public static string WindowTitleDirtyFormat => Get(nameof(WindowTitleDirtyFormat));
+
+    public static string Save => Get(nameof(Save));
+
+    public static string SaveAs => Get(nameof(SaveAs));
+
+    public static string Saving => Get(nameof(Saving));
+
+    public static string ErrorSaveEncrypted => Get(nameof(ErrorSaveEncrypted));
+
+    public static string ErrorSaveVerification => Get(nameof(ErrorSaveVerification));
+
+    public static string ErrorSaveFailed => Get(nameof(ErrorSaveFailed));
+
+    public static string ErrorSaveReplaceFailed => Get(nameof(ErrorSaveReplaceFailed));
+
+    public static string ErrorReopenAfterSave => Get(nameof(ErrorReopenAfterSave));
+
+    public static string ErrorPageChangeFailed => Get(nameof(ErrorPageChangeFailed));
+
+    public static string AskSaveChanges => Get(nameof(AskSaveChanges));
+
+    public static string AnswerSave => Get(nameof(AnswerSave));
+
+    public static string AnswerDontSave => Get(nameof(AnswerDontSave));
+
+    public static string AnswerCancel => Get(nameof(AnswerCancel));
+
+    public static string AskFileChanged => Get(nameof(AskFileChanged));
+
+    public static string AnswerOverwriteAnyway => Get(nameof(AnswerOverwriteAnyway));
+
+    public static string WarnSignatureInvalidation => Get(nameof(WarnSignatureInvalidation));
+
+    public static string AnswerSaveAnyway => Get(nameof(AnswerSaveAnyway));
+
+    public static string AnswerOk => Get(nameof(AnswerOk));
+
+    public static string ErrorSaveTargetMissing => Get(nameof(ErrorSaveTargetMissing));
+
+    public static string ErrorSavedStateNotUpdated => Get(nameof(ErrorSavedStateNotUpdated));
+
+    public static string ErrorSaveFailedAfterRelease => Get(nameof(ErrorSaveFailedAfterRelease));
+
+    public static string NoticeRestored => Get(nameof(NoticeRestored));
+
+    public static string NoticeRestoredSkipped => Get(nameof(NoticeRestoredSkipped));
+
+    public static string NoticeJournalDisabled => Get(nameof(NoticeJournalDisabled));
+
+    public static string NoticeCopyKept => Get(nameof(NoticeCopyKept));
+
+    public static string ErrorDocumentInUse => Get(nameof(ErrorDocumentInUse));
+
+    public static string ErrorJournalFileMissing => Get(nameof(ErrorJournalFileMissing));
+
+    public static string ErrorJournalUnreadable => Get(nameof(ErrorJournalUnreadable));
+
+    public static string ErrorJournalDeleteFailed => Get(nameof(ErrorJournalDeleteFailed));
+
+    public static string ErrorJournalRestoreFailed => Get(nameof(ErrorJournalRestoreFailed));
+
+    public static string WarnJournalFault => Get(nameof(WarnJournalFault));
+
+    public static string AskJournalMismatch => Get(nameof(AskJournalMismatch));
+
+    public static string AnswerApplyAnyway => Get(nameof(AnswerApplyAnyway));
+
+    public static string AnswerDiscard => Get(nameof(AnswerDiscard));
+
+    public static string AskDiscardOrphanJournal => Get(nameof(AskDiscardOrphanJournal));
+
+    public static string AnswerKeep => Get(nameof(AnswerKeep));
+
+    public static string WarnJournalListenerFailed => Get(nameof(WarnJournalListenerFailed));
+
+    public static string NoticeNotSavable => Get(nameof(NoticeNotSavable));
+
+    public static string JournalWarningLabel => Get(nameof(JournalWarningLabel));
 
     private static string Get(string name) =>
         Manager.GetString(name, System.Globalization.CultureInfo.CurrentUICulture) ?? name;

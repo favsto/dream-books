@@ -22,10 +22,15 @@ public partial class PageView : UserControl
     private const double _wheelNotch = 120;
     private const double _minScaleDelta = 1e-4;
 
+    /// <summary>How long the view must stay still before its position is journalled (FR-04, FR-84).</summary>
+    internal static readonly TimeSpan ViewStateDelay = TimeSpan.FromMilliseconds(500);
+
     private readonly DispatcherTimer _renderTimer;
+    private readonly DispatcherTimer _viewStateTimer;
     private MainViewModel? _viewModel;
     private CancellationTokenSource? _renderCts;
     private Point? _zoomAnchor;
+    private RestoredView? _pendingRestore;
 
     public PageView()
     {
@@ -36,13 +41,20 @@ public partial class PageView : UserControl
             _renderTimer.Stop();
             RenderPage();
         };
+        _viewStateTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = ViewStateDelay };
+        _viewStateTimer.Tick += (_, _) => ReportViewState();
+        Viewport.ScrollChanged += (_, _) => ScheduleViewStateReport();
         DataContextChanged += (_, e) => Attach(e.NewValue as MainViewModel);
         Unloaded += (_, _) =>
         {
             _renderTimer.Stop();
+            _viewStateTimer.Stop();
             _renderCts?.Cancel();
         };
     }
+
+    /// <summary>True while a settled-view report is waiting for the view to stay still.</summary>
+    internal bool IsViewStateReportPending => _viewStateTimer.IsEnabled;
 
     /// <summary>Width available to the page for "fit width", leaving room for the vertical scroll bar.</summary>
     public double FitWidthViewport => Math.Max(0, Viewport.ActualWidth - SystemParameters.VerticalScrollBarWidth - 1);
@@ -59,6 +71,7 @@ public partial class PageView : UserControl
         {
             _viewModel.PageChanged -= OnPageChanged;
             _viewModel.ZoomVm.PropertyChanged -= OnZoomChanged;
+            _viewModel.PropertyChanged -= OnViewModelChanged;
         }
 
         _viewModel = viewModel;
@@ -66,7 +79,12 @@ public partial class PageView : UserControl
         {
             viewModel.PageChanged += OnPageChanged;
             viewModel.ZoomVm.PropertyChanged += OnZoomChanged;
+            viewModel.PropertyChanged += OnViewModelChanged;
             Surface.Scale = viewModel.ZoomVm.Zoom * Units.DipPerPt;
+            if (viewModel.ViewToRestore is { } restored)
+            {
+                ApplyRestoredView(restored);
+            }
         }
     }
 
@@ -76,6 +94,80 @@ public partial class PageView : UserControl
         Surface.PageImage = null;
         _renderTimer.Stop();
         RenderPage();
+        _pendingRestore = null; // the user moved on before the restored position could be applied
+        ScheduleViewStateReport();
+    }
+
+    /// <summary>Restarts the 500 ms wait: the position is reported once the user stops scrolling or zooming.</summary>
+    private void ScheduleViewStateReport()
+    {
+        _viewStateTimer.Stop();
+        _viewStateTimer.Start();
+    }
+
+    /// <summary>Hands the settled position to the view model, which journals it if there is something to restore.</summary>
+    internal void ReportViewState()
+    {
+        _viewStateTimer.Stop();
+        if (_viewModel is not { PageNumber: > 0 } vm)
+        {
+            return;
+        }
+
+        if (Surface.IsInking)
+        {
+            ScheduleViewStateReport(); // never write while a stroke is being drawn
+            return;
+        }
+
+        vm.ReportViewState(vm.PageNumber - 1, vm.ZoomVm.Zoom, Viewport.HorizontalOffset, Viewport.VerticalOffset);
+    }
+
+    /// <summary>
+    /// Scrolls to a restored position once the page is laid out at its restored zoom (the zoom itself is already
+    /// applied by the view model). Applied once; offsets beyond the extent are clamped by the scroll viewer.
+    /// </summary>
+    internal void ApplyRestoredView(RestoredView view)
+    {
+        _pendingRestore = view;
+        Viewport.LayoutUpdated -= OnLayoutUpdatedForRestore;
+        Viewport.LayoutUpdated += OnLayoutUpdatedForRestore;
+        Viewport.InvalidateMeasure();
+    }
+
+    private void OnLayoutUpdatedForRestore(object? sender, EventArgs e)
+    {
+        if (_pendingRestore is not { } view)
+        {
+            Viewport.LayoutUpdated -= OnLayoutUpdatedForRestore;
+            return;
+        }
+
+        if (Surface.Page is null || Viewport.ExtentWidth <= 0 || Viewport.ExtentHeight <= 0)
+        {
+            return; // not laid out yet: wait for the next pass
+        }
+
+        Viewport.LayoutUpdated -= OnLayoutUpdatedForRestore;
+        _pendingRestore = null;
+        Viewport.ScrollToHorizontalOffset(view.ScrollX);
+        Viewport.ScrollToVerticalOffset(view.ScrollY);
+    }
+
+    private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.ViewToRestore) && _viewModel?.ViewToRestore is { } restored)
+        {
+            ApplyRestoredView(restored);
+            return;
+        }
+
+        // A save swapped the renderer onto the saved file: same page content, so the current bitmap stays
+        // until the new one is ready (a render attempted while the file was released yielded nothing).
+        if (e.PropertyName == nameof(MainViewModel.Renderer) && _viewModel?.Renderer is not null)
+        {
+            ScheduleRender();
+        }
     }
 
     private void OnZoomChanged(object? sender, PropertyChangedEventArgs e)
