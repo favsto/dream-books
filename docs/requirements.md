@@ -103,6 +103,7 @@ L'interfaccia ha un solo livello di base, il canvas del documento, e quattro ele
 | UI-04 | Pannello segnalibri e miniature | Bordo sinistro, a scomparsa | Si apre con swipe dal bordo o dal menu; due schede: Segnalibri e Pagine |
 | UI-05 | Indicatore pagina e zoom | In basso a destra | Mostra "12 / 48 · 125%"; compare durante scroll e zoom, sparisce dopo 1,5 s |
 | UI-06 | Barra del titolo | In alto, trasparente | Solo i pulsanti finestra e il nome file in piccolo; si nasconde a schermo intero |
+| UI-07 | Barra di scorrimento con anteprima | Bordo destro, sottile, a scomparsa | Compare mentre si scorre e mostra la posizione; toccandola o trascinandola compare l'anteprima grande della pagina corrispondente; svanisce da sola dopo circa 1,5 s con dissolvenza morbida (istantanea se le animazioni di Windows sono disattivate). I segni colorati su di essa (appunti, evidenziazioni, segnalibri) arrivano con il blocco 3b |
 
 ### Toolbar strumenti (UI-02)
 
@@ -136,7 +137,7 @@ L'utente deve poter aprire qualsiasi PDF standard e muoversi nel documento con d
 | FR-01 | Apertura PDF da menu, trascinamento sulla finestra, "Apri con" da Esplora file e associazione al tipo .pdf | Must |
 | FR-02 | Apertura di PDF protetti da password, con richiesta della password | Should |
 | FR-03 | Elenco degli ultimi 8 file aperti, con miniatura della prima pagina | Should |
-| FR-04 | Riapertura del documento alla pagina e allo zoom dell'ultima sessione | Should |
+| FR-04 | Riapertura del documento alla pagina, allo zoom e alla posizione dell'ultima sessione, anche per i documenti senza modifiche non salvate; la posizione si conserva fuori dal PDF, in un piccolo file locale per documento (il PDF non viene toccato) | Should |
 | FR-05 | Scorrimento verticale continuo con un dito, rotellina o barra di scorrimento sottile a scomparsa | Must |
 | FR-06 | Zoom con pinch a due dita, Ctrl + rotellina, Ctrl + / Ctrl −; range 25%–800% | Must |
 | FR-07 | Doppio tocco con un dito: alterna "adatta larghezza" e zoom 200% sul punto toccato | Should |
@@ -326,7 +327,7 @@ Lo sviluppo procede in cinque fasi; ognuna termina con una build installabile da
 
 1. **Prototipo inchiostro.** Una pagina PDF renderizzata, penna con pressione, gomma col dorso, undo/redo in memoria, zoom minimo (parte di FR-06) per verificare FR-26. Serve a validare la sensazione di scrittura.
 2. **Salvataggio e riapertura.** Salvataggio nel PDF con le due forme (visibile e modificabile), riapertura, diario delle modifiche non salvate e recupero dopo crash; i tratti di tutte le pagine restano quando si cambia pagina.
-3. **Documento completo.** Multipagina con rendering virtualizzato, zoom, navigazione, evidenziatori, segnalibri.
+3. **Documento completo**, in tre blocchi da provare uno alla volta: **3a** documento a più pagine (scorrimento continuo con rendering virtualizzato, zoom, vai a pagina, torna indietro, ripresa dall'ultima posizione, barra di scorrimento con anteprima); **3b** aiuti per ritrovare le cose (anteprime con i propri tratti, segni sulla barra, salto tra appunti, segnalibri, ricerca di testo); **3c** evidenziatori (tondo e a scalpello, salvati trasparenti nel PDF).
 4. **Interfaccia finale.** Toolbar flottante, pannelli a scomparsa, Mica/Acrylic, animazioni, temi, schermata iniziale, impostazioni.
 5. **Rifinitura.** Selezione con lazo, prestazioni su PDF grandi, accessibilità, pacchetto MSIX.
 
