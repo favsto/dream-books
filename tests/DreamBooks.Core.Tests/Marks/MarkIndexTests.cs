@@ -164,6 +164,26 @@ public class MarkIndexTests
     }
 
     [Fact]
+    public void TrySetPageIfUnscanned_sets_only_a_page_nobody_set_yet()
+    {
+        var index = new MarkIndex(3);
+        var raised = new List<int>();
+        index.Changed += (_, e) => raised.Add(e.PageIndex);
+        var live = new[] { M(1, 10) };
+        index.SetPage(1, live);
+
+        Assert.False(index.TrySetPageIfUnscanned(1, [M(1, 300)]));
+        Assert.True(index.TrySetPageIfUnscanned(2, []));
+        Assert.False(index.TrySetPageIfUnscanned(2, [M(2, 5)]));
+
+        Assert.Equal(live, index.MarksOnPage(1));
+        Assert.True(index.IsScanned(2));
+        Assert.Empty(index.MarksOnPage(2));
+        Assert.Equal([1, 2], raised);
+        Assert.Throws<ArgumentOutOfRangeException>(() => index.TrySetPageIfUnscanned(3, []));
+    }
+
+    [Fact]
     public void Ten_thousand_marks_lookup_is_fast()
     {
         var index = new MarkIndex(100);

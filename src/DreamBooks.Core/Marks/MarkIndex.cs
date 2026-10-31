@@ -59,6 +59,30 @@ public sealed class MarkIndex
         Changed?.Invoke(this, new MarkIndexChangedEventArgs(pageIndex));
     }
 
+    /// <summary>
+    /// Sets the page only if nothing set it yet (it is not scanned), atomically: the background scan uses it
+    /// so that marks it computed from strokes loaded earlier never overwrite a live update made meanwhile.
+    /// Returns false, changing nothing, when the page is already scanned.
+    /// </summary>
+    public bool TrySetPageIfUnscanned(int pageIndex, IReadOnlyList<Mark> marks)
+    {
+        ArgumentNullException.ThrowIfNull(marks);
+        var sorted = marks.OrderBy(m => m.TopPt).ThenBy(m => m.BottomPt).ToArray();
+        lock (_gate)
+        {
+            CheckPage(pageIndex);
+            if (_pages[pageIndex] is not null)
+            {
+                return false;
+            }
+
+            Publish(pageIndex, sorted);
+        }
+
+        Changed?.Invoke(this, new MarkIndexChangedEventArgs(pageIndex));
+        return true;
+    }
+
     public void ClearPage(int pageIndex)
     {
         lock (_gate)
