@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
@@ -10,6 +11,7 @@ using DreamBooks.App.Resources;
 using DreamBooks.App.Services;
 using DreamBooks.App.ViewModels;
 using DreamBooks.Core.Layout;
+using DreamBooks.Core.Marks;
 using DreamBooks.Pdf;
 using Microsoft.Win32;
 
@@ -29,7 +31,8 @@ namespace DreamBooks.App.Views;
 /// <see cref="PointerDown"/> / <see cref="OpenGoToPage"/>. The position fraction is the scroll offset over the
 /// scrollable range (extent minus viewport), both from the view model, the only writer of the position (scrubbing
 /// calls <see cref="DocumentViewportViewModel.SetScroll"/>). Nothing scrolls while a page is inking
-/// (<see cref="CanScroll"/>). Only the page field, while open, takes keyboard focus.
+/// (<see cref="CanScroll"/>). Only the page field, while open, takes keyboard focus. The marks' ticks (FR-101) are
+/// one decorative layer over the bar and under the knob, placed with the knob's own mapping (see UpdateTicks).
 /// </remarks>
 public partial class ScrollRail : UserControl
 {
@@ -43,6 +46,8 @@ public partial class ScrollRail : UserControl
     private readonly RailVisibilityState _state;
     private readonly DispatcherTimer _idleTimer;
     private DocumentViewportViewModel? _model;
+    private MarksViewModel? _marks;
+    private TickInputs _tickInputs;
     private RailTimings? _timings;
     private bool _rendering;
     private bool _dragging;
@@ -116,6 +121,7 @@ public partial class ScrollRail : UserControl
             {
                 old.PositionChanged -= OnPositionChanged;
                 old.LayoutChanged -= OnLayoutChanged;
+                old.PropertyChanged -= OnModelPropertyChanged;
             }
 
             _model = value;
@@ -123,10 +129,37 @@ public partial class ScrollRail : UserControl
             {
                 value.PositionChanged += OnPositionChanged;
                 value.LayoutChanged += OnLayoutChanged;
+                value.PropertyChanged += OnModelPropertyChanged;
             }
 
             HideNow();
             UpdateKnob();
+        }
+    }
+
+    /// <summary>The marks drawn as ticks on the track (FR-101); set by <see cref="DocumentView"/>.</summary>
+    internal MarksViewModel? Marks
+    {
+        get => _marks;
+        set
+        {
+            if (ReferenceEquals(value, _marks))
+            {
+                return;
+            }
+
+            if (_marks is { } old)
+            {
+                old.MarksRefreshed -= OnMarksRefreshed;
+            }
+
+            _marks = value;
+            if (value is not null)
+            {
+                value.MarksRefreshed += OnMarksRefreshed;
+            }
+
+            UpdateTicks();
         }
     }
 
@@ -386,6 +419,7 @@ public partial class ScrollRail : UserControl
         var transparent = TransparencyEnabled();
         var suffix = transparent ? string.Empty : "Opaque";
         TrackBar.SetResourceReference(Border.BackgroundProperty, "RailTrackBrush" + suffix);
+        Ticks.SetResourceReference(RailTickLayer.FillProperty, "RailMarkTickBrush" + suffix);
         PreviewBubble.SetResourceReference(Border.BackgroundProperty, "RailPreviewBackgroundBrush" + suffix);
         if (transparent)
         {
@@ -436,6 +470,10 @@ public partial class ScrollRail : UserControl
         {
             HideBubble();
         }
+        else
+        {
+            UpdateTicks(); // brought up to date as it shows (a cheap check when nothing changed)
+        }
 
         var fading = phase is RailPhase.FadingIn or RailPhase.FadingOut;
         SetRendering(fading && IsLoaded);
@@ -476,9 +514,61 @@ public partial class ScrollRail : UserControl
         UpdateKnob();
     }
 
+    private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(DocumentViewportViewModel.ViewportHeightDip) or null or "")
+        {
+            UpdateTicks(); // the window's height in points is part of the mapping, even when the position stays
+        }
+    }
+
+    private void OnMarksRefreshed(object? sender, EventArgs e) => UpdateTicks();
+
+    /// <summary>
+    /// The ticks at the marks' positions on the track (FR-101), with the knob's own mapping
+    /// (<see cref="RailTickLayout"/>): each tick is centred where the knob's centre is when the view shows its mark, so
+    /// the knob covers it there. Only while the rail is shown (hidden, nothing is recomputed; it catches up as it
+    /// shows). Recomputed only when an input changed: the marks (a new list at each throttled refresh of the marks
+    /// list, <see cref="MarksViewModel.RefreshInterval"/>), the layout, the zoom or window height, the track length.
+    /// </summary>
+    private void UpdateTicks()
+    {
+        if (!IsShown)
+        {
+            return;
+        }
+
+        var marks = _marks?.Marks ?? [];
+        var layout = _model?.Layout;
+        var window = layout is not null ? _model!.WindowHeightPt : 0;
+        var inputs = new TickInputs(marks, layout, window, TrackLength, KnobHeight);
+        if (inputs == _tickInputs)
+        {
+            return;
+        }
+
+        _tickInputs = inputs;
+        if (layout is null || marks.Count == 0)
+        {
+            Ticks.SetCentres([]);
+            return;
+        }
+
+        var half = KnobHeight / 2;
+        var positions = RailTickLayout.Positions(marks, layout, window, inputs.TrackLength);
+        var centres = new double[positions.Count];
+        for (var i = 0; i < centres.Length; i++)
+        {
+            centres[i] = positions[i] + half;
+        }
+
+        Ticks.SetCentres(centres);
+    }
+
     /// <summary>The knob at the position's fraction of the track (not while dragging: then it follows the pointer).</summary>
     private void UpdateKnob()
     {
+        UpdateTicks(); // a zoom or a resize changes the mapping the ticks share with the knob
         if (_dragging)
         {
             return;
@@ -635,6 +725,10 @@ public partial class ScrollRail : UserControl
     }
 
     private void OnIndicatorClick(object sender, RoutedEventArgs e) => OpenGoToPage(); // UI Automation's Invoke
+
+    /// <summary>What the ticks were last drawn from; the lists compare by reference (each refresh makes a new one).</summary>
+    private readonly record struct TickInputs(
+        IReadOnlyList<Mark>? Marks, DocumentLayout? Layout, double WindowHeightPt, double TrackLength, double KnobHeight);
 
     private void OnGoToPageKeyDown(object sender, KeyEventArgs e)
     {

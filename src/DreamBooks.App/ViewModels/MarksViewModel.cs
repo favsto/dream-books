@@ -50,6 +50,7 @@ public sealed class MarksViewModel : ObservableObject
     private readonly ObservableCollection<MarkItem> _items = [];
     private MarkIndex? _index;
     private MarkScanner? _scanner;
+    private IReadOnlyList<Mark> _marks = [];
     private bool _isScanning;
     private string? _statusText;
     private IDisposable? _pendingRefresh;
@@ -112,6 +113,18 @@ public sealed class MarksViewModel : ObservableObject
 
     /// <summary>Goes to a row's mark (FR-103); no history entry when it is already shown.</summary>
     public IRelayCommand<MarkItem> GoToMarkCommand { get; }
+
+    /// <summary>
+    /// The marks <see cref="Items"/> shows, as one list replaced (never changed in place) at each refresh: what the
+    /// rail's ticks are drawn from (FR-101).
+    /// </summary>
+    internal IReadOnlyList<Mark> Marks => _marks;
+
+    /// <summary>
+    /// Raised on the UI thread after each refresh that re-read the index (at most once per <see cref="RefreshInterval"/>,
+    /// and at once when the document changes), once <see cref="Items"/> and <see cref="Marks"/> are updated.
+    /// </summary>
+    internal event EventHandler? MarksRefreshed;
 
     /// <summary>The index of the document now shown, or none; the list follows it at once.</summary>
     internal void Attach(MarkIndex? index)
@@ -215,6 +228,7 @@ public sealed class MarksViewModel : ObservableObject
     private void Rebuild()
     {
         var marks = _index?.AllMarks() ?? [];
+        _marks = marks;
         var countBefore = _items.Count;
         int i = 0, j = 0;
         while (j < marks.Count)
@@ -265,6 +279,8 @@ public sealed class MarksViewModel : ObservableObject
                 NotifyCommands();
             }
         }
+
+        MarksRefreshed?.Invoke(this, EventArgs.Empty);
     }
 
     // The index's own order: page, then top, then bottom.

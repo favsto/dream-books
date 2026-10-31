@@ -249,15 +249,7 @@ public sealed class DocumentViewportViewModel : ObservableObject
             return null;
         }
 
-        var windowPt = WindowHeightPt;
-        var extentPt = Math.Max(0, mark.BottomPt - mark.TopPt);
-        var topPt = layout.PageTopPt(mark.PageIndex) + mark.TopPt;
-        if (windowPt > 0 && extentPt <= windowPt)
-        {
-            topPt -= (windowPt - extentPt) / 2;
-        }
-
-        topPt = Math.Clamp(topPt, 0, layout.TotalHeightPt);
+        var topPt = MarkTarget.TopPt(mark, layout, WindowHeightPt); // the rail ticks use the same rule (RailTickLayout)
         var page = layout.PageAt(topPt);
         return Normalize(new ViewPosition(page, topPt - layout.PageTopPt(page), _position.ColumnXPt, _position.Zoom));
     }

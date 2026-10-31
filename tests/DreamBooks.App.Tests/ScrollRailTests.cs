@@ -872,7 +872,7 @@ public sealed class ScrollRailTests : IDisposable
     /// Where input at a point goes: a visual hit test that skips what input routing skips (elements that are not
     /// hit-testable or not visible, with their children). InputHitTest itself needs a shown window.
     /// </summary>
-    private static DependencyObject? HitAt(Visual root, Point point)
+    internal static DependencyObject? HitAt(Visual root, Point point)
     {
         DependencyObject? hit = null;
         VisualTreeHelper.HitTest(
@@ -889,7 +889,7 @@ public sealed class ScrollRailTests : IDisposable
         return hit;
     }
 
-    private static bool IsWithin(DependencyObject? element, DependencyObject ancestor)
+    internal static bool IsWithin(DependencyObject? element, DependencyObject ancestor)
     {
         for (var current = element; current is not null; current = VisualTreeHelper.GetParent(current))
         {
@@ -925,7 +925,7 @@ public sealed class ScrollRailTests : IDisposable
         }
     }
 
-    private static void LayOut(FrameworkElement element, double width, double height)
+    internal static void LayOut(FrameworkElement element, double width, double height)
     {
         element.Measure(new Size(width, height));
         element.Arrange(new Rect(0, 0, width, height));
@@ -939,7 +939,7 @@ public sealed class ScrollRailTests : IDisposable
         }
     }
 
-    private static void Settle(DocumentView view)
+    internal static void Settle(DocumentView view)
     {
         for (var i = 0; i < 6; i++)
         {

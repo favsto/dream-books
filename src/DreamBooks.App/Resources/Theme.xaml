@@ -22,7 +22,7 @@
 
     <!-- Scroll rail (UI-07, design B): a 40 px touch strip on the right edge with an 8 px bar and a 34 px knob, one large
          page preview beside the knob while scrubbing, and the page indicator; all fade in 180 ms and out 200 ms after
-         1.5 s idle, ease-out (instant when Windows animations are off, NFR-32). No marks yet (3b). -->
+         1.5 s idle, ease-out (instant when Windows animations are off, NFR-32). Mark ticks below (3b). -->
     <sys:TimeSpan x:Key="RailFadeInDuration">0:0:0.18</sys:TimeSpan>
     <sys:TimeSpan x:Key="RailFadeOutDuration">0:0:0.2</sys:TimeSpan>
     <sys:TimeSpan x:Key="RailIdleDelay">0:0:1.5</sys:TimeSpan>
@@ -44,6 +44,13 @@
     <!-- With Windows "Transparency effects" off (NFR-32): the same colours, opaque, and no shadow. -->
     <SolidColorBrush x:Key="RailTrackBrushOpaque" Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
     <SolidColorBrush x:Key="RailPreviewBackgroundBrushOpaque" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <!-- Mark ticks on the rail (FR-101, phase 3b): a short bar across the track per mark, as wide as the knob, which
+         covers the tick of the mark shown; the text colour, so they read on the grey bar in light and dark themes.
+         Search results (3b-2) get a different colour. Opaque with transparency effects off (NFR-32). -->
+    <sys:Double x:Key="RailMarkTickLength">14</sys:Double>
+    <sys:Double x:Key="RailMarkTickThickness">2</sys:Double>
+    <SolidColorBrush x:Key="RailMarkTickBrush" Color="{DynamicResource {x:Static SystemColors.ControlTextColorKey}}" Opacity="0.75" />
+    <SolidColorBrush x:Key="RailMarkTickBrushOpaque" Color="{DynamicResource {x:Static SystemColors.ControlTextColorKey}}" />
     <Thickness x:Key="RailIndicatorMargin">0,0,44,12</Thickness>
     <sys:Double x:Key="GoToPageFieldWidth">80</sys:Double>
 
