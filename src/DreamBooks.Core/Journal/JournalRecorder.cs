@@ -41,14 +41,14 @@ public sealed class JournalRecorder : IDisposable
     public bool IsFaulted { get; private set; }
 
     /// <summary>Appends a view line. Debouncing is the caller's job. Ignored after <see cref="Dispose"/>.</summary>
-    public void RecordView(int pageIndex, double zoom, double scrollX, double scrollY)
+    public void RecordView(int pageIndex, double zoom, double scrollX, double scrollY, bool? fitWidth = null)
     {
         if (_disposed)
         {
             return;
         }
 
-        Append(new ViewEntry(pageIndex, zoom, scrollX, scrollY));
+        Append(new ViewEntry(pageIndex, zoom, scrollX, scrollY, fitWidth));
     }
 
     /// <summary>Stops recording. Idempotent.</summary>

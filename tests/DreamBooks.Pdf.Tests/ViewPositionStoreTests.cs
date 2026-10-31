@@ -243,4 +243,45 @@ public sealed class ViewPositionStoreTests : IDisposable
         Assert.DoesNotContain("C:", text);
         Assert.Equal(Path.Combine(_root, RecoveryStore.DocumentKey(Doc) + ".json"), file);
     }
+
+    [Fact]
+    public void Fit_width_flag_round_trips()
+    {
+        var store = NewStore();
+        store.Save(@"C:\Books\Fit.pdf", new ViewPosition(3, 12.5, 306, 1.2), fitWidth: true);
+        store.Save(@"C:\Books\Manual.pdf", new ViewPosition(3, 12.5, 306, 1.2), fitWidth: false);
+
+        Assert.True(store.TryLoad(@"C:\Books\Fit.pdf")!.Value.FitWidth);
+        Assert.False(store.TryLoad(@"C:\Books\Manual.pdf")!.Value.FitWidth);
+        Assert.Contains("\"fit\":true", File.ReadAllText(FileFor(@"C:\Books\Fit.pdf")), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_file_without_the_fit_field_loads_as_not_fit()
+    {
+        var store = NewStore();
+        Directory.CreateDirectory(_root);
+        File.WriteAllText(
+            FileFor(@"C:\Books\Old.pdf"),
+            "{\"v\":1,\"page\":4,\"y\":10,\"x\":306,\"zoom\":1.5,\"saved\":\"2026-10-30T12:00:00.0000000Z\"}");
+
+        var loaded = store.TryLoad(@"C:\Books\Old.pdf");
+
+        Assert.NotNull(loaded);
+        Assert.Equal(new ViewPosition(4, 10, 306, 1.5), loaded.Value.Position);
+        Assert.False(loaded.Value.FitWidth);
+    }
+
+    [Fact]
+    public void Save_reports_an_unexpected_failure_instead_of_throwing()
+    {
+        var store = NewStore();
+        Exception? reported = null;
+        store.Failed += (_, ex) => reported = ex;
+
+        store.Save("bad\0path.pdf", new ViewPosition(1, 0, 0, 1)); // not a usable path at all
+
+        Assert.NotNull(reported);
+        Assert.DoesNotContain("bad", reported.Message, StringComparison.Ordinal);
+    }
 }

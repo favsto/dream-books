@@ -15,6 +15,7 @@ public sealed class ZoomViewModel : ObservableObject
 
     private double _zoom = 1.0;
     private bool _isFitWidth;
+    private bool _isLocked;
 
     public ZoomViewModel()
     {
@@ -28,9 +29,14 @@ public sealed class ZoomViewModel : ObservableObject
 
     /// <summary>
     /// True while a stroke is being drawn: every zoom request is ignored, so the live (wet) ink is never
-    /// left at a scale different from the page under it.
+    /// left at a scale different from the page under it. Raises PropertyChanged, so a fit-width recompute skipped
+    /// meanwhile can catch up on release.
     /// </summary>
-    public bool IsLocked { get; set; }
+    public bool IsLocked
+    {
+        get => _isLocked;
+        set => SetProperty(ref _isLocked, value);
+    }
 
     /// <summary>
     /// True while the zoom fits the widest page to the viewport width and follows resizes. Any manual zoom (setting

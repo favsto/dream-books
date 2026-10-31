@@ -547,6 +547,230 @@ public sealed class DocumentViewportViewModelTests : IDisposable
         Assert.Equal(0, viewport.CurrentPage);
     }
 
+    [Fact]
+    public async Task Pending_centre_report_does_not_supersede_a_go_to_page()
+    {
+        var source = Pages(10);
+        var gate = new TaskCompletionSource();
+        source.Gates[5] = gate;
+        var vm = await OpenSizedAsync(source);
+
+        vm.Viewport.SetScroll(0, 2 * _pitchPt * _scale); // a centre report is now pending
+        var going = vm.Viewport.GoToPageCommand.ExecuteAsync(6); // and the user jumps before it fires
+        _scheduler.Advance(150);
+        Assert.Equal(0, vm.Session!.CurrentPageIndex); // the old report was dropped
+        gate.SetResult();
+        await going;
+
+        Assert.Equal(5, vm.Session.CurrentPageIndex);
+        Assert.Equal(6, vm.PageNumber);
+        Assert.Equal(5, vm.Editor?.Page.Index);
+    }
+
+    [Fact]
+    public async Task Restore_makes_the_centre_page_current_with_its_editor()
+    {
+        var path = WriteFile("centre.pdf");
+        new ViewPositionStore(_positionsRoot).Save(path, new ViewPosition(6, 500, 306, 1)); // top on page 7, centre on 8
+        var vm = NewVm();
+        vm.Viewport.ViewportWidthDip = 1000;
+        vm.Viewport.ViewportHeightDip = 800;
+
+        await OpenAsync(vm, Pages(10), path);
+
+        Assert.Equal(6, vm.Viewport.Position.PageIndex);
+        Assert.Equal(7, vm.Viewport.CurrentPage);
+        Assert.Equal(7, vm.Session!.CurrentPageIndex);
+        Assert.Equal(8, vm.PageNumber);
+        Assert.Equal(7, vm.Editor?.Page.Index);
+    }
+
+    [Fact]
+    public async Task Fit_width_mode_is_remembered_and_recomputed_for_another_width()
+    {
+        var path = WriteFile("fit.pdf");
+        var vm = await OpenAsync(NewVm(), Pages(5), path);
+        vm.Viewport.ViewportWidthDip = 1000;
+        vm.Viewport.ViewportHeightDip = 800;
+        Assert.True(vm.ZoomVm.IsFitWidth);
+        var scale = 1000 / 612.0; // DIP per point in fit mode
+        vm.Viewport.SetScroll(0, ((2 * _pitchPt) + 30) * scale);
+        Assert.True(await vm.CanCloseAsync());
+        Assert.True(new ViewPositionStore(_positionsRoot).TryLoad(path)?.FitWidth);
+
+        var wider = NewVm();
+        wider.Viewport.ViewportWidthDip = 1500;
+        wider.Viewport.ViewportHeightDip = 800;
+        await OpenAsync(wider, Pages(5), path);
+
+        Assert.True(wider.ZoomVm.IsFitWidth);
+        Assert.Equal(1500 / (612 * _scale), wider.ZoomVm.Zoom, 6);
+        Assert.Equal(2, wider.Viewport.Position.PageIndex);
+        Assert.Equal(30, wider.Viewport.Position.YPt, 6);
+
+        var unsized = await OpenAsync(NewVm(), Pages(5), path); // the width is not known yet: recomputed once it is
+        Assert.True(unsized.ZoomVm.IsFitWidth);
+        unsized.Viewport.ViewportWidthDip = 2000;
+        Assert.Equal(2000 / (612 * _scale), unsized.ZoomVm.Zoom, 6);
+    }
+
+    [Fact]
+    public async Task Journal_view_restores_fit_width_mode_at_another_width()
+    {
+        var path = WriteFile("fit-journal.pdf");
+        var vm = await OpenAsync(NewVm(withRecovery: true), Pages(5), path);
+        Line(vm.Editor!, 100);
+        vm.Viewport.ViewportWidthDip = 1000;
+        vm.Viewport.ViewportHeightDip = 800;
+        vm.Viewport.SetScroll(0, ((3 * _pitchPt) + 40) * (1000 / 612.0));
+        _scheduler.Advance(500);
+        await vm.PositionWritesForTest;
+        new ViewPositionStore(_positionsRoot).Save(path, new ViewPosition(0, 0, 306, 3)); // the journal must win
+        await vm.SimulateCrashForTestAsync();
+
+        var next = NewVm(withRecovery: true);
+        next.Viewport.ViewportWidthDip = 1500;
+        next.Viewport.ViewportHeightDip = 800;
+        await OpenAsync(next, Pages(5), path);
+
+        Assert.True(next.ZoomVm.IsFitWidth);
+        Assert.Equal(1500 / (612 * _scale), next.ZoomVm.Zoom, 6);
+        Assert.Equal(3, next.Viewport.Position.PageIndex);
+        Assert.Equal(40, next.Viewport.Position.YPt, 6);
+    }
+
+    [Fact]
+    public async Task Failed_go_to_page_still_makes_the_target_current_without_an_editor()
+    {
+        var source = Pages(10);
+        source.FailingPages.Add(5);
+        var vm = await OpenSizedAsync(source);
+
+        await vm.Viewport.GoToPageCommand.ExecuteAsync(6);
+
+        Assert.Equal(Resources.Strings.ErrorPageChangeFailed, vm.ErrorMessage);
+        Assert.Equal(5, vm.Viewport.CurrentPage);
+        Assert.Equal(5, vm.Session!.CurrentPageIndex);
+        Assert.Equal(6, vm.PageNumber);
+        Assert.Null(vm.Editor);
+    }
+
+    [Fact]
+    public async Task Previous_and_Next_do_not_record_history_and_stop_at_the_ends()
+    {
+        var vm = await OpenSizedAsync(Pages(5));
+        var viewport = vm.Viewport;
+        var moves = 0;
+        viewport.PositionChanged += (_, _) => moves++;
+
+        await vm.PreviousPageCommand.ExecuteAsync(null); // already on page 1
+        Assert.Equal(0, moves);
+        Assert.Equal(0, viewport.CurrentPage);
+
+        await vm.NextPageCommand.ExecuteAsync(null);
+        await vm.NextPageCommand.ExecuteAsync(null);
+        Assert.Equal(2, viewport.CurrentPage);
+        Assert.Equal(3, vm.PageNumber);
+        Assert.NotNull(vm.Editor);
+        Assert.False(viewport.History.CanGoBack);
+
+        await vm.PreviousPageCommand.ExecuteAsync(null);
+        Assert.Equal(1, viewport.CurrentPage);
+        Assert.False(viewport.History.CanGoBack);
+
+        await viewport.GoToPageCommand.ExecuteAsync(5);
+        var atEnd = viewport.Position;
+        moves = 0;
+        await vm.NextPageCommand.ExecuteAsync(null); // already on the last page
+        Assert.Equal(0, moves);
+        Assert.Equal(atEnd, viewport.Position);
+        Assert.Equal(4, viewport.CurrentPage);
+    }
+
+    [Fact]
+    public async Task Restored_position_in_the_gap_above_a_page_is_kept()
+    {
+        var store = new ViewPositionStore(_positionsRoot);
+        var inGap = WriteFile("gap.pdf");
+        var beyond = WriteFile("beyond.pdf");
+        store.Save(inGap, new ViewPosition(3, -5, 306, 1));
+        store.Save(beyond, new ViewPosition(3, -50, 306, 1));
+
+        var vm = await OpenAsync(NewVm(), Pages(10), inGap);
+        Assert.Equal(-5, vm.Viewport.Position.YPt, 6);
+        var other = await OpenAsync(NewVm(), Pages(10), beyond);
+        Assert.Equal(-LayoutConstants.PageGapPt, other.Viewport.Position.YPt, 6);
+    }
+
+    [Fact]
+    public async Task Fit_width_skipped_while_locked_catches_up_when_the_lock_is_released()
+    {
+        var vm = await OpenAsync(NewVm(), Pages(10));
+        vm.Viewport.ViewportWidthDip = 1000;
+        vm.Viewport.ViewportHeightDip = 800;
+        var fit = vm.ZoomVm.Zoom;
+
+        vm.ZoomVm.IsLocked = true; // a stroke is live while the window is resized
+        vm.Viewport.ViewportWidthDip = 2000;
+        Assert.Equal(fit, vm.ZoomVm.Zoom);
+
+        vm.ZoomVm.IsLocked = false;
+        Assert.Equal(2000 / (612 * _scale), vm.ZoomVm.Zoom, 6);
+        Assert.Equal(vm.ZoomVm.Zoom, vm.Viewport.Position.Zoom, 6);
+        Assert.True(vm.ZoomVm.IsFitWidth);
+    }
+
+    [Fact]
+    public async Task Zoom_at_the_limit_raises_no_PositionChanged()
+    {
+        var vm = await OpenSizedAsync(Pages(10));
+        vm.ZoomVm.Zoom = 8;
+        var moves = 0;
+        vm.Viewport.PositionChanged += (_, _) => moves++;
+
+        vm.Viewport.ZoomAt(2, new Point(500, 400));
+
+        Assert.Equal(0, moves);
+        Assert.Equal(8, vm.Viewport.Position.Zoom);
+    }
+
+    [Fact]
+    public async Task Old_journal_view_with_DIP_offsets_restores_on_the_right_page()
+    {
+        var path = WriteFile("old-journal.pdf");
+        var vm = await OpenAsync(NewVm(withRecovery: true), Pages(3), path);
+        Line(vm.Editor!, 100);
+        vm.ReportViewState(1, 2.0, 30, 400); // the single-page view's numbers: DIP offsets inside page 2
+        await vm.SimulateCrashForTestAsync();
+
+        var next = await OpenAsync(NewVm(withRecovery: true), Pages(3), path);
+
+        var position = next.Viewport.Position;
+        Assert.Equal(1, position.PageIndex);
+        Assert.Equal(400 / (2 * _scale), position.YPt, 6); // DIPs at 200% turned into page points
+        Assert.Equal(306, position.ColumnXPt, 6);
+        Assert.Equal(2, position.Zoom);
+        Assert.False(next.ZoomVm.IsFitWidth);
+        Assert.Equal(2, next.PageNumber);
+    }
+
+    [Fact]
+    public async Task EnsureEditorAsync_is_cancelled_when_the_document_is_replaced_mid_load()
+    {
+        var first = Pages(5);
+        var gate = new TaskCompletionSource();
+        first.Gates[3] = gate;
+        var vm = await OpenAsync(NewVm(), first);
+        var loading = vm.EnsureEditorAsync(3);
+
+        await OpenAsync(vm, Pages(2));
+        gate.SetResult();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => loading);
+        Assert.Equal(2, vm.Session!.PageCount);
+        Assert.Equal(0, vm.Editor?.Page.Index);
+    }
+
     private static double Offset(DocumentViewportViewModel viewport) =>
         viewport.Layout!.ToOffsets(viewport.Position, viewport.ViewportWidthDip, viewport.ViewportHeightDip).OffsetYDip;
 

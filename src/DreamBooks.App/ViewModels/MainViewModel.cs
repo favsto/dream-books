@@ -96,9 +96,9 @@ public sealed class MainViewModel : ObservableObject
         OpenPdfCommand = new AsyncRelayCommand(OpenPdfAsync, () => !IsSaving);
         GoToPageCommand = new AsyncRelayCommand<int>(GoToPageAsync, AsyncRelayCommandOptions.AllowConcurrentExecutions);
         PreviousPageCommand = new AsyncRelayCommand(
-            () => GoToPageAsync(Viewport.CurrentPage), AsyncRelayCommandOptions.AllowConcurrentExecutions);
+            () => Viewport.StepPageAsync(-1), AsyncRelayCommandOptions.AllowConcurrentExecutions);
         NextPageCommand = new AsyncRelayCommand(
-            () => GoToPageAsync(Viewport.CurrentPage + 2), AsyncRelayCommandOptions.AllowConcurrentExecutions);
+            () => Viewport.StepPageAsync(1), AsyncRelayCommandOptions.AllowConcurrentExecutions);
         UndoCommand = new AsyncRelayCommand(UndoAsync, () => Session is not null && Undo.CanUndo);
         RedoCommand = new AsyncRelayCommand(RedoAsync, () => Session is not null && Undo.CanRedo);
         SaveCommand = new AsyncRelayCommand(() => SaveCoreAsync(saveAs: false), CanSave);
@@ -585,7 +585,7 @@ public sealed class MainViewModel : ObservableObject
         RestoreResult? restore = null;
         DocumentJournal? journal = null;
         DocumentLayout layout;
-        ViewPosition? position;
+        RestoredPosition? restored;
         int firstPage;
         try
         {
@@ -621,12 +621,11 @@ public sealed class MainViewModel : ObservableObject
             }
 
             // FR-04: the journal's view (unsaved changes) wins over the remembered position of the saved file.
-            // Journal numbers are (page of the top edge, zoom, column x, y inside the page) in points; an old
-            // journal's DIP offsets are read the same way and clamped (best effort).
-            position = restore is { Status: RestoreStatus.Replayed, LastView: { } view }
-                ? new ViewPosition(view.PageIndex, view.ScrollY, view.ScrollX, view.Zoom)
-                : sameDocument ? Viewport.Position : await LoadPositionAsync(opened.Path, ct);
-            firstPage = position is { } start ? Math.Clamp(start.PageIndex, 0, session.PageCount - 1) : 0;
+            restored = restore is { Status: RestoreStatus.Replayed, LastView: { } view }
+                ? FromJournal(view, layout)
+                : sameDocument ? new RestoredPosition(Viewport.Position, ZoomVm.IsFitWidth)
+                : await LoadPositionAsync(opened.Path, ct);
+            firstPage = restored is { } start ? Math.Clamp(start.Position.PageIndex, 0, session.PageCount - 1) : 0;
             await session.GoToPageAsync(firstPage, ct);
         }
         catch (OperationCanceledException)
@@ -669,7 +668,7 @@ public sealed class MainViewModel : ObservableObject
 
         var previousSession = Session;
         var previousDocument = _document;
-        Swap(opened, session, journal, newLock ?? _lock, layout, position, firstPage);
+        Swap(opened, session, journal, newLock ?? _lock, layout, restored, firstPage);
         ShowRestoreOutcome(restore, journalUnavailable);
         if (opened.Viewer is { Info.CanBeRewritten: false })
         {
@@ -681,6 +680,13 @@ public sealed class MainViewModel : ObservableObject
         if (previousDocument is not null)
         {
             await previousDocument.Lifetime.DisposeAsync();
+        }
+
+        // The view's current page is the one at the centre, which can differ from the top page loaded above: load it
+        // too, so the session, PageNumber, Editor and the indicator agree from the start.
+        if (ReferenceEquals(Session, session) && Viewport.CurrentPage != session.CurrentPageIndex)
+        {
+            await NavigateToPageAsync(Viewport.CurrentPage);
         }
 
         await PrunePositionsOnceAsync();
@@ -698,7 +704,7 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>The remembered position of a document (FR-04), read off the UI thread; null when none or unreadable.</summary>
-    private async Task<ViewPosition?> LoadPositionAsync(string path, CancellationToken ct)
+    private async Task<RestoredPosition?> LoadPositionAsync(string path, CancellationToken ct)
     {
         if (_positions is not { } store)
         {
@@ -706,7 +712,27 @@ public sealed class MainViewModel : ObservableObject
         }
 
         var stored = await Task.Run(() => store.TryLoad(path), ct);
-        return stored?.Position;
+        return stored is { } found ? new RestoredPosition(found.Position, found.FitWidth) : null;
+    }
+
+    /// <summary>
+    /// A journalled view as a position. Entries of the multi-page view (with a fit flag) are (page of the top edge,
+    /// zoom, column x, y inside the page) in points. Entries of the single-page view (no flag) hold the current page
+    /// and the viewport's DIP offsets inside it: the vertical offset is turned into page points at that zoom and the
+    /// column is centred (best effort; the viewport clamps the result).
+    /// </summary>
+    private RestoredPosition FromJournal(ViewEntry view, DocumentLayout layout)
+    {
+        if (view.FitWidth is { } fit)
+        {
+            return new RestoredPosition(new ViewPosition(view.PageIndex, view.ScrollY, view.ScrollX, view.Zoom), fit);
+        }
+
+        var zoom = double.IsFinite(view.Zoom) && view.Zoom > 0
+            ? Math.Clamp(view.Zoom, LayoutConstants.MinZoom, LayoutConstants.MaxZoom)
+            : ZoomVm.Zoom;
+        var y = double.IsFinite(view.ScrollY) && view.ScrollY > 0 ? view.ScrollY / (zoom * Units.DipPerPt) : 0;
+        return new RestoredPosition(new ViewPosition(view.PageIndex, y, layout.ColumnWidthPt / 2, zoom), FitWidth: false);
     }
 
     /// <summary>Once per run, after the first successful open: old and excess remembered positions go.</summary>
@@ -765,9 +791,10 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
+        var fit = ZoomVm.IsFitWidth;
         try
         {
-            _journal?.RecordView(position.PageIndex, position.Zoom, position.ColumnXPt, position.YPt);
+            _journal?.RecordView(position.PageIndex, position.Zoom, position.ColumnXPt, position.YPt, fit);
         }
 #pragma warning disable CA1031 // A journal failure is reported through FaultChanged, never thrown from a timer.
         catch (Exception)
@@ -777,12 +804,27 @@ public sealed class MainViewModel : ObservableObject
 
         if (_positions is { } store)
         {
+            // The store reports its own failures (ViewPositionStore.Failed, no document content) and never throws;
+            // the chain still guards so that no write can end as an unobserved faulted task.
             var path = session.Path;
             _positionWrites = _positionWrites.ContinueWith(
-                _ => store.Save(path, position),
+                _ => SaveQuietly(store, path, position, fit),
                 CancellationToken.None,
                 TaskContinuationOptions.None,
                 TaskScheduler.Default);
+        }
+    }
+
+    private static void SaveQuietly(ViewPositionStore store, string path, ViewPosition position, bool fitWidth)
+    {
+        try
+        {
+            store.Save(path, position, fitWidth);
+        }
+#pragma warning disable CA1031 // Best effort: remembering the position must never fault the write chain.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
         }
     }
 
@@ -1009,7 +1051,7 @@ public sealed class MainViewModel : ObservableObject
         DocumentJournal? journal,
         DocumentLock? documentLock,
         DocumentLayout layout,
-        ViewPosition? position,
+        RestoredPosition? restored,
         int firstPage)
     {
         CancelErase();
@@ -1035,7 +1077,7 @@ public sealed class MainViewModel : ObservableObject
         AttachJournal(journal);
         ViewToRestore = null;
         Session = session;
-        Viewport.Attach(session, layout, position, firstPage);
+        Viewport.Attach(session, layout, restored?.Position, firstPage, restored?.FitWidth ?? false);
         session.CurrentPageChanged += OnCurrentPageChanged;
         session.RevealRequested += OnRevealRequested;
         session.Undo.StateChanged += OnUndoStateChanged;
@@ -1116,9 +1158,17 @@ public sealed class MainViewModel : ObservableObject
         }
         catch (Exception)
         {
-            // The session changes nothing until the page is loaded, so the current page stays intact.
             ReportFailure(session);
+            if (ReferenceEquals(session, Session) && pageIndex == Viewport.CurrentPage)
+            {
+                // The viewport is on that page now: the session agrees, the page simply has no editor (no strokes
+                // loaded), like any page not loaded yet. A later jump elsewhere is left alone.
+                session.SetCurrentPageFromView(pageIndex);
+            }
         }
+
+        // A centre report or an undo may have changed the current page or its editor meanwhile without telling.
+        RefreshCurrentEditor();
     }
 
     private async Task UndoAsync()
@@ -1496,4 +1546,7 @@ public sealed class MainViewModel : ObservableObject
         /// <summary>Cancelled, or the save did not succeed: keep the document.</summary>
         Stay,
     }
+
+    /// <summary>A position to show at open, and whether it was taken in fit-width mode (FR-04, FR-07).</summary>
+    private readonly record struct RestoredPosition(ViewPosition Position, bool FitWidth);
 }

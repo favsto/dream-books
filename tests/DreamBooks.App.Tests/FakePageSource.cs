@@ -29,9 +29,28 @@ internal sealed class FakePageSource : IPageSource, IAsyncDisposable
 
     public PageDimensions GetPageDimensions(int pageIndex) => _dimensions[pageIndex];
 
+    /// <summary>Pages whose load waits until the gate is completed.</summary>
+    public Dictionary<int, TaskCompletionSource> Gates { get; } = [];
+
     public Task<PageStrokes> LoadStrokesAsync(int pageIndex, CancellationToken ct = default)
     {
         Loads.Add(pageIndex);
+        if (Gates.TryGetValue(pageIndex, out var gate))
+        {
+            return GatedAsync(gate.Task, pageIndex);
+        }
+
+        return Complete(pageIndex);
+    }
+
+    private async Task<PageStrokes> GatedAsync(Task gate, int pageIndex)
+    {
+        await gate;
+        return await Complete(pageIndex);
+    }
+
+    private Task<PageStrokes> Complete(int pageIndex)
+    {
         if (FailingPages.Contains(pageIndex))
         {
             return Task.FromException<PageStrokes>(new IOException("unreadable page"));

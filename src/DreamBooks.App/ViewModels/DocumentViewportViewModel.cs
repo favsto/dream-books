@@ -240,10 +240,13 @@ public sealed class DocumentViewportViewModel : ObservableObject
 
     /// <summary>
     /// Makes a document (or none) the viewed one: its layout, and the position to show. A restored position is
-    /// clamped to the document and its zoom applied (fit-width mode off); without one the view starts at the top of
-    /// <paramref name="startPage"/> in fit-width mode. Clears the history.
+    /// clamped to the document; its zoom is applied, or, when it was taken in fit-width mode
+    /// (<paramref name="restoredFitWidth"/>), fit-width mode comes back and the zoom is recomputed for this viewport
+    /// width keeping the top page and offset. Without one the view starts at the top of <paramref name="startPage"/>
+    /// in fit-width mode. Clears the history. The current page is the centre page; the caller loads it.
     /// </summary>
-    internal void Attach(DocumentSession? session, DocumentLayout? layout, ViewPosition? restored, int startPage = 0)
+    internal void Attach(
+        DocumentSession? session, DocumentLayout? layout, ViewPosition? restored, int startPage = 0, bool restoredFitWidth = false)
     {
         CancelPendingReport();
         _railDrag = false;
@@ -266,7 +269,14 @@ public sealed class DocumentViewportViewModel : ObservableObject
                 _applyingZoom = true;
                 try
                 {
-                    _zoom.Zoom = stored.Zoom; // clamped by the zoom model; turns fit-width mode off
+                    if (restoredFitWidth)
+                    {
+                        _zoom.ApplyFitZoom(stored.Zoom); // until the width is known, the zoom it had
+                    }
+                    else
+                    {
+                        _zoom.Zoom = stored.Zoom; // clamped by the zoom model; turns fit-width mode off
+                    }
                 }
                 finally
                 {
@@ -274,7 +284,13 @@ public sealed class DocumentViewportViewModel : ObservableObject
                 }
             }
 
-            _position = Normalize(Clamp(layout, stored with { Zoom = _zoom.Zoom }));
+            _position = Clamp(layout, stored with { Zoom = _zoom.Zoom });
+            if (restoredFitWidth && _zoom.IsFitWidth && _viewportWidthDip > 0 && !_zoom.IsLocked)
+            {
+                _position = FitKeepingTop(layout);
+            }
+
+            _position = Normalize(_position);
         }
         else
         {
@@ -283,7 +299,7 @@ public sealed class DocumentViewportViewModel : ObservableObject
             _position = new ViewPosition(page, 0, layout.ColumnWidthPt / 2, _zoom.Zoom);
             if (_viewportWidthDip > 0 && !_zoom.IsLocked)
             {
-                ApplyFitZoomKeepingTop(layout);
+                _position = FitKeepingTop(layout);
             }
 
             _position = Normalize(_position);
@@ -294,16 +310,28 @@ public sealed class DocumentViewportViewModel : ObservableObject
         PositionChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Go to page: scrolls at once, then lets <see cref="PageNavigator"/> load and show the page.</summary>
-    internal async Task GoToPageAsync(int pageNumber)
-    {
-        if (_layout is not { } layout)
-        {
-            return;
-        }
+    /// <summary>Go to page (1-based, clamped): a jump, recorded for Back; the page is loaded by <see cref="PageNavigator"/>.</summary>
+    internal Task GoToPageAsync(int pageNumber) =>
+        _layout is { } layout
+            ? JumpToPageAsync(Math.Clamp(pageNumber - 1, 0, layout.PageCount - 1), recordHistory: true)
+            : Task.CompletedTask;
 
-        var index = Math.Clamp(pageNumber - 1, 0, layout.PageCount - 1);
-        JumpToPage(index, recordHistory: true, PageNavigator is null ? CurrentPageReport.Immediate : CurrentPageReport.None);
+    /// <summary>
+    /// Previous / Next page: relative to <see cref="CurrentPage"/>, not recorded for Back (FR-09 records only jumps),
+    /// and nothing at all before the first or after the last page.
+    /// </summary>
+    internal Task StepPageAsync(int delta)
+    {
+        var target = _currentPage + delta;
+        return _layout is { } layout && target >= 0 && target < layout.PageCount
+            ? JumpToPageAsync(target, recordHistory: false)
+            : Task.CompletedTask;
+    }
+
+    /// <summary>Scrolls at once, then lets <see cref="PageNavigator"/> load and show the page (or reports it as current).</summary>
+    private async Task JumpToPageAsync(int index, bool recordHistory)
+    {
+        JumpToPage(index, recordHistory, PageNavigator is null ? CurrentPageReport.Immediate : CurrentPageReport.None);
         if (PageNavigator is { } navigate)
         {
             await navigate(index);
@@ -382,6 +410,11 @@ public sealed class DocumentViewportViewModel : ObservableObject
 
     private void SetPosition(ViewPosition position)
     {
+        if (position == _position)
+        {
+            return; // nothing moved: no event, no settle timer restarted
+        }
+
         _position = position;
         OnPropertyChanged(nameof(Position));
         PositionChanged?.Invoke(this, EventArgs.Empty);
@@ -414,18 +447,26 @@ public sealed class DocumentViewportViewModel : ObservableObject
         }
 
         zoom = _zoom.Zoom;
+        OnPropertyChanged(nameof(IsFitWidth));
+        if (Math.Abs(zoom - _position.Zoom) < _zoomEpsilon && !fit)
+        {
+            return; // at a zoom limit: nothing to move
+        }
+
         var moved = layout.ZoomAt(_position, zoom, anchorXDip, anchorYDip, _viewportWidthDip);
         if (fit)
         {
             moved = moved with { ColumnXPt = layout.ColumnWidthPt / 2 };
         }
 
-        OnPropertyChanged(nameof(IsFitWidth));
         MoveTo(moved, CurrentPageReport.Debounced);
     }
 
-    /// <summary>Fit width after a resize or at open: the top of the view stays where it is.</summary>
-    private void ApplyFitZoomKeepingTop(DocumentLayout layout)
+    /// <summary>
+    /// Fit width after a resize, at open or when the zoom lock is released: applies the fit zoom and returns the
+    /// current position at that zoom, with the same top page and offset and the column centred.
+    /// </summary>
+    private ViewPosition FitKeepingTop(DocumentLayout layout)
     {
         var zoom = layout.FitWidthZoom(_viewportWidthDip);
         _applyingZoom = true;
@@ -438,7 +479,7 @@ public sealed class DocumentViewportViewModel : ObservableObject
             _applyingZoom = false;
         }
 
-        _position = _position with { Zoom = _zoom.Zoom, ColumnXPt = layout.ColumnWidthPt / 2 };
+        return _position with { Zoom = _zoom.Zoom, ColumnXPt = layout.ColumnWidthPt / 2 };
     }
 
     private void OnViewportResized()
@@ -448,12 +489,20 @@ public sealed class DocumentViewportViewModel : ObservableObject
             return;
         }
 
-        if (_zoom.IsFitWidth && _viewportWidthDip > 0 && !_zoom.IsLocked)
+        var position = _zoom.IsFitWidth && _viewportWidthDip > 0 && !_zoom.IsLocked ? FitKeepingTop(layout) : _position;
+        MoveTo(position, CurrentPageReport.Debounced);
+    }
+
+    /// <summary>The zoom lock was released: a fit-width recompute skipped while a stroke was live happens now.</summary>
+    private void CatchUpFitWidth()
+    {
+        if (_zoom.IsLocked || !_zoom.IsFitWidth || _viewportWidthDip <= 0 || _layout is not { } layout
+            || Math.Abs(layout.FitWidthZoom(_viewportWidthDip) - _position.Zoom) < _zoomEpsilon)
         {
-            ApplyFitZoomKeepingTop(layout);
+            return;
         }
 
-        MoveTo(_position, CurrentPageReport.Debounced);
+        MoveTo(FitKeepingTop(layout), CurrentPageReport.Debounced);
     }
 
     /// <summary>A zoom change from elsewhere (zoom buttons, the old single-page view): anchored at the viewport centre.</summary>
@@ -462,6 +511,12 @@ public sealed class DocumentViewportViewModel : ObservableObject
         if (e.PropertyName == nameof(ZoomViewModel.IsFitWidth))
         {
             OnPropertyChanged(nameof(IsFitWidth));
+            return;
+        }
+
+        if (e.PropertyName == nameof(ZoomViewModel.IsLocked))
+        {
+            CatchUpFitWidth();
             return;
         }
 
@@ -514,11 +569,14 @@ public sealed class DocumentViewportViewModel : ObservableObject
         return layout.ToPosition(x, y, _viewportWidthDip, position.Zoom);
     }
 
-    /// <summary>Best effort for any stored or journalled numbers: a valid page, an offset inside it, a valid zoom.</summary>
+    /// <summary>
+    /// Best effort for any stored or journalled numbers: a valid page, an offset inside it (or in the gap above it,
+    /// where a top edge between two pages belongs to the page below), a valid zoom.
+    /// </summary>
     private ViewPosition Clamp(DocumentLayout layout, ViewPosition position)
     {
         var page = Math.Clamp(position.PageIndex, 0, layout.PageCount - 1);
-        var y = double.IsFinite(position.YPt) ? Math.Clamp(position.YPt, 0, PageHeightPt(layout, page)) : 0;
+        var y = double.IsFinite(position.YPt) ? Math.Clamp(position.YPt, -LayoutConstants.PageGapPt, PageHeightPt(layout, page)) : 0;
         var x = double.IsFinite(position.ColumnXPt)
             ? Math.Clamp(position.ColumnXPt, 0, layout.ColumnWidthPt)
             : layout.ColumnWidthPt / 2;
@@ -578,12 +636,13 @@ public sealed class DocumentViewportViewModel : ObservableObject
 
     private void ReportCurrentPage(CurrentPageReport report)
     {
+        // Any newer movement or jump replaces a pending report: a late one must not supersede a go-to-page load.
+        CancelPendingReport();
         if (report == CurrentPageReport.None)
         {
             return;
         }
 
-        CancelPendingReport();
         var session = _session;
         if (session is null)
         {

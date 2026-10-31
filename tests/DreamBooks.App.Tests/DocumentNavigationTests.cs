@@ -253,22 +253,26 @@ public sealed class DocumentNavigationTests : IDisposable
     }
 
     [Fact]
-    public async Task Failed_page_navigation_sets_error_and_keeps_state()
+    public async Task Failed_page_navigation_sets_error_and_shows_the_page_without_an_editor()
     {
         var source = new FakePageSource((612, 792), (300, 400));
         source.FailingPages.Add(1);
         var vm = await OpenFakeAsync(source);
-        var editor = vm.Editor;
+        var first = vm.Editor!;
         var changes = 0;
         vm.PageChanged += (_, _) => changes++;
 
         await vm.GoToPageCommand.ExecuteAsync(2); // must not throw
 
+        // The view is on page 2 (the viewport scrolled there), so the session agrees: page 2 is current but has no
+        // editor, like any page whose strokes are not loaded; page 1 keeps its strokes and editor.
         Assert.Equal(Strings.ErrorPageChangeFailed, vm.ErrorMessage);
-        Assert.Equal(1, vm.PageNumber);
-        Assert.Same(editor, vm.Editor);
-        Assert.Equal(612, vm.PageSize.WidthPt);
-        Assert.Equal(0, changes);
+        Assert.Equal(2, vm.PageNumber);
+        Assert.Null(vm.Editor);
+        Assert.Equal(300, vm.PageSize.WidthPt);
+        Assert.Equal(1, changes);
+        Assert.True(vm.Session!.TryGetEditor(0, out var kept));
+        Assert.Same(first, kept);
     }
 
     private Task<MainViewModel> OpenFakeAsync(FakePageSource source) =>

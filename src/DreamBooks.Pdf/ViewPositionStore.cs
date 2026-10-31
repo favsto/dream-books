@@ -7,7 +7,9 @@ namespace DreamBooks.Pdf;
 /// <summary>
 /// Remembers where the user was in each document: one small ASCII JSON file per document,
 /// <c>&lt;root&gt;\&lt;DocumentKey&gt;.json</c>, outside the user's folders. Files hold no path or document text.
-/// Loading never throws; saving reports I/O problems through <see cref="Failed"/> instead of throwing.
+/// Format: <c>{"v":1,"page","y","x","zoom","fit","saved"}</c>; <c>fit</c> (fit-width mode) is optional on read, a file
+/// without it reads as not fit. Loading never throws; saving reports every failure through <see cref="Failed"/>
+/// instead of throwing.
 /// </summary>
 public sealed class ViewPositionStore
 {
@@ -28,26 +30,51 @@ public sealed class ViewPositionStore
     /// <summary>Raised when a write or delete fails. The exception carries no document content.</summary>
     public event EventHandler<Exception>? Failed;
 
-    public StoredPosition? TryLoad(string documentPath) => ReadFile(FilePath(documentPath));
+    /// <summary>Never throws: an unusable path or unreadable file reads as "nothing remembered".</summary>
+    public StoredPosition? TryLoad(string documentPath)
+    {
+        string file;
+        try
+        {
+            file = FilePath(documentPath);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
 
-    public void Save(string documentPath, ViewPosition position)
+        return ReadFile(file);
+    }
+
+    /// <summary>
+    /// Remembers a position and whether the zoom follows the window width. Never throws: failures, expected (I/O) or
+    /// not, are reported through <see cref="Failed"/>.
+    /// </summary>
+    public void Save(string documentPath, ViewPosition position, bool fitWidth = false)
     {
         if (!IsValid(position))
         {
             return;
         }
 
-        var file = FilePath(documentPath);
-        var temp = Path.Combine(_root, Guid.NewGuid().ToString("N") + _tempExtension);
+        string? temp = null;
         try
         {
+            var file = FilePath(documentPath);
+            temp = Path.Combine(_root, Guid.NewGuid().ToString("N") + _tempExtension);
             Directory.CreateDirectory(_root);
-            File.WriteAllBytes(temp, Serialize(position, _clock()));
+            File.WriteAllBytes(temp, Serialize(position, fitWidth, _clock()));
             Commit(temp, file);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+#pragma warning disable CA1031 // Remembering the position is best effort: every failure is reported, none thrown.
+        catch (Exception ex)
+#pragma warning restore CA1031
         {
-            TryDelete(temp);
+            if (temp is not null)
+            {
+                TryDelete(temp);
+            }
+
             Report(ex);
         }
     }
@@ -102,7 +129,7 @@ public sealed class ViewPositionStore
     private static bool IsValid(ViewPosition p) =>
         p.PageIndex >= 0 && double.IsFinite(p.YPt) && double.IsFinite(p.ColumnXPt) && double.IsFinite(p.Zoom) && p.Zoom > 0;
 
-    private static byte[] Serialize(ViewPosition p, DateTime savedUtc)
+    private static byte[] Serialize(ViewPosition p, bool fitWidth, DateTime savedUtc)
     {
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
@@ -113,6 +140,7 @@ public sealed class ViewPositionStore
             writer.WriteNumber("y", p.YPt);
             writer.WriteNumber("x", p.ColumnXPt);
             writer.WriteNumber("zoom", p.Zoom);
+            writer.WriteBoolean("fit", fitWidth); // optional on read: older files have no "fit" (not fit)
             writer.WriteString("saved", savedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
             writer.WriteEndObject();
         }
@@ -157,7 +185,8 @@ public sealed class ViewPositionStore
         }
 
         var position = new ViewPosition(page, y, x, zoom);
-        return IsValid(position) ? new StoredPosition(position, saved) : null;
+        var fit = root.TryGetProperty("fit", out var fitEl) && fitEl.ValueKind == JsonValueKind.True;
+        return IsValid(position) ? new StoredPosition(position, saved, fit) : null;
     }
 
     private static bool TryNumber(JsonElement root, string name, out double value)
