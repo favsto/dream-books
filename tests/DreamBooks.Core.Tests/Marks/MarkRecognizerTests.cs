@@ -143,6 +143,134 @@ public class MarkRecognizerTests
     }
 
     [Fact]
+    public void Recognising_identical_strokes_twice_gives_equal_marks()
+    {
+        var strokes = new[] { Line(30, 100, 260), Line(40, 200, 330) };
+        var a = Assert.Single(Recognize(strokes));
+        var b = Assert.Single(Recognize(strokes));
+        Assert.Equal(a, b);
+        Assert.Equal(a.GetHashCode(), b.GetHashCode());
+    }
+
+    [Fact]
+    public void A_different_stroke_set_gives_an_unequal_mark()
+    {
+        var a = Assert.Single(Recognize(Line(30, 100, 260)));
+        var b = Assert.Single(Recognize(Line(30, 100, 260)));
+        Assert.NotEqual(a, b);
+    }
+
+    [Fact]
+    public void Mark_stroke_ids_cannot_be_mutated_through_a_cast()
+    {
+        var m = Assert.Single(Recognize(Line(30, 100, 260)));
+        Assert.False(m.StrokeIds is List<Guid>);
+        Assert.False(m.StrokeIds is Guid[]);
+    }
+
+    [Fact]
+    public void A_zero_point_stroke_cannot_exist()
+    {
+        // InkStroke rejects empty point lists, so MarginNotes can never see one; its guard is defensive.
+        Assert.Throws<ArgumentException>(() => Stroke([]));
+    }
+
+    [Fact]
+    public void Highlighter_strokes_near_a_mark_are_not_margin_notes()
+    {
+        var line = Line(30, 200, 360);
+        var hl = Stroke([(60, 250), (90, 260)], InkTool.Highlighter);
+        var r = new MarkRecognizer();
+        var all = new[] { line, hl };
+        var mark = Assert.Single(r.Recognize(0, _width, all));
+        Assert.Empty(r.MarginNotes(mark, _width, all));
+    }
+
+    [Fact]
+    public void An_upward_drawn_line_is_a_mark()
+    {
+        var m = Assert.Single(Recognize(Line(30, 260, 100)));
+        Assert.Equal(100, m.TopPt, 3);
+        Assert.Equal(260, m.BottomPt, 3);
+    }
+
+    [Fact]
+    public void A_gap_of_exactly_one_and_a_half_lines_merges_and_just_over_does_not()
+    {
+        Assert.Single(Recognize(Line(30, 100, 260), Line(30, 314, 474)));
+        Assert.Equal(2, Recognize(Line(30, 100, 260), Line(30, 314.5, 474.5)).Count);
+    }
+
+    [Fact]
+    public void An_extent_of_exactly_three_lines_is_a_mark_and_just_under_is_not()
+    {
+        Assert.Single(Recognize(Line(30, 100, 208)));
+        Assert.Empty(Recognize(Line(30, 100, 207.9)));
+    }
+
+    [Fact]
+    public void The_margin_zone_edge_is_inside_and_just_beyond_is_outside()
+    {
+        Assert.Single(Recognize(Line(108, 100, 260)));
+        Assert.Empty(Recognize(Line(108.5, 100, 260)));
+        Assert.Single(Recognize(Line(492, 100, 260)));
+        Assert.Empty(Recognize(Line(491.5, 100, 260)));
+    }
+
+    [Fact]
+    public void Right_side_margin_notes_are_found_on_the_right_only()
+    {
+        var line = Line(570, 200, 360);
+        var near = Stroke([(500, 250), (540, 260)]);
+        var tooFar = Stroke([(300, 250), (340, 260)]);
+        var leftSide = Stroke([(40, 250), (60, 260)]);
+        var r = new MarkRecognizer();
+        var all = new[] { line, near, tooFar, leftSide };
+        var mark = Assert.Single(r.Recognize(0, _width, all));
+        Assert.Equal(near.Id, Assert.Single(r.MarginNotes(mark, _width, all)).Id);
+    }
+
+    [Fact]
+    public void A_path_ratio_just_under_the_limit_is_a_mark_and_just_over_is_not()
+    {
+        // Two-leg detour with a vertical end-to-end of 200 pt: path = 2 * sqrt(100^2 + w^2) = ratio * 200.
+        static InkStroke Detour(double ratio)
+        {
+            var w = 100 * Math.Sqrt((ratio * ratio) - 1);
+            return Stroke([(30.0, 100.0), (30 + w, 200.0), (30.0, 300.0)]);
+        }
+
+        Assert.Single(Recognize(Detour(1.29)));
+        Assert.Empty(Recognize(Detour(1.31)));
+    }
+
+    [Fact]
+    public void An_invalid_page_width_is_rejected()
+    {
+        var r = new MarkRecognizer();
+        var s = new[] { Line(30, 100, 260) };
+        Assert.Throws<ArgumentOutOfRangeException>(() => r.Recognize(0, double.NaN, s));
+        Assert.Throws<ArgumentOutOfRangeException>(() => r.Recognize(0, 0, s));
+        Assert.Throws<ArgumentOutOfRangeException>(() => r.Recognize(0, -5, s));
+        var mark = new Mark(0, MarkSide.Left, 0, 100, []);
+        Assert.Throws<ArgumentOutOfRangeException>(() => r.MarginNotes(mark, double.NaN, s));
+    }
+
+    [Fact]
+    public void An_invalid_line_height_is_rejected()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new FixedLineMetrics(0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new FixedLineMetrics(double.NaN));
+        var r = new MarkRecognizer(new BadMetrics());
+        Assert.Throws<ArgumentOutOfRangeException>(() => r.Recognize(0, _width, [Line(30, 100, 260)]));
+    }
+
+    private sealed class BadMetrics : IPageLineMetrics
+    {
+        public double LineHeightPt(int pageIndex) => -1;
+    }
+
+    [Fact]
     public void Custom_line_metrics_change_the_minimum_extent()
     {
         var s = Line(30, 100, 200); // 100 pt

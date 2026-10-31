@@ -10,7 +10,8 @@ public sealed class MarkRecognizer(IPageLineMetrics? metrics = null)
     public IReadOnlyList<Mark> Recognize(int pageIndex, double pageWidthPt, IReadOnlyList<InkStroke> strokes)
     {
         ArgumentNullException.ThrowIfNull(strokes);
-        var line = _metrics.LineHeightPt(pageIndex);
+        ValidateWidth(pageWidthPt);
+        var line = ValidLineHeight(pageIndex);
 
         var lines = new List<(MarkSide Side, double Top, double Bottom, Guid Id)>();
         foreach (var s in strokes)
@@ -51,12 +52,17 @@ public sealed class MarkRecognizer(IPageLineMetrics? metrics = null)
         return marks.OrderBy(m => m.TopPt).ThenBy(m => m.Side).ToList();
     }
 
-    /// <summary>The strokes that are not margin lines and sit near the mark: its margin note.</summary>
+    /// <summary>
+    /// The pen strokes that are not margin lines and sit near the mark: its margin note. Highlighter strokes
+    /// are not notes (the 3c highlighter source handles them); strokes without points are ignored.
+    /// An invalid page width or line height throws <see cref="ArgumentOutOfRangeException"/>.
+    /// </summary>
     public IReadOnlyList<InkStroke> MarginNotes(Mark mark, double pageWidthPt, IReadOnlyList<InkStroke> strokes)
     {
         ArgumentNullException.ThrowIfNull(mark);
         ArgumentNullException.ThrowIfNull(strokes);
-        var line = _metrics.LineHeightPt(mark.PageIndex);
+        ValidateWidth(pageWidthPt);
+        var line = ValidLineHeight(mark.PageIndex);
         var windowTop = mark.TopPt - (MarkRules.NoteWindowLines * line);
         var windowBottom = mark.BottomPt + (MarkRules.NoteWindowLines * line);
         var reach = (MarkRules.MarginZoneFraction + MarkRules.NoteReachFraction) * pageWidthPt;
@@ -64,7 +70,7 @@ public sealed class MarkRecognizer(IPageLineMetrics? metrics = null)
         var notes = new List<InkStroke>();
         foreach (var s in strokes)
         {
-            if (TryMarginLine(s, pageWidthPt, line, out _, out _, out _))
+            if (s.Tool != InkTool.Pen || s.Points.Count == 0 || TryMarginLine(s, pageWidthPt, line, out _, out _, out _))
             {
                 continue;
             }
@@ -89,6 +95,26 @@ public sealed class MarkRecognizer(IPageLineMetrics? metrics = null)
         return notes;
     }
 
+    private static void ValidateWidth(double pageWidthPt)
+    {
+        if (!double.IsFinite(pageWidthPt) || pageWidthPt <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pageWidthPt), "The page width must be finite and positive.");
+        }
+    }
+
+    /// <summary>A metrics provider returning a non-finite or non-positive height is a bug: throw, do not guess.</summary>
+    private double ValidLineHeight(int pageIndex)
+    {
+        var line = _metrics.LineHeightPt(pageIndex);
+        if (!double.IsFinite(line) || line <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pageIndex), "The line height must be finite and positive.");
+        }
+
+        return line;
+    }
+
     private static bool TryMarginLine(
         InkStroke s, double pageWidthPt, double line, out MarkSide side, out double top, out double bottom)
     {
@@ -109,7 +135,9 @@ public sealed class MarkRecognizer(IPageLineMetrics? metrics = null)
             maxY = Math.Max(maxY, pts[i].Y);
             if (i > 0)
             {
-                path += Math.Sqrt(Math.Pow(pts[i].X - pts[i - 1].X, 2) + Math.Pow(pts[i].Y - pts[i - 1].Y, 2));
+                var ddx = pts[i].X - pts[i - 1].X;
+                var ddy = pts[i].Y - pts[i - 1].Y;
+                path += Math.Sqrt((ddx * ddx) + (ddy * ddy));
             }
         }
 
