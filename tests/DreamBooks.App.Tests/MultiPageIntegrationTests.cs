@@ -341,6 +341,10 @@ public sealed class MultiPageIntegrationTests : IDisposable
                 Assert.True(vm.Viewport.VisiblePages.Count >= 4);
                 LoadEditors(view);
                 var saved = PenLine(view.SurfaceFor(1)!, 100);
+
+                // If a sharp bitmap was already shown at the fit zoom, the 50% zoom waits for its 150 ms settle and the
+                // scheduler goes idle after the previews: apply the settle now (as its timer would), then wait.
+                view.InvalidateBitmaps();
                 Idle(view);
                 Assert.All(vm.Viewport.VisiblePages, page => Assert.True(ShowsCurrentSharp(view, page), $"page {page}"));
 
@@ -757,11 +761,17 @@ public sealed class MultiPageIntegrationTests : IDisposable
         WpfTestThread.Drain();
     }
 
+    /// <summary>
+    /// The page shows a sharp bitmap of the current generation, rendered at the size of the current zoom (not a sharp
+    /// bitmap of an earlier zoom whose settle is still pending).
+    /// </summary>
     private static bool ShowsCurrentSharp(DocumentView view, int page) =>
         view.Bitmaps.Scheduler is { } scheduler
         && scheduler.TryGet(page, out var cached)
         && cached!.Quality == RenderQuality.Sharp
         && !scheduler.IsStale(page, cached)
+        && (cached.PixelWidth, cached.PixelHeight) == PageBitmapRenderer.SharpSize(
+            new PageSize(_widthPt, _heightPt), ((MainViewModel)view.DataContext).ZoomVm.Zoom, view.Pages.DpiScale)
         && ReferenceEquals(view.SurfaceFor(page)?.PageImage, cached.Bitmap);
 
     private static void MouseDown(InkSurface surface) =>
