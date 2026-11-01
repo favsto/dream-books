@@ -24,8 +24,16 @@ namespace DreamBooks.App.Views;
 /// retries pages whose renders failed while the file was released.</para>
 /// <para><b>Rail preview.</b> <see cref="GetPreviewAsync"/> serves small previews (<see cref="PageBitmapRenderer.PreviewSize"/>)
 /// from a cache of <see cref="PreviewCacheBudget"/> bytes, fed by the scheduler's preview renders too.</para>
+/// <para><b>Pages tab thumbnails.</b> <see cref="RenderThumbnailAsync"/> renders small bitmaps
+/// (<see cref="PageBitmapRenderer.ThumbnailSize"/>) for the Pages tab (FR-103) at the lowest priority: a queue of its own,
+/// served one render at a time, newest request first (the rows just scrolled into view), and only while the scheduler
+/// has no page render running or due, no zoom is settling and the file is not released by a save (looked at again
+/// every <see cref="ThumbnailIdlePoll"/>). PDFium runs one job at a
+/// time, so a page render asked meanwhile waits at most for the one small thumbnail in progress. A request that is
+/// cancelled (its row recycled) leaves the queue at once; another document empties it.</para>
 /// <para><b>Threading.</b> Used on the UI thread; renders start on the thread pool (the scheduler's, or
-/// <see cref="Task.Run(Action)"/> for the rail), and the scheduler's events come back through the dispatcher.</para>
+/// <see cref="Task.Run(Action)"/> for the rail and the thumbnails), and the scheduler's events come back through the
+/// dispatcher.</para>
 /// </remarks>
 internal sealed class PageBitmapCoordinator : IDisposable
 {
@@ -37,6 +45,9 @@ internal sealed class PageBitmapCoordinator : IDisposable
 
     /// <summary>The zoom must stay still this long before the pages are rendered again at the new size (NFR-07).</summary>
     public static readonly TimeSpan ZoomSettleDelay = TimeSpan.FromMilliseconds(150);
+
+    /// <summary>While page renders are due, queued thumbnails look again this often whether they may start.</summary>
+    public static readonly TimeSpan ThumbnailIdlePoll = TimeSpan.FromMilliseconds(40);
 
     private readonly IBitmapRenderer<BitmapSource> _renderer;
     private readonly IDelayScheduler _delays;
@@ -59,6 +70,9 @@ internal sealed class PageBitmapCoordinator : IDisposable
     private bool _sharpShown;
     private long _previewBytes;
     private long _previewClock;
+    private readonly LinkedList<ThumbnailJob> _thumbnails = new();
+    private ThumbnailJob? _thumbnailRunning;
+    private IDisposable? _thumbnailPoll;
     private bool _disposed;
 
     /// <param name="renderer">Renders one page; called on thread-pool threads only.</param>
@@ -266,6 +280,57 @@ internal sealed class PageBitmapCoordinator : IDisposable
         }
     }
 
+    /// <summary>
+    /// A small bitmap of a page (<see cref="PageBitmapRenderer.ThumbnailSize"/>) for the Pages tab (FR-103), rendered at
+    /// the lowest priority (see the remarks); not cached here. Null when there is no document, the page does not exist,
+    /// the render failed, the request was cancelled or the document changed meanwhile. Never throws. UI thread.
+    /// </summary>
+    public Task<BitmapSource?> RenderThumbnailAsync(int pageIndex, CancellationToken ct)
+    {
+        if (_layout is not { } layout
+            || pageIndex < 0
+            || pageIndex >= layout.PageCount
+            || PageSizeOf(layout, pageIndex) is not { } page)
+        {
+            return Task.FromResult<BitmapSource?>(null);
+        }
+
+        var (width, height) = PageBitmapRenderer.ThumbnailSize(page, _dpiScale);
+        return RunWhenIdleAsync(token => Task.Run(() => _renderer.RenderAsync(pageIndex, width, height, token), token), ct);
+    }
+
+    /// <summary>
+    /// Runs other small PDFium work of the Pages tab (a page's stored ink) in the thumbnails' low-priority queue, so it
+    /// never goes ahead of a page render either. The result, or null when the work failed, was cancelled, or the document
+    /// changed meanwhile. Never throws. UI thread; <paramref name="work"/> is started on the UI thread and must move its
+    /// heavy part off it (the page reads go to the PDFium thread).
+    /// </summary>
+    public async Task<T?> RunWhenIdleAsync<T>(Func<CancellationToken, Task<T?>> work, CancellationToken ct)
+        where T : class
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        if (_disposed || ct.IsCancellationRequested || _layout is null)
+        {
+            return null;
+        }
+
+        var job = new ThumbnailJob(async token => await work(token).ConfigureAwait(false), _document);
+        job.Node = _thumbnails.AddFirst(job); // newest first: the rows just shown
+        job.Registration = ct.Register(() =>
+        {
+            if (_dispatcher.CheckAccess())
+            {
+                AbandonThumbnail(job);
+            }
+            else
+            {
+                _dispatcher.BeginInvoke(() => AbandonThumbnail(job));
+            }
+        });
+        PumpThumbnails();
+        return await job.Completion.Task as T;
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -275,6 +340,94 @@ internal sealed class PageBitmapCoordinator : IDisposable
 
         ReleaseDocument();
         _disposed = true;
+    }
+
+    /// <summary>Thumbnails queued, plus the one rendering (tests).</summary>
+    internal int PendingThumbnailCount => _thumbnails.Count + (_thumbnailRunning is null ? 0 : 1);
+
+    /// <summary>Starts the next thumbnail when none runs and no page render is running or due; otherwise looks again later.</summary>
+    private void PumpThumbnails()
+    {
+        if (_disposed || _thumbnailRunning is not null || _thumbnails.First is not { } next)
+        {
+            return;
+        }
+
+        if (_scheduler is not { } scheduler
+            || scheduler.HasPendingWork
+            || double.IsNaN(_zoom)
+            || _settle is not null
+            || _renderer is PageBitmapRenderer { Renderer: null }) // a save has the file released: wait for it
+        {
+            _thumbnailPoll ??= _delays.Schedule(ThumbnailIdlePoll, () =>
+            {
+                _thumbnailPoll = null;
+                PumpThumbnails();
+            });
+            return;
+        }
+
+        _thumbnails.RemoveFirst();
+        var job = next.Value;
+        job.Node = null;
+        _thumbnailRunning = job;
+        _ = RunThumbnailAsync(job);
+    }
+
+    /// <summary>One thumbnail job; never faults. Continues on the UI thread, then starts the next.</summary>
+    private async Task RunThumbnailAsync(ThumbnailJob job)
+    {
+        var token = job.Cancellation.Token;
+        object? result;
+        try
+        {
+            result = await job.Work(token);
+        }
+#pragma warning disable CA1031 // A thumbnail that cannot be rendered keeps its placeholder (NFR-11).
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            result = null;
+        }
+
+        if (ReferenceEquals(_thumbnailRunning, job))
+        {
+            _thumbnailRunning = null;
+        }
+
+        job.Finish(token.IsCancellationRequested || job.Document != _document || _disposed ? null : result);
+        PumpThumbnails();
+    }
+
+    /// <summary>The caller gave up (its row was recycled): out of the queue, or its render cancelled. UI thread.</summary>
+    private void AbandonThumbnail(ThumbnailJob job)
+    {
+        if (job.Node is { } node)
+        {
+            _thumbnails.Remove(node);
+            job.Node = null;
+        }
+
+        job.Cancellation.Cancel();
+        job.Finish(null);
+    }
+
+    private void ReleaseThumbnails()
+    {
+        _thumbnailPoll?.Dispose();
+        _thumbnailPoll = null;
+        foreach (var job in _thumbnails.ToArray())
+        {
+            job.Node = null;
+            job.Finish(null);
+        }
+
+        _thumbnails.Clear();
+        if (_thumbnailRunning is { } running)
+        {
+            running.Cancellation.Cancel(); // it frees its slot when the renderer returns
+            running.Finish(null);
+        }
     }
 
     /// <summary>The rail render of <paramref name="rail"/>; never faults. Continues on the UI thread.</summary>
@@ -339,6 +492,7 @@ internal sealed class PageBitmapCoordinator : IDisposable
 
         _rail?.Cancellation.Cancel();
         _rail = null;
+        ReleaseThumbnails();
         _sharpShown = false;
         _layout = null;
         _document++;
@@ -515,6 +669,31 @@ internal sealed class PageBitmapCoordinator : IDisposable
         public Task<BitmapSource?> Render { get; set; } = Task.FromResult<BitmapSource?>(null);
 
         public int Waiters { get; set; }
+    }
+
+    /// <summary>
+    /// A low-priority request (a thumbnail render, or a page's stored ink): queued, then running. Touched on the UI
+    /// thread only. Its cancellation source is not disposed (no timer; a late cancel must never throw).
+    /// </summary>
+    private sealed class ThumbnailJob(Func<CancellationToken, Task<object?>> work, int document)
+    {
+        public Func<CancellationToken, Task<object?>> Work { get; } = work;
+
+        public int Document { get; } = document;
+
+        public CancellationTokenSource Cancellation { get; } = new();
+
+        public TaskCompletionSource<object?> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public LinkedListNode<ThumbnailJob>? Node { get; set; }
+
+        public CancellationTokenRegistration Registration { get; set; }
+
+        public void Finish(object? result)
+        {
+            Registration.Unregister();
+            Completion.TrySetResult(result);
+        }
     }
 
     private sealed class PreviewEntry(BitmapSource bitmap, long bytes)

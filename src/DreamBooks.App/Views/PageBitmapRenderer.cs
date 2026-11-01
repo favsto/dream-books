@@ -23,6 +23,12 @@ internal sealed class PageBitmapRenderer : IBitmapRenderer<BitmapSource>
     /// <summary>Width of a preview in DIPs (rendered at the screen's scale): the quick first render and the rail bubble.</summary>
     public const double PreviewWidthDip = 300;
 
+    /// <summary>
+    /// Width of a Pages tab thumbnail in DIPs (rendered at the screen's scale); the list lays its rows out with the same
+    /// width (<c>PagesThumbnailWidth</c> in the theme).
+    /// </summary>
+    public const double ThumbnailWidthDip = 140;
+
     /// <summary>A preview's height is at most this many times its width (very tall pages stay small).</summary>
     private const double _maxPreviewAspect = 2;
 
@@ -59,7 +65,17 @@ internal sealed class PageBitmapRenderer : IBitmapRenderer<BitmapSource>
     /// The pixel size of a preview: <see cref="PreviewWidthDip"/> wide at the screen's scale, with the page's
     /// proportions; a page taller than <see cref="_maxPreviewAspect"/> times its width is fitted in that box instead.
     /// </summary>
-    public static (int Width, int Height) PreviewSize(PageSize pageSize, double dpiScale)
+    public static (int Width, int Height) PreviewSize(PageSize pageSize, double dpiScale) =>
+        BoxedSize(pageSize, PreviewWidthDip * dpiScale, dpiScale);
+
+    /// <summary>
+    /// The pixel size of a Pages tab thumbnail (FR-103): <see cref="ThumbnailWidthDip"/> wide at the screen's scale, with
+    /// the page's proportions, fitted like <see cref="PreviewSize"/> when the page is very tall.
+    /// </summary>
+    public static (int Width, int Height) ThumbnailSize(PageSize pageSize, double dpiScale) =>
+        BoxedSize(pageSize, ThumbnailWidthDip * dpiScale, dpiScale);
+
+    private static (int Width, int Height) BoxedSize(PageSize pageSize, double boxWidth, double dpiScale)
     {
         if (!(pageSize.WidthPt > 0) || !(pageSize.HeightPt > 0) || !(dpiScale > 0)
             || !double.IsFinite(pageSize.WidthPt) || !double.IsFinite(pageSize.HeightPt) || !double.IsFinite(dpiScale))
@@ -67,7 +83,6 @@ internal sealed class PageBitmapRenderer : IBitmapRenderer<BitmapSource>
             throw new ArgumentOutOfRangeException(nameof(pageSize), "Page size and screen scale must be positive.");
         }
 
-        var boxWidth = PreviewWidthDip * dpiScale;
         var scale = Math.Min(boxWidth / pageSize.WidthPt, boxWidth * _maxPreviewAspect / pageSize.HeightPt);
         return (
             Math.Max(1, (int)Math.Round(pageSize.WidthPt * scale)),

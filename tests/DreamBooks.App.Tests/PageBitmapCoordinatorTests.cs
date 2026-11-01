@@ -458,6 +458,157 @@ public sealed class PageBitmapCoordinatorTests
         });
     }
 
+    [Fact]
+    public void Thumbnail_renders_wait_until_no_page_render_is_due_newest_first_and_cancel_when_abandoned()
+    {
+        WpfTestThread.Run(() =>
+        {
+            using var f = new Fixture(30);
+            f.Open(dpiScale: 1.5);
+            f.Show(0, 2, [0]);
+            var thumb = PageBitmapRenderer.ThumbnailSize(_page, 1.5);
+            Assert.Equal((int)Math.Round(PageBitmapRenderer.ThumbnailWidthDip * 1.5), thumb.Width);
+            Assert.InRange(thumb.Height, (int)(thumb.Width * _heightPt / _widthPt) - 1, (int)(thumb.Width * _heightPt / _widthPt) + 1);
+
+            using var abandon = new CancellationTokenSource();
+            var a = f.Coordinator.RenderThumbnailAsync(10, CancellationToken.None);
+            var b = f.Coordinator.RenderThumbnailAsync(11, abandon.Token);
+            var c = f.Coordinator.RenderThumbnailAsync(12, CancellationToken.None);
+            f.WaitForPending(0);
+
+            // Page renders are due: no thumbnail render starts, however long they take.
+            for (var i = 0; i < 5; i++)
+            {
+                f.Delays.Advance(PageBitmapCoordinator.ThumbnailIdlePoll);
+                WpfTestThread.Drain();
+            }
+
+            Assert.DoesNotContain(f.Renderer.Requests, r => r.Page >= 10);
+            abandon.Cancel(); // its row was recycled: it leaves the queue without a render
+            WpfTestThread.PumpUntil(() => b.IsCompleted);
+            Assert.Null(b.Result);
+
+            // Renders done: the thumbnails follow one at a time, the most recently asked first.
+            f.Renderer.Auto = true;
+            f.Renderer.CompletePending();
+            f.Idle();
+            f.Renderer.Auto = false;
+            WpfTestThread.PumpUntil(() =>
+            {
+                f.Delays.Advance(PageBitmapCoordinator.ThumbnailIdlePoll);
+                return f.Renderer.Pending.Any(r => r.Page >= 10);
+            });
+            Assert.Equal([12], f.Renderer.Pending.Where(r => r.Page >= 10).Select(r => r.Page));
+            Assert.Equal((thumb.Width, thumb.Height), (f.Renderer.Pending.Last().Width, f.Renderer.Pending.Last().Height));
+
+            // A visible page wanted again while a thumbnail runs: the next thumbnail waits for it.
+            f.Show(20, 22, [21]);
+            f.Renderer.Complete(12);
+            Assert.Equal(thumb.Width, Await(c)!.PixelWidth);
+            f.WaitForPending(21);
+            f.Delays.Advance(PageBitmapCoordinator.ThumbnailIdlePoll);
+            WpfTestThread.Drain();
+            Assert.DoesNotContain(f.Renderer.Requests, r => r.Page == 10);
+            f.Renderer.Auto = true;
+            f.Renderer.CompletePending();
+            f.Idle();
+            WpfTestThread.PumpUntil(() =>
+            {
+                f.Delays.Advance(PageBitmapCoordinator.ThumbnailIdlePoll);
+                return a.IsCompleted;
+            });
+            Assert.NotNull(a.Result);
+            Assert.DoesNotContain(f.Renderer.Requests, r => r.Page == 11);
+            var uiThread = Environment.CurrentManagedThreadId;
+            Assert.All(f.Renderer.Requests, r => Assert.NotEqual(uiThread, r.ThreadId)); // never on the UI thread
+
+            // Another document: queued thumbnails end with nothing, a failing render yields null, never an exception.
+            f.Renderer.Auto = false;
+            f.Show(0, 2, [0]);
+            var queued = f.Coordinator.RenderThumbnailAsync(15, CancellationToken.None);
+            f.Coordinator.SetDocument(null);
+            WpfTestThread.PumpUntil(() => queued.IsCompleted);
+            Assert.Null(queued.Result);
+            Assert.Null(Await(f.Coordinator.RenderThumbnailAsync(3, CancellationToken.None)));
+        });
+    }
+
+    [Fact]
+    public void Other_thumbnail_work_waits_in_the_same_low_priority_queue()
+    {
+        WpfTestThread.Run(() =>
+        {
+            using var f = new Fixture(30);
+            f.Open();
+            f.Show(0, 2, [0]);
+            f.WaitForPending(0);
+            var runs = 0;
+            var ink = f.Coordinator.RunWhenIdleAsync(
+                _ =>
+                {
+                    runs++;
+                    return Task.FromResult<string?>("ink");
+                },
+                CancellationToken.None);
+            f.Delays.Advance(PageBitmapCoordinator.ThumbnailIdlePoll);
+            WpfTestThread.Drain();
+            Assert.Equal(0, runs); // a page render is due
+
+            f.Renderer.Auto = true;
+            f.Renderer.CompletePending();
+            f.Idle();
+            WpfTestThread.PumpUntil(() =>
+            {
+                f.Delays.Advance(PageBitmapCoordinator.ThumbnailIdlePoll);
+                return ink.IsCompleted;
+            });
+            Assert.Equal("ink", ink.Result);
+            Assert.Equal(1, runs);
+        });
+    }
+
+    [Fact]
+    public void Thumbnails_wait_while_a_save_has_the_file_released()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var released = new PageBitmapRenderer(); // no PdfRenderer: as during a plain save
+            using var coordinator = new PageBitmapCoordinator(released, new ManualScheduler(), _ => null);
+            coordinator.SetDocument(new DocumentLayout(Enumerable.Repeat(new PageDimensions(_widthPt, _heightPt), 5).ToArray()));
+            coordinator.SetZoom(1);
+            coordinator.SetWindow((0, 1), [0]);
+            WpfTestThread.PumpUntil(() => !coordinator.HasPendingRenders); // the page renders fail meanwhile
+
+            var thumbnail = coordinator.RenderThumbnailAsync(3, CancellationToken.None);
+            WpfTestThread.Drain();
+            Assert.False(thumbnail.IsCompleted); // queued, not failed: it renders once the file is back
+            Assert.Equal(1, coordinator.PendingThumbnailCount);
+        });
+    }
+
+    [Fact]
+    public void A_failing_thumbnail_render_yields_null()
+    {
+        WpfTestThread.Run(() =>
+        {
+            using var f = new Fixture(30) { Renderer = { Auto = true, Throws = page => page == 7, Fails = page => page == 8 } };
+            f.Open();
+            f.Show(0, 1, [0]);
+            f.Idle();
+            var thrown = f.Coordinator.RenderThumbnailAsync(7, CancellationToken.None);
+            var failed = f.Coordinator.RenderThumbnailAsync(8, CancellationToken.None);
+            WpfTestThread.PumpUntil(() =>
+            {
+                f.Delays.Advance(PageBitmapCoordinator.ThumbnailIdlePoll);
+                return thrown.IsCompleted && failed.IsCompleted;
+            });
+            Assert.True(thrown.IsCompletedSuccessfully);
+            Assert.Null(thrown.Result);
+            Assert.Null(failed.Result);
+            Assert.NotNull(Await(f.Coordinator.RenderThumbnailAsync(9, CancellationToken.None)));
+        });
+    }
+
     private static T Await<T>(Task<T> task)
     {
         WpfTestThread.PumpUntil(() => task.IsCompleted);
