@@ -1,30 +1,34 @@
 namespace DreamBooks.Core.Marks;
 
-/// <summary>Tunable constants of the mark rule (spec section 4). Tolerant on purpose: a few false marks beat missed ones.</summary>
+/// <summary>
+/// Tunable constants of the mark rule (spec section 4). Tolerant on purpose: a few false marks beat missed ones.
+/// Tuned on 1 Nov 2026 on Fausto's real pen strokes (an A4 book): his margin lines are 40-95 pt long, 32-48 pt from
+/// the page edge, within 8 degrees of vertical, and some are retraced up and down several times.
+/// </summary>
 public static class MarkRules
 {
-    /// <summary>Maximum angle between the stroke's end-to-end line and the vertical, in degrees.</summary>
-    public const double MaxDeviationFromVerticalDegrees = 20;
-
     /// <summary>
-    /// Maximum path length as a multiple of the end-to-end distance (rejects zig-zags and scribbles; a square bracket
-    /// with short serifs still passes). The path is measured on the stroke resampled at
-    /// <see cref="PathSampleSpacingFraction"/>, never sample by sample.
+    /// Maximum average deviation from the vertical, in degrees: the stroke's horizontal travel may be at most
+    /// tan(this) times its vertical travel (sums of |dx| and |dy| on the resampled stroke). A straight line tilted up to
+    /// this angle, a slightly wavy, curved or retraced line and a square bracket pass; zig-zags, scribbles, loops and
+    /// horizontal strokes, which move sideways about as much as down, do not.
     /// </summary>
-    public const double MaxPathToDistanceRatio = 1.5;
+    public const double MaxDeviationFromVerticalDegrees = 25;
 
     /// <summary>
-    /// Spacing of the points the path length is measured on, as a fraction of the end-to-end distance. The raw pen
-    /// samples are often less than a point apart with about a DIP of jitter each: summed one by one, a straight line
-    /// is half again as long as it is, and the ratio would depend on the zoom and on how slowly the line was drawn.
+    /// Spacing of the points the travel is measured on, as a fraction of the stroke's vertical extent, so the
+    /// digitizer's sample-to-sample jitter does not count and the result does not depend on the sampling density.
     /// </summary>
     public const double PathSampleSpacingFraction = 0.05;
 
     /// <summary>Minimum vertical extent, in text lines.</summary>
     public const double MinExtentLines = 2;
 
-    /// <summary>Line height used until the text layer supplies a real one (3b-2).</summary>
-    public const double DefaultLineHeightPt = 36;
+    /// <summary>
+    /// Line height used until the text layer supplies a real one (3b-2): a book's body text line (about 14-15 pt in
+    /// Fausto's book, whose three-line margin lines start at 40 pt).
+    /// </summary>
+    public const double DefaultLineHeightPt = 15;
 
     /// <summary>Width of the outer margin zone on each side, as a fraction of the page width.</summary>
     public const double MarginZoneFraction = 0.18;

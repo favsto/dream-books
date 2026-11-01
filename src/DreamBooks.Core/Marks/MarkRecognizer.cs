@@ -135,16 +135,16 @@ public sealed class MarkRecognizer(IPageLineMetrics? metrics = null)
             maxY = Math.Max(maxY, pts[i].Y);
         }
 
-        var dx = pts[^1].X - pts[0].X;
-        var dy = pts[^1].Y - pts[0].Y;
-        var dist = Math.Sqrt((dx * dx) + (dy * dy));
-        if (dist <= 0 || ResampledPathLength(pts, MarkRules.PathSampleSpacingFraction * dist) > MarkRules.MaxPathToDistanceRatio * dist)
+        var height = maxY - minY;
+        if (height <= 0 || height < MarkRules.MinExtentLines * line)
         {
             return false;
         }
 
-        var angle = Math.Atan2(Math.Abs(dx), Math.Abs(dy)) * 180 / Math.PI;
-        if (angle > MarkRules.MaxDeviationFromVerticalDegrees || maxY - minY < MarkRules.MinExtentLines * line)
+        // Mostly vertical movement: a straight, tilted, slightly wavy or retraced line, a bracket. Zig-zags, scribbles,
+        // loops and horizontal strokes move sideways about as much as down, or more.
+        var (across, along) = ResampledTravel(pts, MarkRules.PathSampleSpacingFraction * height);
+        if (across > Math.Tan(MarkRules.MaxDeviationFromVerticalDegrees * Math.PI / 180) * along)
         {
             return false;
         }
@@ -170,26 +170,27 @@ public sealed class MarkRecognizer(IPageLineMetrics? metrics = null)
     }
 
     /// <summary>
-    /// The path length over the points kept at least <paramref name="spacing"/> apart (the first, each one that far
-    /// from the last kept, and the last): the shape of the stroke without the digitizer's sample-to-sample jitter, so
-    /// the result does not grow with the sampling density (see <see cref="MarkRules.PathSampleSpacingFraction"/>).
+    /// The horizontal and vertical travel (sums of |dx| and |dy|) over the points kept at least
+    /// <paramref name="spacing"/> apart (the first, each one that far from the last kept, and the last): the shape of the
+    /// stroke without the digitizer's sample-to-sample jitter, so the result does not depend on the sampling density
+    /// (see <see cref="MarkRules.PathSampleSpacingFraction"/>).
     /// </summary>
-    private static double ResampledPathLength(IReadOnlyList<InkPoint> pts, double spacing)
+    private static (double Across, double Along) ResampledTravel(IReadOnlyList<InkPoint> pts, double spacing)
     {
-        double path = 0;
+        double across = 0, along = 0;
         var kept = pts[0];
         for (var i = 1; i < pts.Count; i++)
         {
-            var ddx = pts[i].X - kept.X;
-            var ddy = pts[i].Y - kept.Y;
-            var d = Math.Sqrt((ddx * ddx) + (ddy * ddy));
-            if (d >= spacing || i == pts.Count - 1)
+            var ddx = Math.Abs(pts[i].X - kept.X);
+            var ddy = Math.Abs(pts[i].Y - kept.Y);
+            if (Math.Sqrt((ddx * ddx) + (ddy * ddy)) >= spacing || i == pts.Count - 1)
             {
-                path += d;
+                across += ddx;
+                along += ddy;
                 kept = pts[i];
             }
         }
 
-        return path;
+        return (across, along);
     }
 }

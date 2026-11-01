@@ -46,9 +46,9 @@ public class MarkRecognizerTests
     }
 
     [Fact]
-    public void A_tilted_line_over_twenty_degrees_is_not_a_mark()
+    public void A_tilted_line_over_twenty_five_degrees_is_not_a_mark()
     {
-        Assert.Empty(Recognize(Line(20, 100, 260, dx: 70)));
+        Assert.Empty(Recognize(Line(20, 100, 260, dx: 80)));
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public class MarkRecognizerTests
     [Fact]
     public void A_line_shorter_than_two_lines_is_not_a_mark()
     {
-        Assert.Empty(Recognize(Line(30, 100, 170)));
+        Assert.Empty(Recognize(Line(30, 100, 125)));
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public class MarkRecognizerTests
     {
         var a = Line(30, 100, 260);
         var b = Line(40, 200, 330);
-        var c = Line(35, 380, 500); // gap 50 pt = 1.39 lines
+        var c = Line(35, 350, 500); // gap 20 pt = 1.33 lines
         var m = Assert.Single(Recognize(a, b, c));
         Assert.Equal(100, m.TopPt, 3);
         Assert.Equal(500, m.BottomPt, 3);
@@ -100,7 +100,7 @@ public class MarkRecognizerTests
     [Fact]
     public void Lines_farther_apart_than_one_and_a_half_lines_stay_separate_marks()
     {
-        var marks = Recognize(Line(30, 100, 260), Line(30, 320, 480)); // gap 60 pt
+        var marks = Recognize(Line(30, 100, 260), Line(30, 290, 450)); // gap 30 pt = 2 lines
         Assert.Equal(2, marks.Count);
     }
 
@@ -129,7 +129,7 @@ public class MarkRecognizerTests
     {
         var line = Line(30, 200, 360);
         var near = Stroke([(60, 250), (90, 260), (120, 255)]);
-        var justAbove = Stroke([(40, 170), (70, 175)]); // within one line above
+        var justAbove = Stroke([(40, 188), (70, 195)]); // within one line (15 pt) above
         var tooFarAbove = Stroke([(40, 100), (70, 110)]);
         var tooFarRight = Stroke([(400, 250), (430, 260)]);
         var onOtherSide = Stroke([(560, 250), (580, 260)]);
@@ -197,15 +197,15 @@ public class MarkRecognizerTests
     [Fact]
     public void A_gap_of_exactly_one_and_a_half_lines_merges_and_just_over_does_not()
     {
-        Assert.Single(Recognize(Line(30, 100, 260), Line(30, 314, 474)));
-        Assert.Equal(2, Recognize(Line(30, 100, 260), Line(30, 314.5, 474.5)).Count);
+        Assert.Single(Recognize(Line(30, 100, 260), Line(30, 282.5, 442.5)));
+        Assert.Equal(2, Recognize(Line(30, 100, 260), Line(30, 283, 443)).Count);
     }
 
     [Fact]
     public void An_extent_of_exactly_two_lines_is_a_mark_and_just_under_is_not()
     {
-        Assert.Single(Recognize(Line(30, 100, 172)));
-        Assert.Empty(Recognize(Line(30, 100, 171.9)));
+        Assert.Single(Recognize(Line(30, 100, 130)));
+        Assert.Empty(Recognize(Line(30, 100, 129.9)));
     }
 
     [Fact]
@@ -231,17 +231,37 @@ public class MarkRecognizerTests
     }
 
     [Fact]
-    public void A_path_ratio_just_under_the_limit_is_a_mark_and_just_over_is_not()
+    public void An_average_deviation_just_under_twenty_five_degrees_is_a_mark_and_just_over_is_not()
     {
-        // Two-leg detour with a vertical end-to-end of 200 pt: path = 2 * sqrt(100^2 + w^2) = ratio * 200.
-        static InkStroke Detour(double ratio)
+        // Two legs going away from the vertical and back, 100 pt down each: horizontal travel / vertical travel = tan(angle).
+        static InkStroke Detour(double degrees)
         {
-            var w = 100 * Math.Sqrt((ratio * ratio) - 1);
+            var w = 100 * Math.Tan(degrees * Math.PI / 180);
             return Stroke([(30.0, 100.0), (30 + w, 200.0), (30.0, 300.0)]);
         }
 
-        Assert.Single(Recognize(Detour(1.49)));
-        Assert.Empty(Recognize(Detour(1.51)));
+        Assert.Single(Recognize(Detour(24.9)));
+        Assert.Empty(Recognize(Detour(25.1)));
+    }
+
+    [Fact]
+    public void A_line_retraced_up_and_down_several_times_is_a_mark()
+    {
+        // Down, up, down, up, down over 66 pt, wandering 3 pt sideways: a thickened line (seen on the device).
+        var pts = new List<(double X, double Y)>();
+        double[] turns = [546, 610, 547, 604, 549, 607];
+        for (var leg = 0; leg < turns.Length - 1; leg++)
+        {
+            for (var i = 0; i < 60; i++)
+            {
+                var t = i / 60.0;
+                pts.Add((32 + (1.5 * Math.Sin((leg + t) * 1.3)), turns[leg] + ((turns[leg + 1] - turns[leg]) * t)));
+            }
+        }
+
+        var m = Assert.Single(Recognize(Stroke(pts)));
+        Assert.Equal(546, m.TopPt, 0);
+        Assert.Equal(610, m.BottomPt, 0);
     }
 
     [Fact]
@@ -273,9 +293,9 @@ public class MarkRecognizerTests
     [Fact]
     public void Custom_line_metrics_change_the_minimum_extent()
     {
-        var s = Line(30, 100, 160); // 60 pt: under two default lines, over two 20 pt lines
+        var s = Line(30, 100, 125); // 25 pt: under two default (15 pt) lines, over two 10 pt lines
         Assert.Empty(new MarkRecognizer().Recognize(0, _width, [s]));
-        Assert.Single(new MarkRecognizer(new FixedLineMetrics(20)).Recognize(0, _width, [s]));
+        Assert.Single(new MarkRecognizer(new FixedLineMetrics(10)).Recognize(0, _width, [s]));
     }
 
     /// <summary>

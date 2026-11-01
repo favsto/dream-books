@@ -211,7 +211,7 @@ internal static class Strings
     /// <summary>Automation name of the count in the marks panel's header: {0} the number of marks.</summary>
     public static string MarksCountNameFormat => Get(nameof(MarksCountNameFormat));
 
-    /// <summary>A row's automation name: {0} page number, {1} side (no line: the 36 pt "line" is not a printed line).</summary>
+    /// <summary>A row's automation name: {0} page number, {1} side (no line: the fixed default "line" is not a printed line).</summary>
     public static string MarkRowNameFormat => Get(nameof(MarkRowNameFormat));
 
     public static string MarkSideLeft => Get(nameof(MarkSideLeft));

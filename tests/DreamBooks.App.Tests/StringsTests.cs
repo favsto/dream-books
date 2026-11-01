@@ -60,7 +60,7 @@ public class StringsTests
         var name = string.Format(CultureInfo.CurrentCulture, Strings.MarkRowNameFormat, 12, Strings.MarkSideLeft);
         Assert.Contains("12", name, StringComparison.Ordinal);
         Assert.Contains(Strings.MarkSideLeft, name, StringComparison.Ordinal);
-        Assert.DoesNotContain("{2}", Strings.MarkRowNameFormat, StringComparison.Ordinal); // no line number (fixed 36 pt lines)
+        Assert.DoesNotContain("{2}", Strings.MarkRowNameFormat, StringComparison.Ordinal); // no line number (fixed default lines)
     }
 
     [Fact]
