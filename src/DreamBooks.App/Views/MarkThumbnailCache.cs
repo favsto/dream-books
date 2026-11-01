@@ -1,9 +1,6 @@
 using System.Windows;
-using System.Windows.Media;
-using DreamBooks.App.Ink;
 using DreamBooks.App.ViewModels;
 using DreamBooks.Core.Geometry;
-using DreamBooks.Core.Ink;
 using DreamBooks.Core.Marks;
 using DreamBooks.Core.Model;
 
@@ -129,38 +126,12 @@ internal sealed class MarkThumbnailCache
     }
 
     // Thread pool: the outlines as drawn on the page (same geometry as the page's ink layer).
-    private static List<(InkColor Color, IReadOnlyList<IReadOnlyList<PointD>> Figures)> BuildOutlines(MarkInk ink)
-    {
-        var outlines = new List<(InkColor, IReadOnlyList<IReadOnlyList<PointD>>)>(ink.Strokes.Count);
-        foreach (var stroke in ink.Strokes)
-        {
-            outlines.Add((stroke.Color, StrokeGeometry.BuildOutline(stroke, ink.Curve, ink.Smoothing)));
-        }
-
-        return outlines;
-    }
+    private static List<(InkColor Color, IReadOnlyList<IReadOnlyList<PointD>> Figures)> BuildOutlines(MarkInk ink) =>
+        InkDrawings.BuildOutlines(ink.Strokes, ink.Curve, ink.Smoothing);
 
     private static MarkThumbnail ToThumbnail(
-        MarkInk ink, List<(InkColor Color, IReadOnlyList<IReadOnlyList<PointD>> Figures)> outlines)
-    {
-        var brushes = new Dictionary<InkColor, Brush>();
-        var drawings = new List<GeometryDrawing>(outlines.Count);
-        foreach (var (color, figures) in outlines)
-        {
-            if (!brushes.TryGetValue(color, out var brush))
-            {
-                brush = new SolidColorBrush(CustomInkLayer.ToColor(color));
-                brush.Freeze();
-                brushes[color] = brush;
-            }
-
-            var drawing = new GeometryDrawing(brush, null, OutlineGeometry.ToStreamGeometry(figures));
-            drawing.Freeze();
-            drawings.Add(drawing);
-        }
-
-        return new MarkThumbnail(BandOf(ink.Mark, ink.PageWidthPt), drawings);
-    }
+        MarkInk ink, List<(InkColor Color, IReadOnlyList<IReadOnlyList<PointD>> Figures)> outlines) =>
+        new(BandOf(ink.Mark, ink.PageWidthPt), InkDrawings.ToDrawings(outlines));
 
     private void Store(Mark mark, MarkThumbnail thumbnail)
     {

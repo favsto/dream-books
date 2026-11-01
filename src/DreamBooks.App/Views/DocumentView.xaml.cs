@@ -14,6 +14,7 @@ using DreamBooks.App.Ink;
 using DreamBooks.App.Resources;
 using DreamBooks.App.Services;
 using DreamBooks.App.ViewModels;
+using DreamBooks.Core.Documents;
 using DreamBooks.Core.Layout;
 using DreamBooks.Core.Rendering;
 using DreamBooks.Pdf;
@@ -76,6 +77,7 @@ public partial class DocumentView : UserControl
     private readonly DispatcherTimer _editorTimer;
     private readonly PageBitmapRenderer _pdfBitmaps = new();
     private PageBitmapCoordinator _bitmaps;
+    private readonly PageInkCache _pageInk;
     private IBitmapRenderer<BitmapSource> _bitmapRenderer;
     private MainViewModel? _viewModel;
     private PageSurfacePool _pool;
@@ -103,6 +105,9 @@ public partial class DocumentView : UserControl
         _bitmapRenderer = _pdfBitmaps;
         _bitmaps = NewBitmapCoordinator();
         Rail.PreviewSource = (pageIndex, ct) => _bitmaps.GetPreviewAsync(pageIndex, ct); // the current coordinator
+        _pageInk = new PageInkCache((pageIndex, ct) =>
+            _viewModel is { } vm ? vm.LoadPageInkAsync(pageIndex, ct) : Task.FromResult<PageInk?>(null));
+        Rail.InkSource = (pageIndex, ct) => _pageInk.GetAsync(pageIndex, ct); // the reader's ink over the preview
         Rail.CanScroll = () => !AnyInking();
         _editorTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = DocumentViewportViewModel.CurrentPageDelay };
         _editorTimer.Tick += (_, _) => FlushEditorLoads();
@@ -143,6 +148,9 @@ public partial class DocumentView : UserControl
 
     /// <summary>The page bitmaps: scheduler, cache and the rail's previews (<see cref="PageBitmapCoordinator.GetPreviewAsync"/>).</summary>
     internal PageBitmapCoordinator Bitmaps => _bitmaps;
+
+    /// <summary>The ink of the pages shown in the rail's preview bubble (UI-07).</summary>
+    internal PageInkCache PageInk => _pageInk;
 
     /// <summary>The surfaces in use, by page index (the retained window, plus a page kept while it is inking).</summary>
     internal IReadOnlyDictionary<int, InkSurface> ActiveSurfaces =>
@@ -281,6 +289,8 @@ public partial class DocumentView : UserControl
             old.Viewport.PropertyChanged -= OnViewportPropertyChanged;
             old.PropertyChanged -= OnViewModelPropertyChanged;
             old.Search.PageHighlightsChanged -= OnSearchHighlightsChanged;
+            old.Marks.InkChanged -= OnPageInkChanged;
+            old.Marks.DocumentChanged -= OnMarksDocumentChanged;
             old.FirstRendersDone = null;
             old.RendersPending = null;
         }
@@ -295,6 +305,7 @@ public partial class DocumentView : UserControl
         _pendingOffsets = null;
         _requestedFrom = viewModel?.Renderer;
         _bitmaps.SetDocument(null); // whatever the new view model shows starts from scratch
+        _pageInk.Clear();
         SyncBitmaps();
         if (viewModel is not null)
         {
@@ -306,6 +317,8 @@ public partial class DocumentView : UserControl
             viewModel.Viewport.PropertyChanged += OnViewportPropertyChanged;
             viewModel.PropertyChanged += OnViewModelPropertyChanged;
             viewModel.Search.PageHighlightsChanged += OnSearchHighlightsChanged;
+            viewModel.Marks.InkChanged += OnPageInkChanged;
+            viewModel.Marks.DocumentChanged += OnMarksDocumentChanged;
 
             // The mark scan waits for the first renders and parks while renders are due (the current coordinator).
             viewModel.FirstRendersDone = () => _bitmaps.FirstRendersDone;
@@ -324,10 +337,18 @@ public partial class DocumentView : UserControl
         ReleaseAll();
         _pendingOffsets = null;
         _requestedFrom = _viewModel?.Renderer;
+        _pageInk.Clear(); // no ink of the previous document (or of the same one before a reopen without saving)
         SyncBitmaps();
         ApplyPosition();
         UpdateSurfaces();
     }
+
+    // Any thread: the session raises it where the edit or the load happened. The rail reads that page's ink again.
+    private void OnPageInkChanged(object? sender, PageStrokesChangedEventArgs e) =>
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, () => _pageInk.Invalidate(e.PageIndex));
+
+    // UI thread: the marks follow another document (or the same one reopened): no stale ink in the rail.
+    private void OnMarksDocumentChanged(object? sender, EventArgs e) => _pageInk.Clear();
 
     private void OnPositionChanged(object? sender, EventArgs e)
     {

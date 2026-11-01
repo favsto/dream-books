@@ -94,42 +94,12 @@ public sealed class MarkInkThumbnail : FrameworkElement
 
         drawingContext.PushClip(new RectangleGeometry(new Rect(size)));
         drawingContext.PushTransform(new MatrixTransform(scale, 0, 0, scale, offsetX, offsetY));
-        var pens = new Dictionary<Brush, Pen>();
-        foreach (var stroke in thumbnail.Strokes)
-        {
-            if (stroke.Brush is not { } brush)
-            {
-                continue;
-            }
-
-            // A pen of the minimum width (in page points at this scale) around the fill: thin ink stays visible.
-            if (!pens.TryGetValue(brush, out var pen))
-            {
-                pen = Pen(brush, minimumDip / scale)!;
-                pens[brush] = pen;
-            }
-
-            drawingContext.DrawGeometry(brush, pen, stroke.Geometry);
-        }
-
+        InkDrawings.Draw(drawingContext, thumbnail.Strokes, scale, minimumDip); // thin ink stays visible
         drawingContext.Pop();
         drawingContext.Pop();
     }
 
-    private static Pen? Pen(Brush? brush, double thickness)
-    {
-        if (brush is null)
-        {
-            return null;
-        }
-
-        var pen = new Pen(brush, thickness) { LineJoin = PenLineJoin.Round, StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
-        if (pen.CanFreeze)
-        {
-            pen.Freeze(); // a theme brush with a dynamic colour cannot be frozen
-        }
-        return pen;
-    }
+    private static Pen? Pen(Brush? brush, double thickness) => InkDrawings.RoundPen(brush, thickness);
 
     private static void OnSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {

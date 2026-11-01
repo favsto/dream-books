@@ -1195,6 +1195,64 @@ public sealed class MainViewModel : ObservableObject
     private void OnMarkPageStrokesChanged(object? sender, PageStrokesChangedEventArgs e) => Marks.NotifyInkChanged(e.PageIndex);
 
     /// <summary>
+    /// The ink of a whole page for the scroll rail's preview bubble (UI-07): the page's strokes, read as the marks list
+    /// reads them (live strokes of a loaded page, otherwise the stored ones through the scan's source, nothing added to
+    /// the session). An empty list when the page has no ink; null when there is no document, the page is gone or the
+    /// file is released by a save. Never on the UI thread for the read; cancellation surfaces as
+    /// <see cref="OperationCanceledException"/>.
+    /// </summary>
+    internal async Task<PageInk?> LoadPageInkAsync(int pageIndex, CancellationToken ct)
+    {
+        var curve = Tools.Curve;
+        var smoothing = Tools.Smoothing;
+        return await ReadPageStrokesAsync(pageIndex, ct).ConfigureAwait(false) is { } read
+            ? new PageInk(pageIndex, read.WidthPt, read.HeightPt, read.Strokes, curve, smoothing)
+            : null;
+    }
+
+    /// <summary>
+    /// A page's strokes as the marks list and the rail read them: a page loaded in the session gives its live strokes
+    /// (an immutable snapshot); any other page its stored strokes through the scan's source (the renderer's stroke cache
+    /// or an uncached read, on the PDFium thread), so nothing is added to the session. Null when there is no document,
+    /// the page is gone or the file is released; an empty list for a page without the app's ink.
+    /// </summary>
+    private async Task<(double WidthPt, IReadOnlyList<InkStroke> Strokes, double HeightPt)?> ReadPageStrokesAsync(
+        int pageIndex, CancellationToken ct)
+    {
+        if (Session is not { } session || _document is not { } document || pageIndex < 0 || pageIndex >= session.PageCount)
+        {
+            return null;
+        }
+
+        if (session.IsPageLoaded(pageIndex))
+        {
+            var page = await session.EnsurePageAsync(pageIndex, ct).ConfigureAwait(false); // loaded: no load
+            return (page.WidthPt, page.Strokes, page.HeightPt);
+        }
+
+        IMarkPageSource? source;
+        try
+        {
+            source = MarkSourceFactory(document);
+        }
+#pragma warning disable CA1031 // A picture without its ink keeps its placeholder.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            source = null;
+        }
+
+        if (source is null || pageIndex >= source.PageCount)
+        {
+            return null;
+        }
+
+        var dimensions = source.GetPageDimensions(pageIndex);
+        var stored = await source.TryLoadStrokesForScanAsync(pageIndex, ct).ConfigureAwait(false);
+        return (dimensions.WidthPt, stored?.Strokes ?? [], dimensions.HeightPt);
+    }
+
+    /// <summary>
     /// The ink a marks-list row draws (FR-103): the mark's strokes and its margin notes (<see cref="MarkRecognizer.MarginNotes"/>).
     /// A page loaded in the session gives its live strokes; any other page its stored strokes, through the scan's own
     /// source (the renderer's stroke cache, on the PDFium thread), so nothing is added to the session and no page is
@@ -1204,50 +1262,14 @@ public sealed class MainViewModel : ObservableObject
     internal async Task<MarkInk?> LoadMarkInkAsync(Mark mark, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(mark);
-        if (Session is not { } session || _document is not { } document
-            || mark.PageIndex < 0 || mark.PageIndex >= session.PageCount)
-        {
-            return null;
-        }
-
         var curve = Tools.Curve;
         var smoothing = Tools.Smoothing;
-        IReadOnlyList<InkStroke>? strokes;
-        double widthPt;
-        if (session.IsPageLoaded(mark.PageIndex))
-        {
-            var page = await session.EnsurePageAsync(mark.PageIndex, ct).ConfigureAwait(false); // loaded: no load
-            strokes = page.Strokes; // an immutable snapshot
-            widthPt = page.WidthPt;
-        }
-        else
-        {
-            IMarkPageSource? source;
-            try
-            {
-                source = MarkSourceFactory(document);
-            }
-#pragma warning disable CA1031 // A row without its ink keeps its placeholder.
-            catch (Exception)
-#pragma warning restore CA1031
-            {
-                source = null;
-            }
-
-            if (source is null || mark.PageIndex >= source.PageCount)
-            {
-                return null;
-            }
-
-            widthPt = source.GetPageDimensions(mark.PageIndex).WidthPt;
-            strokes = (await source.TryLoadStrokesForScanAsync(mark.PageIndex, ct).ConfigureAwait(false))?.Strokes;
-        }
-
-        if (strokes is null)
+        if (await ReadPageStrokesAsync(mark.PageIndex, ct).ConfigureAwait(false) is not { } read)
         {
             return null;
         }
 
+        var (widthPt, strokes, _) = read;
         var recognizer = _markRecognizer;
         return await Task.Run(
             () =>

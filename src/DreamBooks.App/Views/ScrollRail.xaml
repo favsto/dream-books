@@ -11,21 +11,29 @@
          DocumentView, which routes them by position (ZoneAt). Only the page field, while open, takes keyboard focus. -->
     <Grid>
         <Grid x:Name="Visuals" IsHitTestVisible="False">
-            <!-- One large preview beside the knob while scrubbing: the page number and a light render (white until
-                 it arrives). -->
+            <!-- One large preview beside the knob while scrubbing: the page number and a light render with the reader's
+                 ink drawn over it (white until it arrives). It fades in and out, and each new page fades in over the
+                 previous one (instant when Windows animations are off). -->
             <Border x:Name="PreviewBubble" HorizontalAlignment="Right" VerticalAlignment="Top"
                     Width="{StaticResource RailPreviewWidth}" Margin="{StaticResource RailPreviewMargin}"
                     Padding="{StaticResource RailPreviewPadding}" CornerRadius="{StaticResource RailPreviewCornerRadius}"
                     Background="{StaticResource RailPreviewBackgroundBrush}" Effect="{StaticResource RailPreviewShadow}"
-                    IsHitTestVisible="False" Visibility="Collapsed" SizeChanged="OnBubbleSizeChanged">
+                    IsHitTestVisible="False" Visibility="Collapsed" Opacity="0" SizeChanged="OnBubbleSizeChanged">
                 <Border.RenderTransform>
                     <TranslateTransform x:Name="BubbleOffset" />
                 </Border.RenderTransform>
                 <StackPanel>
                     <Grid>
                         <Rectangle x:Name="PreviewPlaceholder" Fill="{StaticResource PagePlaceholderBrush}" />
-                        <Image x:Name="PreviewImage" Stretch="Uniform"
-                               AutomationProperties.Name="{x:Static res:Strings.RailPreviewLabel}" />
+                        <Grid x:Name="PreviewBack">
+                            <Image x:Name="PreviewBackImage" Stretch="Uniform" />
+                            <local:PageInkOverlay x:Name="PreviewBackInk" />
+                        </Grid>
+                        <Grid x:Name="PreviewFront" Opacity="0">
+                            <Image x:Name="PreviewImage" Stretch="Uniform"
+                                   AutomationProperties.Name="{x:Static res:Strings.RailPreviewLabel}" />
+                            <local:PageInkOverlay x:Name="PreviewInk" />
+                        </Grid>
                     </Grid>
                     <TextBlock x:Name="PreviewText" HorizontalAlignment="Center" Margin="{StaticResource Gap}" />
                 </StackPanel>

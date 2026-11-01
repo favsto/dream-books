@@ -304,6 +304,152 @@ public sealed class ScrollRailTests : IDisposable
     }
 
     [Fact]
+    public async Task Preview_bubble_draws_the_page_ink_over_the_preview_once_the_page_shows()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            var rail = view.Rail;
+            Assert.NotNull(rail.InkSource); // wired to the view's page ink cache
+            var bitmaps = new List<(int Page, TaskCompletionSource<BitmapSource?> Result)>();
+            var inks = new List<(int Page, CancellationToken Token, TaskCompletionSource<PageInkPicture?> Result)>();
+            rail.PreviewSource = (page, _) =>
+            {
+                var result = new TaskCompletionSource<BitmapSource?>();
+                bitmaps.Add((page, result));
+                return result.Task;
+            };
+            rail.InkSource = (page, ct) =>
+            {
+                var result = new TaskCompletionSource<PageInkPicture?>();
+                inks.Add((page, ct, result));
+                return result.Task;
+            };
+
+            rail.PointerDown(rail.KnobHeight / 2);
+            rail.PointerMove((rail.KnobHeight / 2) + (0.5 * rail.TrackLength));
+            Settle(view);
+            var page = bitmaps[^1].Page;
+            Assert.Equal(page, inks[^1].Page);
+
+            // The ink first: kept, but nothing shows until the page itself does (the clean page, then its ink).
+            var ink = new PageInkPicture(page, _widthPt, _heightPt, []);
+            inks[^1].Result.SetResult(ink);
+            WpfTestThread.Drain();
+            Assert.Same(ink, rail.PreviewInk.Picture);
+            Assert.Equal(0, rail.PreviewFront.Opacity);
+
+            var bitmap = FakeBitmapRenderer.BitmapOf(30, 40);
+            bitmaps[^1].Result.SetResult(bitmap);
+            WpfTestThread.Drain();
+            Assert.Same(bitmap, rail.PreviewImage.Source);
+            Assert.Equal(1, rail.PreviewFront.Opacity);
+            Assert.Same(ink, rail.PreviewInk.Picture);
+
+            // The next page: the previous one stays behind (no white flash) until the new one shows over it.
+            rail.PointerMove((rail.KnobHeight / 2) + (0.8 * rail.TrackLength));
+            Settle(view);
+            Assert.NotEqual(page, bitmaps[^1].Page);
+            Assert.True(inks[^2].Token.IsCancellationRequested);
+            Assert.Same(bitmap, rail.PreviewBackImage.Source);
+            Assert.Same(ink, rail.PreviewBackInk.Picture);
+            Assert.Null(rail.PreviewImage.Source);
+            Assert.Null(rail.PreviewInk.Picture);
+            var next = FakeBitmapRenderer.BitmapOf(30, 40);
+            bitmaps[^1].Result.SetResult(next);
+            WpfTestThread.Drain();
+            Assert.Same(next, rail.PreviewImage.Source);
+            Assert.Null(rail.PreviewBackImage.Source); // the cross-fade is over (instant here)
+
+            // A page without ink, then released: everything is dropped.
+            inks[^1].Result.SetResult(null);
+            WpfTestThread.Drain();
+            Assert.Null(rail.PreviewInk.Picture);
+            rail.PointerUp();
+            Assert.Equal(Visibility.Collapsed, rail.PreviewBubble.Visibility);
+            Assert.Null(rail.PreviewImage.Source);
+        });
+    }
+
+    [Fact]
+    public async Task Preview_bubble_fades_in_and_out_and_cross_fades_softly_with_windows_animations_on()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            var rail = view.Rail;
+            rail.AnimationsOverride = true;
+            var bitmaps = new List<TaskCompletionSource<BitmapSource?>>();
+            rail.PreviewSource = (_, _) =>
+            {
+                var result = new TaskCompletionSource<BitmapSource?>();
+                bitmaps.Add(result);
+                return result.Task;
+            };
+            rail.InkSource = (_, _) => Task.FromResult<PageInkPicture?>(null);
+            foreach (var key in new[] { "RailPreviewFadeInDuration", "RailPreviewFadeOutDuration", "RailPreviewCrossFadeDuration" })
+            {
+                Assert.IsType<TimeSpan>(Application.Current.FindResource(key));
+            }
+
+            Assert.IsAssignableFrom<System.Windows.Media.Animation.IEasingFunction>(Application.Current.FindResource("RailPreviewEase"));
+
+            rail.PointerDown(rail.KnobHeight / 2);
+            Settle(view);
+            Assert.Equal(Visibility.Visible, rail.PreviewBubble.Visibility);
+            Assert.True(rail.PreviewBubble.HasAnimatedProperties); // fading in
+
+            bitmaps[^1].SetResult(FakeBitmapRenderer.BitmapOf(30, 40));
+            WpfTestThread.Drain();
+            Assert.True(rail.PreviewFront.HasAnimatedProperties); // the page fades in over the placeholder
+
+            rail.PointerUp();
+            Assert.False(rail.IsBubbleShown);
+            Assert.Equal(Visibility.Visible, rail.PreviewBubble.Visibility); // fading out, then collapsed
+            Assert.True(rail.PreviewBubble.HasAnimatedProperties);
+
+            // With Windows animations off everything is instant (NFR-32).
+            rail.AnimationsOverride = false;
+            rail.PointerDown(rail.KnobHeight / 2);
+            Settle(view);
+            Assert.True(rail.IsBubbleShown);
+            Assert.False(rail.PreviewBubble.HasAnimatedProperties);
+            Assert.Equal(1, rail.PreviewBubble.Opacity);
+            rail.PointerUp();
+            Assert.Equal(Visibility.Collapsed, rail.PreviewBubble.Visibility);
+        });
+    }
+
+    [Fact]
+    public async Task Preview_ink_is_read_again_when_the_page_strokes_change_and_dropped_with_the_document()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            var rail = view.Rail;
+            Assert.Empty(Await(rail.InkSource!(0, CancellationToken.None))!.Strokes); // a page without ink
+            Assert.Equal(1, view.PageInk.Count);
+
+            LoadEditors(view);
+            var editor = view.SurfaceFor(0)!.Editor!;
+            DreamBooks.Core.Model.InkPoint[] points =
+                [new(10, 20, 0.5f, null, null, null, 0), new(300, 20, 0.5f, null, null, null, 10)];
+            Assert.True(editor.CommitStroke(points, DreamBooks.Core.Model.InkTool.Pen, DreamBooks.Core.Model.InkColor.FromRgb(0, 0, 0), 1));
+            WpfTestThread.Drain();
+            var picture = Await(rail.InkSource!(0, CancellationToken.None))!;
+            Assert.Single(picture.Strokes);
+            Assert.Equal(_widthPt, picture.WidthPt);
+
+            vm.Marks.Attach(null); // the marks of another document (or the same one reopened without saving)
+            WpfTestThread.Drain();
+            Assert.Equal(0, view.PageInk.Count);
+        });
+    }
+
+    private static T Await<T>(Task<T> task)
+    {
+        WpfTestThread.PumpUntil(() => task.IsCompleted);
+        return task.GetAwaiter().GetResult();
+    }
+
+    [Fact]
     public async Task Indicator_text_formats_page_count_and_zoom()
     {
         await WithViewAsync((vm, view) =>
@@ -1046,6 +1192,7 @@ public sealed class ScrollRailTests : IDisposable
             WpfTestThread.Run(() =>
             {
                 var view = new DocumentView { BitmapRenderer = new FakeBitmapRenderer() };
+                view.Rail.AnimationsOverride = false; // the bubble's fades are instant here; tested on their own
                 view.DataContext = vm;
                 LayOut(view, 1000, 800);
                 test(vm, view);

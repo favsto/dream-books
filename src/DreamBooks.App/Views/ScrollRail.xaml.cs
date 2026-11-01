@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using DreamBooks.App.Resources;
@@ -60,6 +61,7 @@ public partial class ScrollRail : UserControl
     private double _grab;
     private int _previewPage = -1;
     private CancellationTokenSource? _previewCancel;
+    private bool _bubbleShown;
     private IInputElement? _focusBefore;
 
     public ScrollRail()
@@ -165,6 +167,17 @@ public partial class ScrollRail : UserControl
 
     /// <summary>The preview of a page for the bubble (the bitmap coordinator's); a newer request cancels the older.</summary>
     internal Func<int, CancellationToken, Task<BitmapSource?>>? PreviewSource { get; set; }
+
+    /// <summary>The reader's ink of a page, drawn over its preview (the view's page ink cache); cancelled like the preview.</summary>
+    internal Func<int, CancellationToken, Task<PageInkPicture?>>? InkSource { get; set; }
+
+    /// <summary>
+    /// Whether the bubble's fades run: null follows the Windows animation setting (NFR-32); tests force it either way.
+    /// </summary>
+    internal bool? AnimationsOverride { get; set; }
+
+    /// <summary>True from the press that shows the bubble to the release that hides it (it may still be fading out).</summary>
+    internal bool IsBubbleShown => _bubbleShown;
 
     /// <summary>False while a page is inking: the rail then never moves the document under the pen.</summary>
     internal Func<bool>? CanScroll { get; set; }
@@ -315,7 +328,7 @@ public partial class ScrollRail : UserControl
         UpdateHeld();
         model.BeginRailDrag();
         _grab = trackY - knobTop;
-        PreviewBubble.Visibility = Visibility.Visible;
+        ShowBubble();
         ScrubTo(trackY);
         return true;
     }
@@ -698,17 +711,31 @@ public partial class ScrollRail : UserControl
         UpdateHeld();
     }
 
-    /// <summary>The bubble shows the page at the knob's fraction of the document: its number, then its preview.</summary>
+    /// <summary>
+    /// The bubble shows the page at the knob's fraction of the document: its number at once, then its preview with the
+    /// reader's ink. The page shown so far stays behind until the new one fades in over it, so scrubbing never flashes
+    /// white; the very first page shows the white placeholder until its preview arrives.
+    /// </summary>
     private void UpdatePreview(DocumentLayout layout, int page)
     {
-        if (PreviewBubble.Visibility != Visibility.Visible || page == _previewPage || page < 0 || page >= layout.PageCount)
+        if (!_bubbleShown || page == _previewPage || page < 0 || page >= layout.PageCount)
         {
             return;
         }
 
         _previewPage = page;
         PreviewText.Text = string.Format(CultureInfo.CurrentCulture, Strings.RailPreviewPageFormat, page + 1);
+        if (PreviewImage.Source is not null)
+        {
+            // The page shown goes behind, fully visible, until the new one has faded in over it.
+            PreviewBackImage.Source = PreviewImage.Source;
+            PreviewBackInk.Picture = PreviewInk.Picture;
+            SetOpacityNow(PreviewBack, 1);
+        }
+
         PreviewImage.Source = null;
+        PreviewInk.Picture = null;
+        SetOpacityNow(PreviewFront, 0);
         var size = VirtualPagePanel.PageSizePt(layout, page);
         var width = PreviewBubble.Width - PreviewBubble.Padding.Left - PreviewBubble.Padding.Right;
         if (size.Width > 0 && size.Height > 0 && double.IsFinite(size.Width) && double.IsFinite(size.Height))
@@ -724,6 +751,7 @@ public partial class ScrollRail : UserControl
         CancelPreview();
         _previewCancel = new CancellationTokenSource();
         _ = LoadPreviewAsync(page, _previewCancel.Token);
+        _ = LoadInkAsync(page, _previewCancel.Token);
     }
 
     private async Task LoadPreviewAsync(int page, CancellationToken ct)
@@ -745,9 +773,48 @@ public partial class ScrollRail : UserControl
             return;
         }
 
+        if (ct.IsCancellationRequested || page != _previewPage || bitmap is null)
+        {
+            return;
+        }
+
+        // The clean page fades in over the previous one (with its ink, if it arrived first); then the previous goes.
+        PreviewImage.Source = bitmap;
+        Fade(PreviewFront, 1, "RailPreviewCrossFadeDuration", () =>
+        {
+            if (page == _previewPage && ReferenceEquals(PreviewImage.Source, bitmap))
+            {
+                ClearBack();
+            }
+        });
+    }
+
+    /// <summary>
+    /// The reader's ink of the page, drawn over its preview when it arrives: it is part of the front layer, which shows
+    /// only once the page's preview does, so the clean page comes first and the ink joins it without flicker.
+    /// </summary>
+    private async Task LoadInkAsync(int page, CancellationToken ct)
+    {
+        if (InkSource is not { } source)
+        {
+            return;
+        }
+
+        PageInkPicture? ink;
+        try
+        {
+            ink = await source(page, ct);
+        }
+#pragma warning disable CA1031 // The bubble shows the page without ink rather than failing (NFR-11).
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            return;
+        }
+
         if (!ct.IsCancellationRequested && page == _previewPage)
         {
-            PreviewImage.Source = bitmap;
+            PreviewInk.Picture = ink;
         }
     }
 
@@ -758,12 +825,90 @@ public partial class ScrollRail : UserControl
         _previewCancel = null;
     }
 
+    /// <summary>The bubble appears, fading in (instant when Windows animations are off, NFR-32).</summary>
+    private void ShowBubble()
+    {
+        if (_bubbleShown)
+        {
+            return;
+        }
+
+        _bubbleShown = true;
+        if (PreviewBubble.Visibility != Visibility.Visible)
+        {
+            SetOpacityNow(PreviewBubble, 0);
+            PreviewBubble.Visibility = Visibility.Visible;
+        }
+
+        Fade(PreviewBubble, 1, "RailPreviewFadeInDuration");
+    }
+
+    /// <summary>The bubble goes: requests stop at once, it fades out, then it is collapsed and emptied.</summary>
     private void HideBubble()
     {
         CancelPreview();
-        PreviewBubble.Visibility = Visibility.Collapsed;
         _previewPage = -1;
-        PreviewImage.Source = null;
+        if (!_bubbleShown)
+        {
+            return;
+        }
+
+        _bubbleShown = false;
+        Fade(PreviewBubble, 0, "RailPreviewFadeOutDuration", () =>
+        {
+            if (_bubbleShown)
+            {
+                return; // shown again meanwhile
+            }
+
+            PreviewBubble.Visibility = Visibility.Collapsed;
+            PreviewImage.Source = null;
+            PreviewInk.Picture = null;
+            SetOpacityNow(PreviewFront, 0);
+            ClearBack();
+        });
+    }
+
+    private void ClearBack()
+    {
+        PreviewBackImage.Source = null;
+        PreviewBackInk.Picture = null;
+    }
+
+    private bool AnimationsOn => AnimationsOverride ?? SystemParameters.ClientAreaAnimation;
+
+    /// <summary>
+    /// Animates <paramref name="element"/>'s opacity from where it is to <paramref name="to"/> over the theme duration
+    /// <paramref name="durationKey"/>, easing out (<c>RailPreviewEase</c>); at once when animations are off. Then runs
+    /// <paramref name="completed"/> (not when another fade replaced this one: callers check their state again anyway).
+    /// </summary>
+    private void Fade(UIElement element, double to, string durationKey, Action? completed = null)
+    {
+        if (!AnimationsOn || TryFindResource(durationKey) is not TimeSpan duration || duration <= TimeSpan.Zero)
+        {
+            SetOpacityNow(element, to);
+            completed?.Invoke();
+            return;
+        }
+
+        var from = element.Opacity; // the current value, animated or not
+        element.Opacity = to; // the base value, kept once the animation is removed
+        var animation = new DoubleAnimation(from, to, new Duration(duration))
+        {
+            EasingFunction = TryFindResource("RailPreviewEase") as IEasingFunction,
+        };
+        if (completed is not null)
+        {
+            animation.Completed += (_, _) => completed();
+        }
+
+        element.BeginAnimation(OpacityProperty, animation);
+    }
+
+    private static void SetOpacityNow(UIElement element, double value)
+    {
+        element.BeginAnimation(OpacityProperty, null);
+        element.Opacity = value;
     }
 
     /// <summary>The bubble's centre beside the knob's centre, kept inside the rail.</summary>

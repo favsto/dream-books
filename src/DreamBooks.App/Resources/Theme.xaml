@@ -48,6 +48,13 @@
     <CornerRadius x:Key="RailPreviewCornerRadius">10</CornerRadius>
     <SolidColorBrush x:Key="RailPreviewBackgroundBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" Opacity="0.92" />
     <DropShadowEffect x:Key="RailPreviewShadow" BlurRadius="14" ShadowDepth="4" Opacity="0.3" />
+    <!-- The preview bubble fades in and out, and each new page fades in over the previous one, easing out (instant
+         when Windows animations are off, NFR-32). The reader's ink is drawn over it, never thinner than this. -->
+    <sys:TimeSpan x:Key="RailPreviewFadeInDuration">0:0:0.15</sys:TimeSpan>
+    <sys:TimeSpan x:Key="RailPreviewFadeOutDuration">0:0:0.12</sys:TimeSpan>
+    <sys:TimeSpan x:Key="RailPreviewCrossFadeDuration">0:0:0.14</sys:TimeSpan>
+    <CubicEase x:Key="RailPreviewEase" EasingMode="EaseOut" />
+    <sys:Double x:Key="RailPreviewMinStrokeWidth">0.75</sys:Double>
     <!-- With Windows "Transparency effects" off (NFR-32): the same colours, opaque, and no shadow. -->
     <SolidColorBrush x:Key="RailTrackBrushOpaque" Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
     <SolidColorBrush x:Key="RailPreviewBackgroundBrushOpaque" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
