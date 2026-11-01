@@ -121,7 +121,7 @@
   <data name="MarksListLabel" xml:space="preserve"><value>Elenco dei segni</value></data>
   <data name="MarksScanning" xml:space="preserve"><value>Ricerca dei segni in corso…</value></data>
   <data name="MarksCountNameFormat" xml:space="preserve"><value>Numero di segni: {0}</value></data>
-  <data name="MarkRowNameFormat" xml:space="preserve"><value>Segno a pagina {0}, margine {1}, riga {2}</value></data>
+  <data name="MarkRowNameFormat" xml:space="preserve"><value>Segno a pagina {0}, margine {1}</value></data>
   <data name="MarkSideLeft" xml:space="preserve"><value>sinistro</value></data>
   <data name="MarkSideRight" xml:space="preserve"><value>destro</value></data>
 </root>

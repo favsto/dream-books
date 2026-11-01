@@ -57,10 +57,10 @@ public class StringsTests
             Assert.NotNull(_stringsType.GetProperty(key, BindingFlags.Public | BindingFlags.Static));
         }
 
-        var name = string.Format(CultureInfo.CurrentCulture, Strings.MarkRowNameFormat, 12, Strings.MarkSideLeft, 3);
+        var name = string.Format(CultureInfo.CurrentCulture, Strings.MarkRowNameFormat, 12, Strings.MarkSideLeft);
         Assert.Contains("12", name, StringComparison.Ordinal);
         Assert.Contains(Strings.MarkSideLeft, name, StringComparison.Ordinal);
-        Assert.Contains("3", name, StringComparison.Ordinal);
+        Assert.DoesNotContain("{2}", Strings.MarkRowNameFormat, StringComparison.Ordinal); // no line number (fixed 36 pt lines)
     }
 
     [Fact]

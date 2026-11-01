@@ -57,10 +57,10 @@ public sealed class MarksListViewTests : IDisposable
             Assert.Equal(3, rows.Count);
             Assert.Equal(["pag. 2", "pag. 2", "pag. 6"], rows.Select(r => Texts(r).First(t => t.StartsWith("pag.", StringComparison.Ordinal))));
 
-            // Each row has a unique Italian automation name and a thumbnail of its mark.
+            // Each row has an Italian automation name (page and side) and a thumbnail of its mark.
             var names = rows.Select(AutomationProperties.GetName).ToList();
             Assert.Equal(3, names.Distinct().Count());
-            Assert.All(names, n => Assert.StartsWith("Segno a pagina", n, StringComparison.Ordinal));
+            Assert.Equal(["Segno a pagina 2, margine sinistro", "Segno a pagina 2, margine destro", "Segno a pagina 6, margine sinistro"], names); // no line number from the fixed 36 pt "line"
             Assert.All(rows, r => Assert.NotNull(FindDescendant<MarkInkThumbnail>(r)));
             Assert.Equal(Strings.MarksListLabel, AutomationProperties.GetName(list.List));
 

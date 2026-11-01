@@ -336,8 +336,7 @@ public sealed class MarksViewModel : ObservableObject
                 CultureInfo.CurrentCulture,
                 Strings.MarkRowNameFormat,
                 mark.PageIndex + 1,
-                mark.Side == MarkSide.Left ? Strings.MarkSideLeft : Strings.MarkSideRight,
-                (int)Math.Floor(Math.Max(0, mark.TopPt) / MarkRules.DefaultLineHeightPt) + 1));
+                mark.Side == MarkSide.Left ? Strings.MarkSideLeft : Strings.MarkSideRight));
 
     private void Step(bool forward)
     {
