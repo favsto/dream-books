@@ -52,6 +52,40 @@
     <SolidColorBrush x:Key="RailMarkTickBrush" Color="{DynamicResource {x:Static SystemColors.ControlTextColorKey}}" Opacity="0.75" />
     <SolidColorBrush x:Key="RailMarkTickBrushOpaque" Color="{DynamicResource {x:Static SystemColors.ControlTextColorKey}}" />
     <Thickness x:Key="RailIndicatorMargin">0,0,44,12</Thickness>
+
+    <!-- Left-edge panel (UI-04, phase 3b; hosts the marks list, later the Pages tab): 320 DIP wide, slides in from the
+         left in 180 ms ease-out and out in 120 ms ease-in (the panel timings of section 4), instant when Windows
+         animations are off (NFR-32). A finger swipe that starts in the left 24 DIP opens it (the pen there inks).
+         12 px corners, a translucent window colour with a soft shadow; opaque and without shadow with transparency
+         effects off (NFR-32). -->
+    <sys:Double x:Key="EdgePanelWidth">320</sys:Double>
+    <sys:TimeSpan x:Key="EdgePanelOpenDuration">0:0:0.18</sys:TimeSpan>
+    <sys:TimeSpan x:Key="EdgePanelCloseDuration">0:0:0.12</sys:TimeSpan>
+    <sys:Double x:Key="EdgeSwipeZoneWidth">24</sys:Double>
+    <CornerRadius x:Key="EdgePanelCornerRadius">0,12,12,0</CornerRadius>
+    <Thickness x:Key="EdgePanelPadding">12,8,8,12</Thickness>
+    <Thickness x:Key="EdgePanelMargin">0,8,0,8</Thickness>
+    <SolidColorBrush x:Key="EdgePanelBackgroundBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" Opacity="0.92" />
+    <SolidColorBrush x:Key="EdgePanelBackgroundBrushOpaque" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <DropShadowEffect x:Key="EdgePanelShadow" BlurRadius="24" ShadowDepth="4" Opacity="0.25" />
+    <sys:Double x:Key="EdgePanelTitleSize">16</sys:Double>
+    <Thickness x:Key="EdgePanelDetailMargin">8,0,0,0</Thickness>
+    <!-- Close glyph (an X) and the previous/next mark chevrons, drawn in a 12 x 12 box with the text colour. -->
+    <Geometry x:Key="CloseGlyph">M 1,1 L 11,11 M 11,1 L 1,11</Geometry>
+    <Geometry x:Key="PreviousMarkGlyph">M 1,9 L 6,3 L 11,9</Geometry>
+    <Geometry x:Key="NextMarkGlyph">M 1,3 L 6,9 L 11,3</Geometry>
+    <sys:Double x:Key="GlyphSize">12</sys:Double>
+    <sys:Double x:Key="GlyphStrokeThickness">1.5</sys:Double>
+    <SolidColorBrush x:Key="GlyphBrush" Color="{DynamicResource {x:Static SystemColors.ControlTextColorKey}}" />
+
+    <!-- Marks list rows (FR-103): the mark's band of the page (full width, the mark's extent and one line above and
+         below) as vector ink on paper, 120 x 60 DIP; ink strokes are never thinner than 1 DIP at that scale. -->
+    <sys:Double x:Key="MarkThumbnailWidth">120</sys:Double>
+    <sys:Double x:Key="MarkThumbnailHeight">60</sys:Double>
+    <sys:Double x:Key="MarkThumbnailMinStrokeWidth">1</sys:Double>
+    <SolidColorBrush x:Key="MarkThumbnailBorderBrush" Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
+    <Thickness x:Key="MarkRowPadding">4</Thickness>
+    <Thickness x:Key="MarkRowLabelMargin">12,0,0,0</Thickness>
     <sys:Double x:Key="GoToPageFieldWidth">80</sys:Double>
 
     <Style TargetType="Button">

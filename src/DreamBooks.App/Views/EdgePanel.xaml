@@ -1,0 +1,47 @@
+<UserControl x:Class="DreamBooks.App.Views.EdgePanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="clr-namespace:DreamBooks.App.Resources"
+             x:Name="Self" Focusable="False" IsTabStop="False">
+    <!-- The left-edge panel shell (UI-04): a sheet that slides in from the left over the document, with a title, an
+         optional detail (a count), a close button and the hosted content. Closed, it is collapsed: nothing of it is in
+         the way, so the pen at the edge inks. Open, only the sheet hit-tests (the rest of the document stays reachable);
+         presses outside it close it (MainWindow routes them through RoutePress), and the pen on the sheet never presses
+         its controls. -->
+    <UserControl.Content>
+    <Grid x:Name="Root" Visibility="Collapsed">
+        <Border x:Name="Sheet" HorizontalAlignment="Left" Width="{StaticResource EdgePanelWidth}"
+                Margin="{StaticResource EdgePanelMargin}" Padding="{StaticResource EdgePanelPadding}"
+                CornerRadius="{StaticResource EdgePanelCornerRadius}"
+                Background="{StaticResource EdgePanelBackgroundBrush}" Effect="{StaticResource EdgePanelShadow}"
+                Stylus.IsPressAndHoldEnabled="False" Stylus.IsFlicksEnabled="False"
+                PreviewStylusDown="OnSheetStylusDown" PreviewMouseDown="OnSheetMouseButton" PreviewMouseUp="OnSheetMouseButton"
+                PreviewTouchDown="OnSheetTouchDown" PreviewTouchMove="OnSheetTouchMove" PreviewTouchUp="OnSheetTouchUp">
+            <Border.RenderTransform>
+                <TranslateTransform x:Name="Slide" />
+            </Border.RenderTransform>
+            <DockPanel>
+                <DockPanel DockPanel.Dock="Top">
+                    <Button x:Name="CloseButton" DockPanel.Dock="Right"
+                            Width="{StaticResource TouchTarget}" Height="{StaticResource TouchTarget}" Margin="0"
+                            Background="Transparent" BorderThickness="0"
+                            AutomationProperties.Name="{x:Static res:Strings.ClosePanel}"
+                            ToolTip="{x:Static res:Strings.ClosePanel}">
+                        <Path Data="{StaticResource CloseGlyph}" Stroke="{StaticResource GlyphBrush}"
+                              StrokeThickness="{StaticResource GlyphStrokeThickness}"
+                              Width="{StaticResource GlyphSize}" Height="{StaticResource GlyphSize}" />
+                    </Button>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock x:Name="TitleText" Text="{Binding Title, ElementName=Self}" FontWeight="SemiBold"
+                                   FontSize="{StaticResource EdgePanelTitleSize}" VerticalAlignment="Center" />
+                        <ContentPresenter x:Name="Detail" Content="{Binding HeaderDetail, ElementName=Self}"
+                                          Margin="{StaticResource EdgePanelDetailMargin}" VerticalAlignment="Center" TextElement.FontSize="{StaticResource EdgePanelTitleSize}"
+                                          AutomationProperties.Name="{Binding HeaderDetailName, ElementName=Self}" />
+                    </StackPanel>
+                </DockPanel>
+                <ContentPresenter x:Name="BodyHost" Content="{Binding Body, ElementName=Self}" Margin="{StaticResource Gap}" />
+            </DockPanel>
+        </Border>
+    </Grid>
+    </UserControl.Content>
+</UserControl>

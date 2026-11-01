@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DreamBooks.App.Resources;
 using DreamBooks.App.Services;
+using DreamBooks.Core.Documents;
 using DreamBooks.Core.Marks;
 
 namespace DreamBooks.App.ViewModels;
@@ -125,6 +126,21 @@ public sealed class MarksViewModel : ObservableObject
     /// and at once when the document changes), once <see cref="Items"/> and <see cref="Marks"/> are updated.
     /// </summary>
     internal event EventHandler? MarksRefreshed;
+
+    /// <summary>
+    /// The ink of a mark for its row (the mark's strokes and margin notes), read off the UI thread; null when it cannot
+    /// be read now (no document, the file released by a save). Set by <see cref="MainViewModel"/>.
+    /// </summary>
+    internal Func<Mark, CancellationToken, Task<MarkInk?>>? InkSource { get; set; }
+
+    /// <summary>
+    /// The strokes of a loaded page changed (or the page just loaded): rows of that page draw their ink again even
+    /// when the mark itself is unchanged (a margin note was added). Raised on any thread.
+    /// </summary>
+    internal event EventHandler<PageStrokesChangedEventArgs>? InkChanged;
+
+    /// <summary>Raises <see cref="InkChanged"/>; any thread.</summary>
+    internal void NotifyInkChanged(int pageIndex) => InkChanged?.Invoke(this, new PageStrokesChangedEventArgs(pageIndex));
 
     /// <summary>The index of the document now shown, or none; the list follows it at once.</summary>
     internal void Attach(MarkIndex? index)
@@ -297,7 +313,15 @@ public sealed class MarksViewModel : ObservableObject
     }
 
     private static MarkItem NewItem(Mark mark) =>
-        new(mark, string.Format(CultureInfo.CurrentCulture, Strings.MarkPageLabelFormat, mark.PageIndex + 1));
+        new(
+            mark,
+            string.Format(CultureInfo.CurrentCulture, Strings.MarkPageLabelFormat, mark.PageIndex + 1),
+            string.Format(
+                CultureInfo.CurrentCulture,
+                Strings.MarkRowNameFormat,
+                mark.PageIndex + 1,
+                mark.Side == MarkSide.Left ? Strings.MarkSideLeft : Strings.MarkSideRight,
+                (int)Math.Floor(Math.Max(0, mark.TopPt) / MarkRules.DefaultLineHeightPt) + 1));
 
     private void Step(bool forward)
     {

@@ -19,6 +19,9 @@
         <KeyBinding Key="S" Modifiers="Ctrl+Shift" Command="{Binding SaveAsCommand}" />
         <!-- Back after a jump (FR-09); PgUp/PgDn/Home/End are routed in code (not while typing in a field). -->
         <KeyBinding Key="Left" Modifiers="Alt" Command="{Binding Viewport.BackCommand}" />
+        <!-- Previous / next mark (FR-102): free in 3a. -->
+        <KeyBinding Key="Up" Modifiers="Alt" Command="{Binding Marks.PreviousCommand}" />
+        <KeyBinding Key="Down" Modifiers="Alt" Command="{Binding Marks.NextCommand}" />
         <!-- Ctrl + / Ctrl − zoom in and out (FR-06), on the main keys and the numeric keypad. -->
         <KeyBinding Key="OemPlus" Modifiers="Ctrl" Command="{Binding ZoomVm.ZoomInCommand}" />
         <KeyBinding Key="Add" Modifiers="Ctrl" Command="{Binding ZoomVm.ZoomInCommand}" />
@@ -86,6 +89,45 @@
                                 Command="{Binding Viewport.BackCommand}"
                                 AutomationProperties.Name="{x:Static res:Strings.Back}" />
                     </StackPanel>
+
+                    <!-- Marks (FR-102, FR-103): previous / next mark (Alt+Up / Alt+Down) and the list in the left-edge
+                         panel; "no other mark" shows here for a moment. Spartan, the real placement is phase 4. -->
+                    <TextBlock Text="{x:Static res:Strings.MarksList}" Style="{StaticResource SectionLabel}" />
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="PreviousMarkButton" Command="{Binding Marks.PreviousCommand}"
+                                MinWidth="{StaticResource TouchTarget}" MinHeight="{StaticResource TouchTarget}"
+                                AutomationProperties.Name="{x:Static res:Strings.PreviousMark}"
+                                ToolTip="{x:Static res:Strings.PreviousMark}">
+                            <Path Data="{StaticResource PreviousMarkGlyph}" Stroke="{StaticResource GlyphBrush}"
+                                  StrokeThickness="{StaticResource GlyphStrokeThickness}"
+                                  Width="{StaticResource GlyphSize}" Height="{StaticResource GlyphSize}" />
+                        </Button>
+                        <Button x:Name="NextMarkButton" Command="{Binding Marks.NextCommand}"
+                                MinWidth="{StaticResource TouchTarget}" MinHeight="{StaticResource TouchTarget}"
+                                AutomationProperties.Name="{x:Static res:Strings.NextMark}"
+                                ToolTip="{x:Static res:Strings.NextMark}">
+                            <Path Data="{StaticResource NextMarkGlyph}" Stroke="{StaticResource GlyphBrush}"
+                                  StrokeThickness="{StaticResource GlyphStrokeThickness}"
+                                  Width="{StaticResource GlyphSize}" Height="{StaticResource GlyphSize}" />
+                        </Button>
+                        <Button x:Name="OpenMarksListButton" Content="{x:Static res:Strings.MarksListLabel}"
+                                Command="{Binding OpenCommand, ElementName=MarksPanel}"
+                                AutomationProperties.Name="{x:Static res:Strings.OpenMarksList}"
+                                ToolTip="{x:Static res:Strings.OpenMarksList}" />
+                    </StackPanel>
+                    <TextBlock x:Name="MarkStatusText" Text="{Binding Marks.StatusText}" TextWrapping="Wrap"
+                               Margin="{StaticResource Gap}" AutomationProperties.LiveSetting="Polite"
+                               AutomationProperties.Name="{x:Static res:Strings.MarkStatusLabel}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Marks.StatusText}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
 
                     <!-- Journal warning (FR-84): unsaved changes are not being recorded for recovery -->
                     <TextBlock x:Name="JournalWarningText" Text="{Binding JournalWarning}" TextWrapping="Wrap"
@@ -215,7 +257,11 @@
             </ScrollViewer>
         </Expander>
 
-        <Grid x:Name="PageHost">
+        <!-- Presses over the document while the left-edge panel is open: outside it they close it (the pen still
+             inks), the pen on it never presses its controls (MarksPanel.RoutePress). -->
+        <Grid x:Name="PageHost"
+              PreviewMouseLeftButtonDown="OnPageHostMouseDown" PreviewTouchDown="OnPageHostTouchDown"
+              PreviewStylusDown="OnPageHostStylusDown">
             <views:DocumentView x:Name="DocumentViewer" />
             <!-- Shown until a document is open; the error line stays visible over the page. -->
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
@@ -233,6 +279,13 @@
                 </TextBlock>
                 <TextBlock Text="{Binding ErrorMessage}" TextAlignment="Center" Margin="{StaticResource Gap}" />
             </StackPanel>
+
+            <!-- The left-edge panel (UI-04) with the marks list (FR-103): a finger swipe from the left edge, the menu
+                 entry; it closes with the close button, Esc, a swipe, a press outside and after a jump. -->
+            <views:EdgePanel x:Name="MarksPanel" Title="{x:Static res:Strings.MarksList}"
+                             HeaderDetail="{Binding Marks.Count}" HeaderDetailName="{x:Static res:Strings.MarksCountLabel}">
+                <views:MarksListView DataContext="{Binding Marks}" />
+            </views:EdgePanel>
         </Grid>
     </DockPanel>
 </Window>

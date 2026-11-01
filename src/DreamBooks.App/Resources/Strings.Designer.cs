@@ -196,6 +196,31 @@ internal static class Strings
     /// <summary>Title of the marks list panel.</summary>
     public static string MarksList => Get(nameof(MarksList));
 
+    /// <summary>Close button of the left-edge panel (UI-04).</summary>
+    public static string ClosePanel => Get(nameof(ClosePanel));
+
+    /// <summary>Menu entry that opens the marks list (FR-103).</summary>
+    public static string OpenMarksList => Get(nameof(OpenMarksList));
+
+    /// <summary>Automation name of the marks list itself.</summary>
+    public static string MarksListLabel => Get(nameof(MarksListLabel));
+
+    /// <summary>Shown in the marks list while the background scan is still running.</summary>
+    public static string MarksScanning => Get(nameof(MarksScanning));
+
+    /// <summary>Automation name of the count in the marks panel's header.</summary>
+    public static string MarksCountLabel => Get(nameof(MarksCountLabel));
+
+    /// <summary>A row's automation name: {0} page number, {1} side, {2} text line of the mark's top.</summary>
+    public static string MarkRowNameFormat => Get(nameof(MarkRowNameFormat));
+
+    public static string MarkSideLeft => Get(nameof(MarkSideLeft));
+
+    public static string MarkSideRight => Get(nameof(MarkSideRight));
+
+    /// <summary>Automation name of the "no other mark" message next to previous/next.</summary>
+    public static string MarkStatusLabel => Get(nameof(MarkStatusLabel));
+
     private static string Get(string name) =>
         Manager.GetString(name, System.Globalization.CultureInfo.CurrentUICulture) ?? name;
 }

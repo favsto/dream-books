@@ -29,7 +29,8 @@ namespace DreamBooks.App.Views;
 /// the current page; an eraser gesture belongs to the page where it starts; a stroke is clipped to its page (FR-26,
 /// FR-27). Fingers pan and zoom, never while a surface is inking; the pen never scrolls (FR-30). The scroll bars are
 /// replaced by the fading <see cref="ScrollRail"/> (UI-07); the navigation keys go through the view model's commands
-/// (<see cref="HandleNavigationKey"/>, FR-10).
+/// (<see cref="HandleNavigationKey"/>, FR-10). A finger swipe from the left edge raises <see cref="LeftEdgeSwiped"/>
+/// (the window opens the left-edge panel, UI-04); the pen there inks.
 /// </summary>
 /// <remarks>
 /// A page entering the window gets a surface at once (white placeholder of the exact size, light fade-in, NFR-03),
@@ -45,6 +46,9 @@ public partial class DocumentView : UserControl
     internal const int DoubleTapTimeMs = 300;
 
     internal const double DoubleTapDistanceDip = 24;
+
+    /// <summary>A finger move from the left edge zone longer than this, and mostly horizontal, is a swipe (UI-04).</summary>
+    internal const double EdgeSwipeDistanceDip = 32;
 
     private const double _wheelStepFactor = 1.1;
     private const double _wheelNotch = 120;
@@ -72,6 +76,8 @@ public partial class DocumentView : UserControl
     private (Point Position, int Time)? _tapStart;
     private (Point Position, int Time)? _lastTap;
     private int? _railTouchId;
+    private TouchDevice? _edgeTouch;
+    private Point? _edgeSwipeStart;
 
     public DocumentView()
     {
@@ -807,6 +813,64 @@ public partial class DocumentView : UserControl
         }
     }
 
+    /// <summary>
+    /// A finger swiped right from the left edge (UI-04): the window opens the left-edge panel. Never raised for the pen
+    /// (at the edge it inks, FR-30) or the mouse (it has the menu entry and the keyboard).
+    /// </summary>
+    internal event EventHandler? LeftEdgeSwiped;
+
+    /// <summary>
+    /// A press at <paramref name="position"/> (this view's coordinates) that may start a swipe from the left edge: only
+    /// a finger, only within <c>EdgeSwipeZoneWidth</c> of the left edge. The press itself is never taken (the finger
+    /// still pans the document, as near the rail). True when a swipe candidate started.
+    /// </summary>
+    internal bool BeginEdgeSwipe(Point position, PointerKind kind)
+    {
+        _edgeSwipeStart = null;
+        if (kind != PointerKind.Finger || position.X < 0 || position.X > EdgeZoneWidth())
+        {
+            return false;
+        }
+
+        _edgeSwipeStart = position;
+        return true;
+    }
+
+    /// <summary>
+    /// The finger moves: <see cref="EdgeSwipeDistanceDip"/> to the right, more horizontal than vertical, is a swipe
+    /// (<see cref="LeftEdgeSwiped"/>, once); a mostly vertical move first is a pan and ends the candidate.
+    /// </summary>
+    internal void MoveEdgeSwipe(Point position)
+    {
+        if (_edgeSwipeStart is not { } start)
+        {
+            return;
+        }
+
+        var dx = position.X - start.X;
+        var dy = Math.Abs(position.Y - start.Y);
+        if (dy > EdgeSwipeDistanceDip / 2 && dy > Math.Abs(dx))
+        {
+            _edgeSwipeStart = null; // a vertical pan from the edge stays a pan
+            return;
+        }
+
+        if (dx >= EdgeSwipeDistanceDip && dx > dy)
+        {
+            _edgeSwipeStart = null;
+            LeftEdgeSwiped?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>The finger lifts (or is lost): no swipe.</summary>
+    internal void EndEdgeSwipe()
+    {
+        _edgeSwipeStart = null;
+        _edgeTouch = null;
+    }
+
+    private double EdgeZoneWidth() => TryFindResource("EdgeSwipeZoneWidth") as double? ?? 0;
+
     /// <summary>The finger or mouse on the rail lifts: a drag ends, a press off the knob that did not move jumps.</summary>
     internal void RoutePointerUp()
     {
@@ -933,6 +997,11 @@ public partial class DocumentView : UserControl
         }
 
         var touch = e.GetTouchPoint(Rail);
+        if (_edgeTouch is not { IsActive: true } && BeginEdgeSwipe(e.GetTouchPoint(this).Position, kind))
+        {
+            _edgeTouch = e.TouchDevice; // not taken: the same finger may still pan (a lift elsewhere is seen as inactive)
+        }
+
         if (RoutePointerDown(touch.Position, kind, touch.Size))
         {
             e.Handled = true; // not promoted to the mouse, never seen by the scroll viewer's manipulation
@@ -946,6 +1015,11 @@ public partial class DocumentView : UserControl
 
     private void OnHostTouchMove(object? sender, TouchEventArgs e)
     {
+        if (ReferenceEquals(e.TouchDevice, _edgeTouch))
+        {
+            MoveEdgeSwipe(e.GetTouchPoint(this).Position);
+        }
+
         if (e.TouchDevice.Id == _railTouchId)
         {
             e.Handled = true;
@@ -955,6 +1029,11 @@ public partial class DocumentView : UserControl
 
     private void OnHostTouchUp(object? sender, TouchEventArgs e)
     {
+        if (ReferenceEquals(e.TouchDevice, _edgeTouch))
+        {
+            EndEdgeSwipe();
+        }
+
         if (e.TouchDevice.Id == _railTouchId)
         {
             e.Handled = true;

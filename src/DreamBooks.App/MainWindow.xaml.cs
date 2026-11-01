@@ -2,8 +2,10 @@ using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
 using DreamBooks.App.Services;
 using DreamBooks.App.ViewModels;
+using DreamBooks.App.Views;
 using DreamBooks.Pdf;
 
 namespace DreamBooks.App;
@@ -23,7 +25,11 @@ public partial class MainWindow : Window
         DataContext = _viewModel;
         Loaded += OnLoaded;
         PreviewKeyDown += OnPreviewKeyDown;
+        DocumentViewer.LeftEdgeSwiped += (_, _) => MarksPanel.Open(); // a finger swipe from the left edge (UI-04)
     }
+
+    /// <summary>The marks list hosted by <see cref="MarksPanel"/> (not named in XAML: the panel is a user control).</summary>
+    internal MarksListView MarksList => (MarksListView)MarksPanel.Body!;
 
     /// <summary>Journals and document locks: <c>%LOCALAPPDATA%\DreamBooks\recovery</c> (FR-84), outside the user's folders.</summary>
     internal static string RecoveryRoot() =>
@@ -143,10 +149,77 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// The window's key routing (separate so tests can drive it): true when a navigation key was taken for the
-    /// document. Everything else (Alt+Left for Back, the shortcuts) is left to the key bindings.
+    /// document, or Esc for the open left-edge panel (it closes). Keys pressed inside the open panel (arrows, PgUp/PgDn,
+    /// Home/End in the list) stay the panel's. Everything else (Alt+Left for Back, Alt+Up/Alt+Down for the marks, the
+    /// shortcuts) is left to the key bindings.
     /// </summary>
-    internal bool RouteKey(Key key, ModifierKeys modifiers, object? source) =>
-        DocumentViewer.HandleNavigationKey(key, modifiers, source);
+    internal bool RouteKey(Key key, ModifierKeys modifiers, object? source)
+    {
+        if (MarksPanel.IsOpen)
+        {
+            if (key == Key.Escape && modifiers == ModifierKeys.None)
+            {
+                MarksPanel.Close(); // Esc closes the left-edge panel (UI-04)
+                return true;
+            }
+
+            if (source is DependencyObject element && IsWithin(element, MarksPanel))
+            {
+                return false;
+            }
+        }
+
+        return DocumentViewer.HandleNavigationKey(key, modifiers, source);
+    }
+
+    private static bool IsWithin(DependencyObject element, DependencyObject ancestor)
+    {
+        for (DependencyObject? current = element; current is not null;
+             current = current is Visual or System.Windows.Media.Media3D.Visual3D
+                 ? VisualTreeHelper.GetParent(current) ?? LogicalTreeHelper.GetParent(current)
+                 : LogicalTreeHelper.GetParent(current))
+        {
+            if (ReferenceEquals(current, ancestor))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>A real mouse press over the document while the left-edge panel is open (FR-30: the pen has its own).</summary>
+    private void OnPageHostMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.StylusDevice is null && MarksPanel.RoutePress(e.GetPosition(MarksPanel), PointerKind.Mouse))
+        {
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>A finger press over the document while the panel is open: outside it, a light dismiss.</summary>
+    private void OnPageHostTouchDown(object? sender, TouchEventArgs e)
+    {
+        if (Stylus.CurrentStylusDevice?.TabletDevice?.Type == TabletDeviceType.Stylus)
+        {
+            return; // the pen's own touch events: routed by its stylus press
+        }
+
+        if (MarksPanel.RoutePress(e.GetTouchPoint(MarksPanel).Position, PointerKind.Finger))
+        {
+            e.Handled = true; // not promoted to the mouse, never panned
+        }
+    }
+
+    /// <summary>The pen's press: outside the open panel it closes it and inks; on it, it closes it and is taken.</summary>
+    private void OnPageHostStylusDown(object sender, StylusDownEventArgs e)
+    {
+        if (e.StylusDevice.TabletDevice?.Type == TabletDeviceType.Stylus
+            && MarksPanel.RoutePress(e.GetPosition(MarksPanel), PointerKind.Pen))
+        {
+            e.Handled = true;
+        }
+    }
 
     /// <summary>The panel's go-to-page field (FR-09): Enter jumps to a valid page and clears it; Esc clears it.</summary>
     private void OnGoToPageFieldKeyDown(object sender, KeyEventArgs e)

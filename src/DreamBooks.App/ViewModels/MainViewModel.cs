@@ -75,6 +75,7 @@ public sealed class MainViewModel : ObservableObject
     private MarkIndex? _markIndex;
     private MarkTracker? _markTracker;
     private MarkScanner? _markScanner;
+    private DocumentSession? _markSession;
     private bool _scanPausedForInk;
     private bool _scanPausedForSave;
 
@@ -100,7 +101,7 @@ public sealed class MainViewModel : ObservableObject
         ZoomVm = new ZoomViewModel();
         Viewport = new DocumentViewportViewModel(ZoomVm, _scheduler) { PageNavigator = NavigateToPageAsync };
         Viewport.PositionChanged += OnViewportPositionChanged;
-        Marks = new MarksViewModel(Viewport, _scheduler);
+        Marks = new MarksViewModel(Viewport, _scheduler) { InkSource = LoadMarkInkAsync };
         ZoomVm.PropertyChanged += OnZoomPropertyChanged;
         OpenDocument = OpenedDocument.OpenPdfAsync;
         MarkSourceFactory = static opened => opened.Viewer?.Current is { } renderer ? new MarkPageSource(renderer) : null;
@@ -1123,8 +1124,79 @@ public sealed class MainViewModel : ObservableObject
         }
 
         _markIndex = index;
+        _markSession = session;
+        session.PageStrokesChanged += OnMarkPageStrokesChanged;
         Marks.Attach(index);
         StartScan();
+    }
+
+    // Any thread (the session raises it where the edit or the load happened): the rows of that page redraw their ink.
+    private void OnMarkPageStrokesChanged(object? sender, PageStrokesChangedEventArgs e) => Marks.NotifyInkChanged(e.PageIndex);
+
+    /// <summary>
+    /// The ink a marks-list row draws (FR-103): the mark's strokes and its margin notes (<see cref="MarkRecognizer.MarginNotes"/>).
+    /// A page loaded in the session gives its live strokes; any other page its stored strokes, through the scan's own
+    /// source (the renderer's stroke cache, on the PDFium thread), so nothing is added to the session and no page is
+    /// kept for it. The selection runs on the thread pool. Null when there is no document, the page is gone or the
+    /// file is released by a save (the row keeps its placeholder and asks again when it is shown again).
+    /// </summary>
+    internal async Task<MarkInk?> LoadMarkInkAsync(Mark mark, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(mark);
+        if (Session is not { } session || _document is not { } document
+            || mark.PageIndex < 0 || mark.PageIndex >= session.PageCount)
+        {
+            return null;
+        }
+
+        var curve = Tools.Curve;
+        var smoothing = Tools.Smoothing;
+        IReadOnlyList<InkStroke>? strokes;
+        double widthPt;
+        if (session.IsPageLoaded(mark.PageIndex))
+        {
+            var page = await session.EnsurePageAsync(mark.PageIndex, ct).ConfigureAwait(false); // loaded: no load
+            strokes = page.Strokes; // an immutable snapshot
+            widthPt = page.WidthPt;
+        }
+        else
+        {
+            IMarkPageSource? source;
+            try
+            {
+                source = MarkSourceFactory(document);
+            }
+#pragma warning disable CA1031 // A row without its ink keeps its placeholder.
+            catch (Exception)
+#pragma warning restore CA1031
+            {
+                source = null;
+            }
+
+            if (source is null || mark.PageIndex >= source.PageCount)
+            {
+                return null;
+            }
+
+            widthPt = source.GetPageDimensions(mark.PageIndex).WidthPt;
+            strokes = (await source.TryLoadStrokesForScanAsync(mark.PageIndex, ct).ConfigureAwait(false))?.Strokes;
+        }
+
+        if (strokes is null)
+        {
+            return null;
+        }
+
+        var recognizer = _markRecognizer;
+        return await Task.Run(
+            () =>
+            {
+                var ids = mark.StrokeIds.ToHashSet();
+                var own = strokes.Where(s => ids.Contains(s.Id));
+                var notes = recognizer.MarginNotes(mark, widthPt, strokes);
+                return new MarkInk(mark, widthPt, own.Concat(notes).ToArray(), curve, smoothing);
+            },
+            ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1186,6 +1258,12 @@ public sealed class MainViewModel : ObservableObject
     private void StopMarks()
     {
         StopScan();
+        if (_markSession is { } markSession)
+        {
+            markSession.PageStrokesChanged -= OnMarkPageStrokesChanged;
+            _markSession = null;
+        }
+
         _markTracker?.Dispose();
         _markTracker = null;
         _markIndex = null;

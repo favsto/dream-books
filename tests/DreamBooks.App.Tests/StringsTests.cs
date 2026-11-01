@@ -47,6 +47,23 @@ public class StringsTests
     }
 
     [Fact]
+    public void Strings_Designer_stays_in_sync()
+    {
+        // The marks panel's texts (FR-103, UI-04) are in both files and the formats take their arguments.
+        var keys = ResxEntries();
+        foreach (var key in new[] { "ClosePanel", "OpenMarksList", "MarksListLabel", "MarksScanning", "MarksCountLabel", "MarkRowNameFormat", "MarkSideLeft", "MarkSideRight", "MarkStatusLabel" })
+        {
+            Assert.True(keys.ContainsKey(key), $"Strings.resx is missing '{key}'.");
+            Assert.NotNull(_stringsType.GetProperty(key, BindingFlags.Public | BindingFlags.Static));
+        }
+
+        var name = string.Format(CultureInfo.CurrentCulture, Strings.MarkRowNameFormat, 12, Strings.MarkSideLeft, 3);
+        Assert.Contains("12", name, StringComparison.Ordinal);
+        Assert.Contains(Strings.MarkSideLeft, name, StringComparison.Ordinal);
+        Assert.Contains("3", name, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Pdf_file_filter_keeps_the_pattern_part()
     {
         Assert.EndsWith("|*.pdf", Strings.PdfFileFilter, StringComparison.Ordinal);
