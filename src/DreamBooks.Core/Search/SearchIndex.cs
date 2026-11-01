@@ -43,9 +43,9 @@ public sealed class SearchIndex
     public bool AnyPageHasText => Current.TextPageCount > 0;
 
     /// <summary>
-    /// True when the hit cap cut the search short: the hits here are not all the document's. Set by the scanner
-    /// before it publishes the page that reached the cap; setting it raises no <see cref="Changed"/> (the scanner
-    /// reports the end of the search through its own Progress event).
+    /// True when the hit cap cut the search short: the hits here may not be all the document's. Set by the scanner
+    /// after it published the page that reached the cap; setting it raises no <see cref="Changed"/> (the scanner
+    /// reports the end of the search through its own Progress event, raised after the flag is set).
     /// </summary>
     public bool Truncated
     {
