@@ -56,6 +56,15 @@ public sealed class PdfDocumentSaver : IDocumentWriter
     internal Action<string>? AfterPackedWritten { get; init; }
 
     /// <summary>
+    /// How long each job of the packed copy's page-by-page comparison holds the PDFium thread
+    /// (<see cref="PdfFidelity.CompareAsync"/>; tests use <see cref="TimeSpan.Zero"/>: one page per job).
+    /// </summary>
+    internal TimeSpan FidelitySlice { get; init; } = PdfFidelity.DefaultSlice;
+
+    /// <summary>Test seam: runs on the PDFium thread after each slice of that comparison.</summary>
+    internal Action? AfterFidelitySlice { get; init; }
+
+    /// <summary>
     /// Test seam: replaces the deletion of a temp copy; returns true when the delete succeeded
     /// (e.g. to simulate a delete that fails, or one that succeeds while the name stays visible).
     /// </summary>
@@ -173,13 +182,19 @@ public sealed class PdfDocumentSaver : IDocumentWriter
                     AfterPackedWritten?.Invoke(target);
                     ct.ThrowIfCancellationRequested();
                     Verify(target, facts, ct);
-                    ct.ThrowIfCancellationRequested();
-                    if (!PdfFidelity.Compare(plain, target).IsFaithful)
-                    {
-                        throw new SaveVerificationException("the packed copy differs");
-                    }
                 },
                 ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+
+            // Every page is compared: seconds on a long book. In short jobs, so that page renders and stroke loads
+            // asked meanwhile (a jump during the save) are served between them instead of waiting for the whole check.
+            FidelityReport report = await PdfFidelity.CompareAsync(plain, target, FidelitySlice, AfterFidelitySlice, ct)
+                .ConfigureAwait(false);
+            if (!report.IsFaithful)
+            {
+                throw new SaveVerificationException("the packed copy differs");
+            }
+
             ct.ThrowIfCancellationRequested();
 
             if (!TryDelete(plain))

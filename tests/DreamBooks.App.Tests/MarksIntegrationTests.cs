@@ -29,7 +29,7 @@ namespace DreamBooks.App.Tests;
 /// times and sizes are reported (NFR-12).
 /// </summary>
 [Collection(nameof(MarkIntegrationCollection))]
-public sealed class MarksIntegrationTests : IDisposable
+public sealed partial class MarksIntegrationTests : IDisposable
 {
     private const string _realDocumentsFolder = @"C:\Users\Favsto\workspace\temp";
     private const string _fixturesVariable = "DREAMBOOKS_FIXTURES";
