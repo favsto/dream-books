@@ -75,7 +75,7 @@
          FlingMinSpeed, reaches the top or bottom, or anything touches. Speeds in DIP/ms; the launch speed is the release
          speed (no gain), capped at FlingMaxSpeed. Distance τ·(v0 − vmin), duration τ·ln(v0/vmin): a release at
          1 DIP/ms glides 428 DIP (1.35 s), 3 DIP/ms 1,328 DIP (1.84 s), 8 DIP/ms 3,578 DIP (2.28 s); the cap allows at
-         most 5,378 DIP (2.47 s, about 3.5-4 pages at fit width). Nothing glides longer than about 2.5 s. -->
+         most 5,378 DIP (2.47 s, about 3 to 4.4 pages at fit width). Nothing glides longer than about 2.5 s. -->
     <sys:Double x:Key="FlingDecayTimeConstant">450</sys:Double>
     <sys:Double x:Key="FlingMinSpeed">0.05</sys:Double>
     <sys:Double x:Key="FlingMaxSpeed">12</sys:Double>
