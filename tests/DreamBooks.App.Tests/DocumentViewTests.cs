@@ -1101,7 +1101,11 @@ public sealed class DocumentViewTests : IDisposable
         await WithViewAsync((vm, view) =>
         {
             Assert.Equal(FlingSettings.From(key => Application.Current.TryFindResource(key)), view.Fling);
-            Assert.Equal(new FlingSettings(325, 0.05, 10), view.Fling);
+            Assert.Equal(new FlingSettings(450, 0.05, 12), view.Fling);
+
+            // The hardest throw (at the cap) glides τ·ln(vmax/vmin): never longer than about 2.5 s.
+            var longest = view.Fling.DecayTimeConstantMs * Math.Log(view.Fling.MaxSpeed / view.Fling.MinSpeed);
+            Assert.InRange(longest, 2000, 2500);
         });
     }
 

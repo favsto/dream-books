@@ -74,11 +74,11 @@
          speed decaying like a phone's, v(t) = v0·e^(−t/τ) with τ = FlingDecayTimeConstant (ms), until it falls below
          FlingMinSpeed, reaches the top or bottom, or anything touches. Speeds in DIP/ms; the launch speed is the release
          speed (no gain), capped at FlingMaxSpeed. Distance τ·(v0 − vmin), duration τ·ln(v0/vmin): a release at
-         1 DIP/ms glides 309 DIP (0.97 s), 3 DIP/ms 959 DIP (1.33 s), 8 DIP/ms 2,584 DIP (1.65 s); the cap allows at
-         most 3,234 DIP (1.72 s, about 2-2.5 pages at fit width). -->
-    <sys:Double x:Key="FlingDecayTimeConstant">325</sys:Double>
+         1 DIP/ms glides 428 DIP (1.35 s), 3 DIP/ms 1,328 DIP (1.84 s), 8 DIP/ms 3,578 DIP (2.28 s); the cap allows at
+         most 5,378 DIP (2.47 s, about 3.5-4 pages at fit width). Nothing glides longer than about 2.5 s. -->
+    <sys:Double x:Key="FlingDecayTimeConstant">450</sys:Double>
     <sys:Double x:Key="FlingMinSpeed">0.05</sys:Double>
-    <sys:Double x:Key="FlingMaxSpeed">10</sys:Double>
+    <sys:Double x:Key="FlingMaxSpeed">12</sys:Double>
 
     <!-- Left-edge panel (UI-04, phase 3b; hosts the marks list, later the Pages tab): 320 DIP wide, slides in from the
          left in 180 ms ease-out and out in 120 ms ease-in (the panel timings of section 4), instant when Windows
