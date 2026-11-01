@@ -67,6 +67,18 @@ public sealed class PdfTextSearcherTests : IDisposable
     }
 
     [Fact]
+    public async Task The_renderer_is_the_background_search_source()
+    {
+        await using var renderer = await OpenAsync(Page(new TextLine(100, 700, "il sole nasce")));
+
+        // The app's search scan reads the document through the renderer itself (no adapter, FR-13).
+        ISearchPageSource source = renderer;
+        Assert.Equal(1, source.PageCount);
+        SearchPageResult result = await source.SearchPageAsync(0, Q("sole"), 100, CancellationToken.None);
+        Assert.Single(result.Hits);
+    }
+
+    [Fact]
     public async Task Match_is_case_and_accent_insensitive()
     {
         await using var renderer = await OpenAsync(Page(

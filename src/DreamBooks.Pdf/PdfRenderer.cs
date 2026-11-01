@@ -11,7 +11,7 @@ namespace DreamBooks.Pdf;
 /// dedicated <see cref="PdfiumThread"/> (NFR-04); open failures surface as
 /// <see cref="PdfOpenException"/> (NFR-11). Never logs document content (NFR-12).
 /// </summary>
-public sealed class PdfRenderer : IAsyncDisposable, IPageSource
+public sealed class PdfRenderer : IAsyncDisposable, IPageSource, ISearchPageSource
 {
     private readonly PageSize[] _pageSizes;
     private readonly PageDimensions[] _dimensions;
