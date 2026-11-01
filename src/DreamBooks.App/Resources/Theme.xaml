@@ -132,6 +132,30 @@
     <Thickness x:Key="MarkRowLabelMargin">12,0,0,0</Thickness>
     <sys:Double x:Key="GoToPageFieldWidth">80</sys:Double>
 
+    <!-- Left-edge panel tabs (UI-04, phase 3b-2): an accent bar under the chosen tab. -->
+    <Thickness x:Key="EdgePanelTabMargin">0,0,4,0</Thickness>
+    <Thickness x:Key="EdgePanelTabPadding">8,0,8,0</Thickness>
+    <Thickness x:Key="EdgePanelTabIndicatorThickness">0,0,0,2</Thickness>
+    <SolidColorBrush x:Key="EdgePanelTabIndicatorBrush" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" />
+
+    <!-- Pages tab (FR-103, UI-04, phase 3b-2): one row per page, a 140 DIP wide thumbnail with the page's proportions
+         (the page bitmap with the ink drawn over it; strokes never thinner than 0.75 DIP), the page number under it. The
+         current page has a 3 DIP accent ring (always laid out, transparent elsewhere, so rows never change size). Pages
+         with marks or notes show small bars at the thumbnail's top left in the rail's colours, opaque (they are tiny). -->
+    <sys:Double x:Key="PagesThumbnailWidth">140</sys:Double>
+    <sys:Double x:Key="PagesThumbnailMinStrokeWidth">0.75</sys:Double>
+    <Thickness x:Key="PagesRowPadding">4</Thickness>
+    <Thickness x:Key="PagesNumberMargin">0,2,0,0</Thickness>
+    <Thickness x:Key="PagesCurrentRingThickness">3</Thickness>
+    <Thickness x:Key="PagesCurrentRingPadding">1</Thickness>
+    <CornerRadius x:Key="PagesCurrentRingCornerRadius">3</CornerRadius>
+    <SolidColorBrush x:Key="PagesCurrentRingBrush" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" />
+    <GridLength x:Key="PagesTickColumnWidth">16</GridLength>
+    <Thickness x:Key="PagesTickMargin">0,4,3,0</Thickness>
+    <Thickness x:Key="PagesTickGap">0,0,2,0</Thickness>
+    <sys:Double x:Key="PagesTickWidth">3</sys:Double>
+    <sys:Double x:Key="PagesTickHeight">16</sys:Double>
+
     <!-- Search highlights on the page (FR-13, FR-105, phase 3b-2): drawn between the PDF bitmap and the ink, so they never
          cover the ink. Every result in translucent yellow, the current one in a stronger orange; padded 1.5 pt above and
          below the text box (PDFium's boxes hug the glyphs). The page is white paper in both themes, so the colours are
@@ -152,6 +176,32 @@
         <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Margin" Value="0,0,12,0" />
+    </Style>
+    <!-- The left-edge panel's tabs ("Segni" / "Pagine", UI-04): 40 px touch targets, the title size, the chosen one
+         semi-bold over an accent bar; keyboard focus shows the system focus rectangle. -->
+    <Style x:Key="EdgePanelTabStyle" TargetType="RadioButton" BasedOn="{StaticResource {x:Type RadioButton}}">
+        <Setter Property="MinWidth" Value="{StaticResource TouchTarget}" />
+        <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />
+        <Setter Property="Margin" Value="{StaticResource EdgePanelTabMargin}" />
+        <Setter Property="Padding" Value="{StaticResource EdgePanelTabPadding}" />
+        <Setter Property="FontSize" Value="{StaticResource EdgePanelTitleSize}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Bar" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"
+                            BorderThickness="{StaticResource EdgePanelTabIndicatorThickness}" BorderBrush="Transparent">
+                        <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bar" Property="BorderBrush" Value="{StaticResource EdgePanelTabIndicatorBrush}" />
+                            <Setter Property="FontWeight" Value="SemiBold" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
     <Style x:Key="SectionLabel" TargetType="TextBlock">
         <Setter Property="FontWeight" Value="SemiBold" />

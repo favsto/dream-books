@@ -35,12 +35,24 @@
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock x:Name="TitleText" FontWeight="SemiBold"
                                    FontSize="{StaticResource EdgePanelTitleSize}" VerticalAlignment="Center" />
+                        <!-- With a second body: the tab strip in place of the title ("Segni" / "Pagine"), 40 px tabs,
+                             reachable with Tab and the arrows; on the sheet, so the pen never presses them. -->
+                        <StackPanel x:Name="TabStrip" Orientation="Horizontal" Visibility="Collapsed">
+                            <RadioButton x:Name="FirstTab" Style="{StaticResource EdgePanelTabStyle}" IsChecked="True"
+                                         Checked="OnTabChecked" />
+                            <RadioButton x:Name="SecondTab" Style="{StaticResource EdgePanelTabStyle}"
+                                         Checked="OnTabChecked" />
+                        </StackPanel>
                         <!-- The count: text and automation name ("Numero di segni: 12") are set by the code. -->
                         <TextBlock x:Name="DetailText" Margin="{StaticResource EdgePanelDetailMargin}" VerticalAlignment="Center"
                                    FontSize="{StaticResource EdgePanelTitleSize}" />
                     </StackPanel>
                 </DockPanel>
-                <ContentPresenter x:Name="BodyHost" Content="{Binding Body, ElementName=Self}" Margin="{StaticResource Gap}" />
+                <Grid Margin="{StaticResource Gap}">
+                    <ContentPresenter x:Name="BodyHost" Content="{Binding Body, ElementName=Self}" />
+                    <ContentPresenter x:Name="SecondBodyHost" Content="{Binding SecondBody, ElementName=Self}"
+                                      Visibility="Collapsed" />
+                </Grid>
             </DockPanel>
         </Border>
     </Grid>

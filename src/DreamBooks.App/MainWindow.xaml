@@ -111,9 +111,16 @@
                                   Width="{StaticResource GlyphSize}" Height="{StaticResource GlyphSize}" />
                         </Button>
                         <Button x:Name="OpenMarksListButton" Content="{x:Static res:Strings.MarksListLabel}"
-                                Command="{Binding OpenCommand, ElementName=MarksPanel}"
+                                Command="{Binding OpenTabCommand, ElementName=MarksPanel}" CommandParameter="0"
                                 AutomationProperties.Name="{x:Static res:Strings.OpenMarksList}"
                                 ToolTip="{x:Static res:Strings.OpenMarksList}" />
+                    </StackPanel>
+                    <!-- The page thumbnails in the same panel (FR-103, UI-04; Ctrl+Shift+P). -->
+                    <StackPanel Orientation="Horizontal" Margin="{StaticResource Gap}">
+                        <Button x:Name="OpenPagesListButton" Content="{x:Static res:Strings.PagesListButton}"
+                                Command="{Binding OpenTabCommand, ElementName=MarksPanel}" CommandParameter="1"
+                                AutomationProperties.Name="{x:Static res:Strings.OpenPagesList}"
+                                ToolTip="{x:Static res:Strings.OpenPagesList}" />
                     </StackPanel>
                     <TextBlock x:Name="MarkStatusText" Text="{Binding Marks.StatusText}" TextWrapping="Wrap"
                                Margin="{StaticResource Gap}" AutomationProperties.LiveSetting="Polite">
@@ -355,11 +362,18 @@
                 <TextBlock Text="{Binding ErrorMessage}" TextAlignment="Center" Margin="{StaticResource Gap}" />
             </StackPanel>
 
-            <!-- The left-edge panel (UI-04) with the marks list (FR-103): a finger swipe from the left edge, the menu
-                 entry; it closes with the close button, Esc, a swipe, a press outside and after a jump. -->
+            <!-- The left-edge panel (UI-04) with two tabs: the marks list (FR-103, Ctrl+M) and the page thumbnails
+                 (Ctrl+Shift+P). It opens with a finger swipe from the left edge (on the last tab shown) or the menu
+                 entries; it closes with the close button, Esc, a swipe, a press outside and after a jump to a mark (a jump
+                 to a page leaves it open). -->
             <views:EdgePanel x:Name="MarksPanel" Title="{x:Static res:Strings.MarksList}"
+                             FirstTabHeader="{x:Static res:Strings.MarksList}" FirstTabName="{x:Static res:Strings.MarksTabName}"
+                             SecondTabHeader="{x:Static res:Strings.PagesTab}" SecondTabName="{x:Static res:Strings.PagesTabName}"
                              HeaderDetail="{Binding Marks.Count}" HeaderDetailNameFormat="{x:Static res:Strings.MarksCountNameFormat}">
                 <views:MarksListView DataContext="{Binding Marks}" />
+                <views:EdgePanel.SecondBody>
+                    <views:PagesListView DataContext="{Binding Pages}" />
+                </views:EdgePanel.SecondBody>
             </views:EdgePanel>
         </Grid>
     </DockPanel>

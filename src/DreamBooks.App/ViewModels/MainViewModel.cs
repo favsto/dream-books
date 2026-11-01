@@ -111,6 +111,7 @@ public sealed class MainViewModel : ObservableObject
         Viewport.PositionChanged += OnViewportPositionChanged;
         Marks = new MarksViewModel(Viewport, _scheduler) { InkSource = LoadMarkInkAsync };
         Search = new SearchViewModel(Viewport, _scheduler);
+        Pages = new PagesViewModel(Viewport, Marks);
         Search.QueryApplied += OnSearchQueryApplied;
         ZoomVm.PropertyChanged += OnZoomPropertyChanged;
         OpenDocument = OpenedDocument.OpenPdfAsync;
@@ -159,6 +160,9 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>The text search of the open document: field, count, next/previous, highlights (FR-13, FR-105).</summary>
     public SearchViewModel Search { get; }
+
+    /// <summary>The Pages tab of the left-edge panel: one thumbnail row per page (FR-103, UI-04).</summary>
+    public PagesViewModel Pages { get; }
 
     /// <summary>The open document, or null.</summary>
     public DocumentSession? Session

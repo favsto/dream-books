@@ -270,6 +270,36 @@ internal static class Strings
     /// <summary>The same note for a single page.</summary>
     public static string SearchFailedPageOne => Get(nameof(SearchFailedPageOne));
 
+    /// <summary>The Pages tab of the left-edge panel (UI-04): its header.</summary>
+    public static string PagesTab => Get(nameof(PagesTab));
+
+    /// <summary>Automation name of the "Segni" tab.</summary>
+    public static string MarksTabName => Get(nameof(MarksTabName));
+
+    /// <summary>Automation name of the "Pagine" tab.</summary>
+    public static string PagesTabName => Get(nameof(PagesTabName));
+
+    /// <summary>Automation name of the page thumbnail list.</summary>
+    public static string PagesListLabel => Get(nameof(PagesListLabel));
+
+    /// <summary>Automation name and tooltip of the menu entry that opens the Pages tab.</summary>
+    public static string OpenPagesList => Get(nameof(OpenPagesList));
+
+    /// <summary>Caption of the menu entry that opens the Pages tab.</summary>
+    public static string PagesListButton => Get(nameof(PagesListButton));
+
+    /// <summary>A page row's automation name: {0} the page number.</summary>
+    public static string PageRowNameFormat => Get(nameof(PageRowNameFormat));
+
+    /// <summary>Added to the row name of the current page.</summary>
+    public static string PageRowCurrent => Get(nameof(PageRowCurrent));
+
+    /// <summary>Added to the row name of a page with marks.</summary>
+    public static string PageRowHasMarks => Get(nameof(PageRowHasMarks));
+
+    /// <summary>Added to the row name of a page with handwritten notes.</summary>
+    public static string PageRowHasNotes => Get(nameof(PageRowHasNotes));
+
     private static string Get(string name) =>
         Manager.GetString(name, System.Globalization.CultureInfo.CurrentUICulture) ?? name;
 }

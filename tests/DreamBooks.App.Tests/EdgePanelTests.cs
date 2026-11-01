@@ -288,8 +288,9 @@ public sealed class EdgePanelTests : IDisposable
                 Assert.Same(window.MarksList, panel.Body);
                 Assert.Same(vm.Marks, window.MarksList.DataContext);
 
-                // The menu entry opens it.
-                Assert.Same(panel.OpenCommand, window.OpenMarksListButton.Command);
+                // The menu entry opens it, on the marks tab (3b-2 adds the Pages tab to the same panel).
+                Assert.Same(panel.OpenTabCommand, window.OpenMarksListButton.Command);
+                Assert.Equal("0", window.OpenMarksListButton.CommandParameter);
                 Assert.Equal(Strings.OpenMarksList, AutomationProperties.GetName(window.OpenMarksListButton));
                 Assert.True(window.OpenMarksListButton.MinHeight >= 40);
                 window.OpenMarksListButton.Command.Execute(null);

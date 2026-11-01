@@ -3,7 +3,8 @@ using DreamBooks.App.ViewModels;
 namespace DreamBooks.App.Views;
 
 /// <summary>
-/// The ink of the pages shown in the scroll rail's preview bubble (UI-07), as frozen vector drawings, for the last
+/// The ink of the pages shown in the scroll rail's preview bubble (UI-07), and of the Pages tab's thumbnails (FR-103,
+/// through <see cref="PageThumbnailCache"/>, with a larger capacity), as frozen vector drawings, for the last
 /// <see cref="Capacity"/> pages (least recently used out), so scrubbing back draws at once. The strokes are read through
 /// the injected source (off the UI thread), their outlines built on the thread pool (<see cref="InkDrawings"/>, as the
 /// marks list builds its thumbnails), the frozen drawings made on the UI thread. A page whose strokes changed is read

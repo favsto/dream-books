@@ -61,6 +61,15 @@ public class StringsTests
         Assert.Contains("12", name, StringComparison.Ordinal);
         Assert.Contains(Strings.MarkSideLeft, name, StringComparison.Ordinal);
         Assert.DoesNotContain("{2}", Strings.MarkRowNameFormat, StringComparison.Ordinal); // no line number (fixed default lines)
+
+        // The Pages tab's texts (FR-103, UI-04), in both files; the row name takes the page number.
+        foreach (var key in new[] { "PagesTab", "MarksTabName", "PagesTabName", "PagesListLabel", "OpenPagesList", "PagesListButton", "PageRowNameFormat", "PageRowCurrent", "PageRowHasMarks", "PageRowHasNotes" })
+        {
+            Assert.True(keys.ContainsKey(key), $"Strings.resx is missing '{key}'.");
+            Assert.NotNull(_stringsType.GetProperty(key, BindingFlags.Public | BindingFlags.Static));
+        }
+
+        Assert.Contains("37", string.Format(CultureInfo.CurrentCulture, Strings.PageRowNameFormat, 37), StringComparison.Ordinal);
     }
 
     [Fact]

@@ -143,4 +143,14 @@
   <data name="SearchWrappedToEnd" xml:space="preserve"><value>Ripartito dalla fine</value></data>
   <data name="SearchFailedPagesFormat" xml:space="preserve"><value>{0} pagine non lette</value></data>
   <data name="SearchFailedPageOne" xml:space="preserve"><value>1 pagina non letta</value></data>
+  <data name="PagesTab" xml:space="preserve"><value>Pagine</value></data>
+  <data name="MarksTabName" xml:space="preserve"><value>Scheda Segni</value></data>
+  <data name="PagesTabName" xml:space="preserve"><value>Scheda Pagine</value></data>
+  <data name="PagesListLabel" xml:space="preserve"><value>Miniature delle pagine</value></data>
+  <data name="OpenPagesList" xml:space="preserve"><value>Apri le miniature delle pagine</value></data>
+  <data name="PagesListButton" xml:space="preserve"><value>Pagine</value></data>
+  <data name="PageRowNameFormat" xml:space="preserve"><value>Pagina {0}</value></data>
+  <data name="PageRowCurrent" xml:space="preserve"><value>pagina corrente</value></data>
+  <data name="PageRowHasMarks" xml:space="preserve"><value>con segni</value></data>
+  <data name="PageRowHasNotes" xml:space="preserve"><value>con note</value></data>
 </root>

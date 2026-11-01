@@ -15,6 +15,11 @@ namespace DreamBooks.App;
 
 public partial class MainWindow : Window
 {
+    /// <summary>The left-edge panel's tabs: the marks list and the page thumbnails.</summary>
+    internal const int MarksTab = 0;
+
+    internal const int PagesTab = 1;
+
     private readonly MainViewModel _viewModel = new(
         new FileDialogService(), new RecoveryStore(RecoveryRoot()), new ViewPositionStore(PositionsRoot()));
 
@@ -35,9 +40,24 @@ public partial class MainWindow : Window
         PreviewKeyDown += OnPreviewKeyDown;
         DocumentViewer.LeftEdgeSwiped += (_, _) => MarksPanel.Open(); // a finger swipe from the left edge (UI-04)
 
-        // Ctrl+M opens and closes the marks list (FR-103; free in 3a). Added here: the panel's command is not reachable
-        // from the window's input bindings in XAML.
-        InputBindings.Add(new KeyBinding(MarksPanel.ToggleCommand, Key.M, ModifierKeys.Control));
+        // Ctrl+M opens and closes the marks list (FR-103; free in 3a), Ctrl+Shift+P the page thumbnails (UI-04; Ctrl+P is
+        // left to printing, the shortcut every Windows reader expects for it). Each switches to its tab when the other is
+        // shown. Added here: the panel's command is not reachable from the window's input bindings in XAML.
+        InputBindings.Add(new KeyBinding(MarksPanel.ToggleCommand, Key.M, ModifierKeys.Control) { CommandParameter = MarksTab });
+        InputBindings.Add(new KeyBinding(MarksPanel.ToggleCommand, Key.P, ModifierKeys.Control | ModifierKeys.Shift)
+        {
+            CommandParameter = PagesTab,
+        });
+
+        // The page thumbnails: bitmaps from the document view's coordinator (the current one), the ink as the marks list
+        // and the rail read it (FR-103); both in the coordinator's low-priority queue, never ahead of a page render.
+        var thumbnails = new PageThumbnailCache(
+            (pageIndex, ct) => DocumentViewer.Bitmaps.RenderThumbnailAsync(pageIndex, ct),
+            (pageIndex, ct) => DataContext is MainViewModel vm
+                ? DocumentViewer.Bitmaps.RunWhenIdleAsync(token => vm.LoadPageInkAsync(pageIndex, token), ct)
+                : Task.FromResult<PageInk?>(null));
+        thumbnails.SetPaused(true); // until the Pages tab is shown
+        PagesList.Thumbnails = thumbnails;
 
         // "Nessun altro segno" is a live region: Narrator reads it when it appears (NFR-31).
         _statusText.AddValueChanged(MarkStatusText, OnMarkStatusTextChanged);
@@ -49,6 +69,9 @@ public partial class MainWindow : Window
 
     /// <summary>The marks list hosted by <see cref="MarksPanel"/> (not named in XAML: the panel is a user control).</summary>
     internal MarksListView MarksList => (MarksListView)MarksPanel.Body!;
+
+    /// <summary>The page thumbnails hosted by <see cref="MarksPanel"/> as its second tab.</summary>
+    internal PagesListView PagesList => (PagesListView)MarksPanel.SecondBody!;
 
     /// <summary>How many times Ctrl+F asked for the search field's focus (tests: an unshown window cannot take it).</summary>
     internal int SearchFocusRequests { get; private set; }

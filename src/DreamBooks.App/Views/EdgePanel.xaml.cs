@@ -13,7 +13,9 @@ namespace DreamBooks.App.Views;
 
 /// <summary>
 /// The left-edge panel shell (UI-04): a sheet of <c>EdgePanelWidth</c> that slides in from the left over the document
-/// and hosts <see cref="Body"/> (the marks list in 3b-1, the Pages tab in 3b-2). It opens through
+/// and hosts <see cref="Body"/> (the marks list, 3b-1) and, as a second tab, <see cref="SecondBody"/> (the Pages tab,
+/// 3b-2): with a second body a tab strip replaces the title, and <see cref="SelectedTab"/> picks the content shown (the
+/// content implementing <see cref="IEdgePanelContent"/> is told when it is shown). It opens through
 /// <see cref="OpenCommand"/> (the menu entry; <c>MainWindow</c> also opens it on a finger swipe from the left edge,
 /// see <see cref="DocumentView.LeftEdgeSwiped"/>) and closes through <see cref="CloseCommand"/> (its close button), Esc
 /// (routed by the window), a finger swipe to the left on the sheet, a press outside it (<see cref="RoutePress"/>), and
@@ -41,6 +43,21 @@ public partial class EdgePanel : UserControl
     public static readonly DependencyProperty BodyProperty = DependencyProperty.Register(
         nameof(Body), typeof(object), typeof(EdgePanel), new PropertyMetadata(null, OnBodyChanged));
 
+    public static readonly DependencyProperty SecondBodyProperty = DependencyProperty.Register(
+        nameof(SecondBody), typeof(object), typeof(EdgePanel), new PropertyMetadata(null, OnBodyChanged));
+
+    public static readonly DependencyProperty FirstTabHeaderProperty = DependencyProperty.Register(
+        nameof(FirstTabHeader), typeof(string), typeof(EdgePanel), new PropertyMetadata(string.Empty, OnTabsChanged));
+
+    public static readonly DependencyProperty SecondTabHeaderProperty = DependencyProperty.Register(
+        nameof(SecondTabHeader), typeof(string), typeof(EdgePanel), new PropertyMetadata(string.Empty, OnTabsChanged));
+
+    public static readonly DependencyProperty FirstTabNameProperty = DependencyProperty.Register(
+        nameof(FirstTabName), typeof(string), typeof(EdgePanel), new PropertyMetadata(null, OnTabsChanged));
+
+    public static readonly DependencyProperty SecondTabNameProperty = DependencyProperty.Register(
+        nameof(SecondTabName), typeof(string), typeof(EdgePanel), new PropertyMetadata(null, OnTabsChanged));
+
     /// <summary>Raised (bubbling) by the hosted content after it moved the document: the panel hides.</summary>
     public static readonly RoutedEvent ContentActivatedEvent = EventManager.RegisterRoutedEvent(
         "ContentActivated", RoutingStrategy.Bubble, typeof(RoutedEventHandler), typeof(EdgePanel));
@@ -60,15 +77,17 @@ public partial class EdgePanel : UserControl
         InitializeComponent();
         OpenCommand = new RelayCommand(Open);
         CloseCommand = new RelayCommand(Close);
-        ToggleCommand = new RelayCommand(() =>
+        OpenTabCommand = new RelayCommand<object?>(parameter => Open(TabOf(parameter) ?? SelectedTab));
+        ToggleCommand = new RelayCommand<object?>(parameter =>
         {
-            if (_isOpen)
+            var tab = TabOf(parameter) ?? SelectedTab;
+            if (_isOpen && tab == SelectedTab)
             {
                 Close();
             }
             else
             {
-                Open();
+                Open(tab); // opens it, or switches to that tab when the other one is shown
             }
         });
         CloseButton.Command = CloseCommand;
@@ -126,8 +145,57 @@ public partial class EdgePanel : UserControl
 
     public ICommand CloseCommand { get; }
 
-    /// <summary>Opens the panel when closed, closes it when open (the keyboard shortcut).</summary>
+    /// <summary>
+    /// The keyboard shortcut: with a tab index as parameter (0 or 1), opens the panel on that tab, switches to it when
+    /// the other one is shown, and closes the panel when it is shown already; without one, opens or closes the panel
+    /// on its current tab.
+    /// </summary>
     public ICommand ToggleCommand { get; }
+
+    /// <summary>Opens the panel on the tab given as parameter (0 or 1; the current one without): the menu entries.</summary>
+    public ICommand OpenTabCommand { get; }
+
+    /// <summary>The second tab's content (the Pages tab); with it the panel shows the tab strip instead of its title.</summary>
+    public object? SecondBody
+    {
+        get => GetValue(SecondBodyProperty);
+        set => SetValue(SecondBodyProperty, value);
+    }
+
+    /// <summary>The first tab's header ("Segni").</summary>
+    public string FirstTabHeader
+    {
+        get => (string)GetValue(FirstTabHeaderProperty);
+        set => SetValue(FirstTabHeaderProperty, value);
+    }
+
+    /// <summary>The second tab's header ("Pagine").</summary>
+    public string SecondTabHeader
+    {
+        get => (string)GetValue(SecondTabHeaderProperty);
+        set => SetValue(SecondTabHeaderProperty, value);
+    }
+
+    /// <summary>The first tab's automation name ("Scheda Segni"); the header without one.</summary>
+    public string? FirstTabName
+    {
+        get => (string?)GetValue(FirstTabNameProperty);
+        set => SetValue(FirstTabNameProperty, value);
+    }
+
+    /// <summary>The second tab's automation name ("Scheda Pagine"); the header without one.</summary>
+    public string? SecondTabName
+    {
+        get => (string?)GetValue(SecondTabNameProperty);
+        set => SetValue(SecondTabNameProperty, value);
+    }
+
+    /// <summary>The tab shown: 0 (<see cref="Body"/>) or 1 (<see cref="SecondBody"/>, when there is one).</summary>
+    public int SelectedTab { get; private set; }
+
+    private bool HasTabs => SecondBody is not null;
+
+    private object? ShownBody => SelectedTab == 1 && HasTabs ? SecondBody : Body;
 
     /// <summary>True from <see cref="Open"/> until <see cref="Close"/> (not while it slides out).</summary>
     public bool IsOpen => _isOpen;
@@ -160,7 +228,41 @@ public partial class EdgePanel : UserControl
                 children.Add(body);
             }
 
+            if (SecondBody is { } second)
+            {
+                children.Add(second);
+            }
+
             return children.GetEnumerator();
+        }
+    }
+
+    /// <summary>Opens the panel on <paramref name="tab"/> (0 or 1), or switches to it when the panel is open.</summary>
+    public void Open(int tab)
+    {
+        SelectTab(tab);
+        Open();
+    }
+
+    /// <summary>
+    /// Shows tab <paramref name="tab"/> (0, or 1 when there is a <see cref="SecondBody"/>): its content in place of the
+    /// other's; the count belongs to the first. When the panel is open, the content is told it is shown.
+    /// </summary>
+    public void SelectTab(int tab)
+    {
+        var index = tab == 1 && HasTabs ? 1 : 0;
+        var changed = index != SelectedTab;
+        if (changed && _isOpen)
+        {
+            (ShownBody as IEdgePanelContent)?.OnHidden();
+        }
+
+        SelectedTab = index;
+        (index == 0 ? FirstTab : SecondTab).IsChecked = true; // re-enters through OnTabChecked: no-op then
+        ApplyTab();
+        if (changed && _isOpen)
+        {
+            NotifyShown();
         }
     }
 
@@ -178,6 +280,7 @@ public partial class EdgePanel : UserControl
         Root.IsHitTestVisible = true;
         SlideTo(0, from: -SheetWidth(), "EdgePanelOpenDuration", new CubicEase { EasingMode = EasingMode.EaseOut }, null);
         IsOpenChanged?.Invoke(this, EventArgs.Empty);
+        NotifyShown();
 
         // After layout, so the content (a list) can take focus: arrows and Enter work at once.
         Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
@@ -185,7 +288,7 @@ public partial class EdgePanel : UserControl
             FocusRequests++;
             if (_isOpen && !IsKeyboardFocusWithin)
             {
-                (Body as UIElement)?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+                (ShownBody as UIElement)?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
             }
         });
     }
@@ -212,6 +315,7 @@ public partial class EdgePanel : UserControl
         }
 
         IsOpenChanged?.Invoke(this, EventArgs.Empty);
+        (ShownBody as IEdgePanelContent)?.OnHidden(); // e.g. the thumbnails stop loading
     }
 
     /// <summary>
@@ -293,8 +397,8 @@ public partial class EdgePanel : UserControl
     {
         var panel = (EdgePanel)d;
         var title = (string?)e.NewValue ?? string.Empty;
-        System.Windows.Automation.AutomationProperties.SetName(panel, title);
         panel.TitleText.Text = title;
+        panel.ApplyTab(); // names the panel: its title, or the tab shown
     }
 
     /// <summary>The count and its automation name, on a text block (which has an automation peer).</summary>
@@ -320,6 +424,80 @@ public partial class EdgePanel : UserControl
         if (e.NewValue is not null)
         {
             panel.AddLogicalChild(e.NewValue);
+        }
+
+        if (e.Property == SecondBodyProperty)
+        {
+            panel.ApplyTabs();
+        }
+    }
+
+    private static void OnTabsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) => ((EdgePanel)d).ApplyTabs();
+
+    /// <summary>A tab index from a command parameter (an int, or its text from XAML), or null.</summary>
+    private static int? TabOf(object? parameter) => parameter switch
+    {
+        int tab => tab,
+        string text when int.TryParse(text, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var tab) => tab,
+        _ => null,
+    };
+
+    /// <summary>The tab strip (shown with a second body, in place of the title), its headers and names.</summary>
+    private void ApplyTabs()
+    {
+        if (TabStrip is null)
+        {
+            return; // still being built
+        }
+
+        TabStrip.Visibility = HasTabs ? Visibility.Visible : Visibility.Collapsed;
+        TitleText.Visibility = HasTabs ? Visibility.Collapsed : Visibility.Visible;
+        FirstTab.Content = FirstTabHeader;
+        SecondTab.Content = SecondTabHeader;
+        System.Windows.Automation.AutomationProperties.SetName(FirstTab, FirstTabName ?? FirstTabHeader);
+        System.Windows.Automation.AutomationProperties.SetName(SecondTab, SecondTabName ?? SecondTabHeader);
+        if (!HasTabs && SelectedTab != 0)
+        {
+            SelectTab(0);
+            return;
+        }
+
+        ApplyTab();
+    }
+
+    /// <summary>Shows the selected tab's content, the count only with the first, and names the panel after the tab.</summary>
+    private void ApplyTab()
+    {
+        if (SecondBodyHost is null)
+        {
+            return; // still being built
+        }
+
+        var second = SelectedTab == 1 && HasTabs;
+        BodyHost.Visibility = second ? Visibility.Collapsed : Visibility.Visible;
+        SecondBodyHost.Visibility = second ? Visibility.Visible : Visibility.Collapsed;
+        DetailText.Visibility = second ? Visibility.Collapsed : Visibility.Visible;
+        System.Windows.Automation.AutomationProperties.SetName(
+            this, HasTabs ? (second ? SecondTabHeader : FirstTabHeader) : Title);
+    }
+
+    /// <summary>A tab chosen by touch, mouse or keyboard.</summary>
+    private void OnTabChecked(object sender, RoutedEventArgs e)
+    {
+        var tab = ReferenceEquals(sender, SecondTab) ? 1 : 0;
+        if (SecondBodyHost is not null && tab != SelectedTab)
+        {
+            SelectTab(tab);
+        }
+    }
+
+    /// <summary>Tells the content now shown that it is (the Pages list brings the current page into view).</summary>
+    private void NotifyShown()
+    {
+        if (ShownBody is IEdgePanelContent content)
+        {
+            UpdateLayout(); // the content is measured at its real size first
+            content.OnShown();
         }
     }
 
