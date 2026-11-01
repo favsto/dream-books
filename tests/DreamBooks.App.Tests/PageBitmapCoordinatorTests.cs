@@ -568,6 +568,71 @@ public sealed class PageBitmapCoordinatorTests
     }
 
     [Fact]
+    public void Thumbnails_wait_for_the_first_zoom_and_while_a_zoom_settles()
+    {
+        WpfTestThread.Run(() =>
+        {
+            using var f = new Fixture(30) { Renderer = { Auto = true } };
+
+            // A document whose view has not asked for any zoom yet: no thumbnail goes ahead of its first pages.
+            f.Coordinator.SetDocument(f.Layout);
+            var early = f.Coordinator.RenderThumbnailAsync(10, CancellationToken.None);
+            f.Delays.Advance(PageBitmapCoordinator.ThumbnailIdlePoll);
+            WpfTestThread.Drain();
+            Assert.Empty(f.Renderer.Requests);
+            Assert.False(early.IsCompleted);
+
+            f.Coordinator.SetZoom(1);
+            f.Show(0, 1, [0]);
+            f.Idle();
+            WpfTestThread.PumpUntil(() =>
+            {
+                f.Delays.Advance(PageBitmapCoordinator.ThumbnailIdlePoll);
+                return early.IsCompleted;
+            });
+            Assert.NotNull(early.Result);
+
+            // A pinch: while the zoom settles (its renders are about to come), thumbnails wait.
+            f.Coordinator.SetZoom(2);
+            var pinched = f.Coordinator.RenderThumbnailAsync(11, CancellationToken.None);
+            WpfTestThread.Drain();
+            Assert.False(pinched.IsCompleted);
+            Assert.DoesNotContain(f.Renderer.Requests, r => r.Page == 11);
+            f.Delays.Advance(PageBitmapCoordinator.ZoomSettleDelay); // settled: the sharp renders run first
+            f.Idle();
+            WpfTestThread.PumpUntil(() =>
+            {
+                f.Delays.Advance(PageBitmapCoordinator.ThumbnailIdlePoll);
+                return pinched.IsCompleted;
+            });
+            Assert.NotNull(pinched.Result);
+            var sharp2 = PageBitmapRenderer.SharpSize(_page, 2, 1);
+            var thumbnailAt = Array.FindIndex(f.Renderer.Requests, r => r.Page == 11);
+            Assert.True(Array.FindLastIndex(f.Renderer.Requests, r => r.Width == sharp2.Width) < thumbnailAt);
+        });
+    }
+
+    [Fact]
+    public void A_screen_scale_change_and_a_renderer_swap_are_signalled_to_the_thumbnails()
+    {
+        WpfTestThread.Run(() =>
+        {
+            using var f = new Fixture(30);
+            f.Open();
+            var (scale, retry) = (0, 0);
+            f.Coordinator.ThumbnailScaleChanged += (_, _) => scale++;
+            f.Coordinator.ThumbnailRetryRequested += (_, _) => retry++;
+
+            f.Coordinator.InvalidateAll(); // the renderer is back after a save
+            Assert.Equal((0, 1), (scale, retry));
+            f.Coordinator.SetDpiScale(2);
+            Assert.Equal(1, scale);
+            f.Coordinator.SetDpiScale(2); // unchanged: nothing
+            Assert.Equal(1, scale);
+        });
+    }
+
+    [Fact]
     public void Thumbnails_wait_while_a_save_has_the_file_released()
     {
         WpfTestThread.Run(() =>

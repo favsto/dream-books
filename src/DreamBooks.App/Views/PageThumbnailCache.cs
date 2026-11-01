@@ -130,6 +130,42 @@ internal sealed class PageThumbnailCache
         }
     }
 
+    /// <summary>The bitmaps were dropped (another screen scale): the rows render theirs again, keeping the old one shown.</summary>
+    public event EventHandler? BitmapsCleared;
+
+    /// <summary>The file is available again (after a save): rows missing their bitmap or ink read it again.</summary>
+    public event EventHandler? RetryRequested;
+
+    /// <summary>How many times the bitmaps were dropped for a screen-scale change (tests).</summary>
+    internal int BitmapClears { get; private set; }
+
+    /// <summary>How many times the rows were asked to read what they miss (tests).</summary>
+    internal int RetryRequests { get; private set; }
+
+    /// <summary>
+    /// The screen scale changed: every bitmap goes (they were rendered for the old scale), reads under way are not kept,
+    /// and the shown rows render theirs again. The ink is vectors and stays.
+    /// </summary>
+    public void ClearBitmaps()
+    {
+        BitmapClears++;
+        _generation++;
+        _entries.Clear();
+        _order.Clear();
+        Bytes = 0;
+        BitmapsCleared?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// The file is available again (the renderer is back after a save): a read that returned nothing because it ran
+    /// while the file was released is tried again by the rows still shown.
+    /// </summary>
+    public void RetryMissing()
+    {
+        RetryRequests++;
+        RetryRequested?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>The strokes of a page changed: its ink is read again (the bitmap stays).</summary>
     public void InvalidateInk(int pageIndex)
     {

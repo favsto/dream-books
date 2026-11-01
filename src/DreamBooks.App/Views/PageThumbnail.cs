@@ -99,7 +99,7 @@ public sealed class PageThumbnail : FrameworkElement
         if (_ink is { } ink && ink.Strokes.Count > 0 && ink.WidthPt > 0)
         {
             var scale = size.Width / ink.WidthPt;
-            var minimumDip = TryFindResource("PagesThumbnailMinStrokeWidth") as double? ?? 0.75;
+            var minimumDip = TryFindResource("PagesThumbnailMinStrokeWidth") as double? ?? 0; // the value is the theme's
             drawingContext.PushClip(new RectangleGeometry(box));
             drawingContext.PushTransform(new ScaleTransform(scale, scale));
             InkDrawings.Draw(drawingContext, ink.Strokes, scale, minimumDip);
@@ -108,8 +108,15 @@ public sealed class PageThumbnail : FrameworkElement
         }
 
         // The page's edge, over everything, so white pages read on the panel in both themes.
-        var frame = InkDrawings.RoundPen(TryFindResource("MarkThumbnailBorderBrush") as Brush, 1);
-        drawingContext.DrawRectangle(null, frame, new Rect(0.5, 0.5, Math.Max(0, size.Width - 1), Math.Max(0, size.Height - 1)));
+        var thickness = TryFindResource("PagesThumbnailFrameThickness") as double? ?? 0; // the value is the theme's
+        if (thickness > 0 && TryFindResource("PagesThumbnailBorderBrush") is Brush border)
+        {
+            var half = thickness / 2;
+            drawingContext.DrawRectangle(
+                null,
+                InkDrawings.RoundPen(border, thickness),
+                new Rect(half, half, Math.Max(0, size.Width - thickness), Math.Max(0, size.Height - thickness)));
+        }
     }
 
     private static void OnSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -137,6 +144,8 @@ public sealed class PageThumbnail : FrameworkElement
             old.InkInvalidated -= OnInkInvalidated;
             old.Cleared -= OnCleared;
             old.PausedChanged -= OnPausedChanged;
+            old.BitmapsCleared -= OnBitmapsCleared;
+            old.RetryRequested -= OnRetryRequested;
         }
 
         _listeningTo = cache;
@@ -145,6 +154,36 @@ public sealed class PageThumbnail : FrameworkElement
             cache.InkInvalidated += OnInkInvalidated;
             cache.Cleared += OnCleared;
             cache.PausedChanged += OnPausedChanged;
+            cache.BitmapsCleared += OnBitmapsCleared;
+            cache.RetryRequested += OnRetryRequested;
+        }
+    }
+
+    /// <summary>Another screen scale: the bitmap is rendered again; the old one stays (stretched) until it arrives.</summary>
+    private void OnBitmapsCleared(object? sender, EventArgs e)
+    {
+        if (Page is { } page && Cache is { } cache)
+        {
+            RequestBitmap(cache, page, keepShown: true);
+        }
+    }
+
+    /// <summary>The file is back: what is missing (a read that returned nothing meanwhile) is read again.</summary>
+    private void OnRetryRequested(object? sender, EventArgs e)
+    {
+        if (Page is not { } page || Cache is not { } cache)
+        {
+            return;
+        }
+
+        if (_bitmap is null && _bitmapLoad is null)
+        {
+            RequestBitmap(cache, page, keepShown: true);
+        }
+
+        if (_ink is null && _inkLoad is null)
+        {
+            RequestInk(cache, page, keepShown: true);
         }
     }
 

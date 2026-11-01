@@ -193,8 +193,18 @@ internal sealed class PageBitmapCoordinator : IDisposable
 
         _dpiScale = dpiScale;
         ClearPreviews(); // previews are drawn at the screen's scale
+        ThumbnailScaleChanged?.Invoke(this, EventArgs.Empty); // and so are the Pages tab's thumbnails
         InvalidateAll();
     }
+
+    /// <summary>The screen scale changed: thumbnails rendered for the old one should be rendered again. UI thread.</summary>
+    public event EventHandler? ThumbnailScaleChanged;
+
+    /// <summary>
+    /// Every page is rendered again (the renderer is back after a save): a thumbnail or ink read that returned nothing
+    /// while the file was released should be tried again. UI thread.
+    /// </summary>
+    public event EventHandler? ThumbnailRetryRequested;
 
     /// <summary>
     /// Renders every page again (the renderer was replaced after a save, or a settled zoom must be applied now); pages
@@ -209,6 +219,10 @@ internal sealed class PageBitmapCoordinator : IDisposable
         }
 
         Push(invalidateAll: true);
+        if (!_disposed)
+        {
+            ThumbnailRetryRequested?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>A surface was just bound to a page: it shows the page's cached bitmap at once, if there is one.</summary>

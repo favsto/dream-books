@@ -152,6 +152,12 @@ public partial class DocumentView : UserControl
     /// <summary>The ink of the pages shown in the rail's preview bubble (UI-07).</summary>
     internal PageInkCache PageInk => _pageInk;
 
+    /// <summary>The current coordinator's <see cref="PageBitmapCoordinator.ThumbnailScaleChanged"/> (the Pages tab).</summary>
+    internal event EventHandler? ThumbnailScaleChanged;
+
+    /// <summary>The current coordinator's <see cref="PageBitmapCoordinator.ThumbnailRetryRequested"/> (the Pages tab).</summary>
+    internal event EventHandler? ThumbnailRetryRequested;
+
     /// <summary>The surfaces in use, by page index (the retained window, plus a page kept while it is inking).</summary>
     internal IReadOnlyDictionary<int, InkSurface> ActiveSurfaces =>
         _slots.ToDictionary(pair => pair.Key, pair => pair.Value.Surface);
@@ -222,8 +228,13 @@ public partial class DocumentView : UserControl
 
     private double DeviceScale() => VisualTreeHelper.GetDpi(this).DpiScaleX;
 
-    private PageBitmapCoordinator NewBitmapCoordinator() =>
-        new(_bitmapRenderer, new DispatcherDelayScheduler(), SurfaceFor);
+    private PageBitmapCoordinator NewBitmapCoordinator()
+    {
+        var coordinator = new PageBitmapCoordinator(_bitmapRenderer, new DispatcherDelayScheduler(), SurfaceFor);
+        coordinator.ThumbnailScaleChanged += (_, e) => ThumbnailScaleChanged?.Invoke(this, e);
+        coordinator.ThumbnailRetryRequested += (_, e) => ThumbnailRetryRequested?.Invoke(this, e);
+        return coordinator;
+    }
 
     /// <summary>
     /// Brings the bitmaps in line with the view model: renderer, document, screen scale, zoom (at once for a new

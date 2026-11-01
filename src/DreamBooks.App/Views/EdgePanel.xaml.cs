@@ -209,8 +209,11 @@ public partial class EdgePanel : UserControl
     /// <summary>True while the sheet slides in or out.</summary>
     internal bool IsAnimating { get; private set; }
 
-    /// <summary>How many times opening asked to move keyboard focus into the content (tests).</summary>
+    /// <summary>How many times opening or a tab switch asked to move keyboard focus into the content (tests).</summary>
     internal int FocusRequests { get; private set; }
+
+    /// <summary>The content keyboard focus was last moved into (tests: an unshown window takes no real focus).</summary>
+    internal object? LastFocusTarget { get; private set; }
 
     protected override IEnumerator LogicalChildren
     {
@@ -263,6 +266,10 @@ public partial class EdgePanel : UserControl
         if (changed && _isOpen)
         {
             NotifyShown();
+
+            // The focused element of the other tab was just collapsed: the keyboard follows into this one, so the
+            // arrows, Enter and Tab stay in the panel (a shortcut switch, or a tap on the tab).
+            RequestContentFocus(keepFocusInside: false);
         }
     }
 
@@ -281,16 +288,7 @@ public partial class EdgePanel : UserControl
         SlideTo(0, from: -SheetWidth(), "EdgePanelOpenDuration", new CubicEase { EasingMode = EasingMode.EaseOut }, null);
         IsOpenChanged?.Invoke(this, EventArgs.Empty);
         NotifyShown();
-
-        // After layout, so the content (a list) can take focus: arrows and Enter work at once.
-        Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
-        {
-            FocusRequests++;
-            if (_isOpen && !IsKeyboardFocusWithin)
-            {
-                (ShownBody as UIElement)?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
-            }
-        });
+        RequestContentFocus(keepFocusInside: true);
     }
 
     /// <summary>Hides the sheet: at once nothing of it hit-tests; it slides out unless animations are off.</summary>
@@ -489,6 +487,32 @@ public partial class EdgePanel : UserControl
         {
             SelectTab(tab);
         }
+    }
+
+    /// <summary>
+    /// After layout, so the content (a list) can take it: keyboard focus into the content shown, at its own starting
+    /// point (<see cref="IEdgePanelContent.TryFocus"/>) or its first focusable element. With
+    /// <paramref name="keepFocusInside"/>, focus already inside the panel stays where it is (opening from a tab).
+    /// </summary>
+    private void RequestContentFocus(bool keepFocusInside)
+    {
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+        {
+            FocusRequests++;
+            if (!_isOpen || (keepFocusInside && IsKeyboardFocusWithin))
+            {
+                return;
+            }
+
+            var body = ShownBody;
+            LastFocusTarget = body;
+            if (body is IEdgePanelContent content && content.TryFocus())
+            {
+                return;
+            }
+
+            (body as UIElement)?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+        });
     }
 
     /// <summary>Tells the content now shown that it is (the Pages list brings the current page into view).</summary>

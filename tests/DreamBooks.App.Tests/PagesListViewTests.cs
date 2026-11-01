@@ -280,6 +280,245 @@ public sealed class PagesListViewTests : IDisposable
     }
 
     [Fact]
+    public void Switching_tabs_on_the_open_panel_moves_keyboard_focus_into_the_new_tab()
+    {
+        WpfTestThread.Run(() =>
+        {
+            // In the window: the shortcuts switch the tab of the open panel; focus follows into the tab shown, so the
+            // arrows and Enter keep working in the panel (an unshown window takes no real focus: the request is checked).
+            var window = new MainWindow();
+            try
+            {
+                ScrollRailTests.LayOut((FrameworkElement)window.Content, 1200, 800);
+                var panel = window.MarksPanel;
+                panel.AnimationsEnabled = () => false;
+                var bindings = window.InputBindings.OfType<KeyBinding>().ToList();
+                var marksKey = bindings.Single(b => b.Key == Key.M && b.Modifiers == ModifierKeys.Control);
+                var pagesKey = bindings.Single(b => b.Key == Key.P);
+
+                marksKey.Command.Execute(marksKey.CommandParameter);
+                WpfTestThread.Drain();
+                Assert.Same(window.MarksList, panel.LastFocusTarget);
+                var requests = panel.FocusRequests;
+
+                pagesKey.Command.Execute(pagesKey.CommandParameter);
+                WpfTestThread.Drain();
+                Assert.Equal(requests + 1, panel.FocusRequests);
+                Assert.Same(window.PagesList, panel.LastFocusTarget);
+
+                marksKey.Command.Execute(marksKey.CommandParameter);
+                WpfTestThread.Drain();
+                Assert.Same(window.MarksList, panel.LastFocusTarget);
+                Assert.True(panel.IsOpen);
+                Assert.Equal(KeyboardNavigationMode.Cycle, KeyboardNavigation.GetTabNavigation(panel.Sheet)); // Tab stays in
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+
+        WpfTestThread.Run(() =>
+        {
+            // In Pagine, the focus goes to the current page's row.
+            var (viewport, _, pages, _) = Standalone(Enumerable.Repeat(new PageDimensions(612, 792), 40).ToArray());
+            var list = new PagesListView { DataContext = pages, Thumbnails = NewCache() };
+            var panel = new EdgePanel { AnimationsEnabled = () => false, Title = "t", Body = new Border(), SecondBody = list };
+            ScrollRailTests.LayOut(panel, 1000, 800);
+            viewport.ScrollToPage(25, recordHistory: false);
+            panel.Open(0);
+            WpfTestThread.Drain();
+            panel.SelectTab(1);
+            WpfTestThread.Drain();
+            Assert.Same(list, panel.LastFocusTarget);
+            Assert.Same(pages.Pages[25], list.LastFocusedItem);
+        });
+    }
+
+    [Fact]
+    public void A_thumbnail_read_that_returned_nothing_is_retried_when_the_file_is_back()
+    {
+        WpfTestThread.Run(() =>
+        {
+            // A read that ran just as a plain save released the file returns nothing; the rows still shown read again
+            // when the renderer is back (the coordinator's retry signal), not only when they are recycled.
+            var (_, _, pages, _) = Standalone(Enumerable.Repeat(new PageDimensions(612, 792), 3).ToArray());
+            var released = true;
+            var cache = new PageThumbnailCache(
+                (_, _) => Task.FromResult<BitmapSource?>(released ? null : Solid(140, 181, 0xC0)),
+                (page, _) => Task.FromResult<PageInk?>(released ? null : new PageInk(page, 612, 792, [], Core.Ink.PressureCurve.Firm, Core.Ink.SmoothingLevel.Strong)));
+            var list = NewList(pages, cache);
+            var thumbs = Rows(list).Select(r => FindDescendant<PageThumbnail>(r)!).ToList();
+            WpfTestThread.Drain();
+            Assert.All(thumbs, t => Assert.False(t.HasBitmap || t.HasInk));
+
+            released = false;
+            cache.RetryMissing();
+            WpfTestThread.PumpUntil(() => thumbs.All(t => t.HasBitmap && t.HasInk));
+        });
+
+        WpfTestThread.Run(() =>
+        {
+            // The window passes the coordinator's signal (renderer back after a save) on to the thumbnails.
+            var window = new MainWindow();
+            try
+            {
+                var cache = window.PagesList.Thumbnails!;
+                var before = cache.RetryRequests;
+                window.DocumentViewer.Bitmaps.InvalidateAll();
+                Assert.Equal(before + 1, cache.RetryRequests);
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    [Fact]
+    public void Selection_follows_the_current_page_while_the_list_is_shown()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var (viewport, _, pages, _) = Standalone(Enumerable.Repeat(new PageDimensions(612, 792), 20).ToArray());
+            var list = new PagesListView { DataContext = pages, Thumbnails = NewCache() };
+            var panel = new EdgePanel { AnimationsEnabled = () => false, Title = "t", Body = new Border(), SecondBody = list };
+            ScrollRailTests.LayOut(panel, 1000, 800);
+            panel.Open(1);
+            WpfTestThread.Drain();
+            Assert.Same(pages.Pages[0], list.List.SelectedItem);
+
+            // The document moves under the open list (wheel, keys, Back): the selection goes with the ring.
+            viewport.ScrollToPage(4, recordHistory: false);
+            viewport.ScrollToPage(6, recordHistory: false);
+            WpfTestThread.Drain();
+            Assert.Same(pages.Pages[6], list.List.SelectedItem);
+            Assert.True(pages.Pages[6].IsCurrent);
+
+            // Hidden, it does not follow (shown again, it is brought to the current page anyway).
+            panel.Close();
+            viewport.ScrollToPage(9, recordHistory: false);
+            WpfTestThread.Drain();
+            Assert.Same(pages.Pages[6], list.List.SelectedItem);
+            panel.Open(1);
+            WpfTestThread.Drain();
+            Assert.Same(pages.Pages[9], list.List.SelectedItem);
+        });
+    }
+
+    [Fact]
+    public void A_dpi_change_drops_the_thumbnail_bitmaps_and_the_shown_rows_render_again()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var (_, _, pages, _) = Standalone(Enumerable.Repeat(new PageDimensions(612, 792), 3).ToArray());
+            var bitmapReads = 0;
+            var inkReads = 0;
+            var cache = new PageThumbnailCache(
+                (_, _) =>
+                {
+                    bitmapReads++;
+                    return Task.FromResult<BitmapSource?>(Solid(140, 181, 0xC0));
+                },
+                (page, _) =>
+                {
+                    inkReads++;
+                    return Task.FromResult<PageInk?>(new PageInk(page, 612, 792, [], Core.Ink.PressureCurve.Firm, Core.Ink.SmoothingLevel.Strong));
+                });
+            var list = NewList(pages, cache);
+            var thumbs = Rows(list).Select(r => FindDescendant<PageThumbnail>(r)!).ToList();
+            WpfTestThread.PumpUntil(() => thumbs.All(t => t.HasBitmap && t.HasInk));
+            var (bitmapsBefore, inkBefore) = (bitmapReads, inkReads);
+
+            cache.ClearBitmaps();
+            Assert.Equal(thumbs.Count, cache.Count); // the shown rows rendered again at once
+            Assert.Equal(bitmapsBefore + thumbs.Count, bitmapReads);
+            Assert.Equal(inkBefore, inkReads); // the ink is vectors: nothing to redo
+            Assert.All(thumbs, t => Assert.True(t.HasBitmap));
+        });
+
+        WpfTestThread.Run(() =>
+        {
+            // The window wires the coordinator's screen-scale change to the thumbnails.
+            var window = new MainWindow();
+            try
+            {
+                var cache = window.PagesList.Thumbnails!;
+                var before = cache.BitmapClears;
+                window.DocumentViewer.Bitmaps.SetDpiScale(2.5);
+                Assert.Equal(before + 1, cache.BitmapClears);
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    [Fact]
+    public void A_rotated_page_thumbnail_has_its_displayed_proportions_and_upright_ink()
+    {
+        WpfTestThread.Run(() =>
+        {
+            // A /Rotate 90 portrait page is laid out landscape (792 x 612 displayed); its strokes are stored in displayed
+            // points, so a vertical line near the left of the displayed page is drawn vertical near the left.
+            var item = new PageItem(0, 792, 612);
+            var line = new InkStroke(
+                Guid.NewGuid(),
+                InkTool.Pen,
+                InkColor.FromRgb(0, 0, 0),
+                10,
+                Enumerable.Range(0, 20).Select(i => new InkPoint(80, 100 + (i * 20), 0.6f, null, null, null, i * 10)).ToArray());
+            var cache = new PageThumbnailCache(
+                (_, _) => Task.FromResult<BitmapSource?>(Solid(140, 108, 0xC0)),
+                (page, _) => Task.FromResult<PageInk?>(new PageInk(page, 792, 612, [line], Core.Ink.PressureCurve.Firm, Core.Ink.SmoothingLevel.Strong)));
+            var thumb = new PageThumbnail { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+            PageThumbnail.SetCache(thumb, cache);
+            thumb.Page = item;
+            ScrollRailTests.LayOut(thumb, 300, 300);
+            WpfTestThread.PumpUntil(() => thumb.HasBitmap && thumb.StrokeCount == 1);
+
+            Assert.Equal(140, thumb.ActualWidth, 3);
+            Assert.Equal(140 * 612 / 792.0, thumb.ActualHeight, 3);
+            var pixels = Render(thumb);
+            var x = (int)(80 * 140 / 792.0); // about 14
+            Assert.True(Dark(pixels, thumb, new Int32Rect(x - 3, 25, 6, 40)) >= 40, "a vertical line on the left");
+            Assert.Equal(0, Dark(pixels, thumb, new Int32Rect(40, 10, 90, 90)));
+        });
+    }
+
+    [Fact]
+    public void A_stroke_change_raised_on_a_background_thread_redraws_the_thumbnail_ink_on_the_UI_thread()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var (_, marks, pages, _) = Standalone(Enumerable.Repeat(new PageDimensions(612, 792), 3).ToArray());
+            var inkReads = new List<int>();
+            var cache = new PageThumbnailCache(
+                (_, _) => Task.FromResult<BitmapSource?>(null),
+                (page, _) =>
+                {
+                    Assert.True(System.Windows.Application.Current.Dispatcher.CheckAccess());
+                    inkReads.Add(page);
+                    return Task.FromResult<PageInk?>(new PageInk(page, 612, 792, [], Core.Ink.PressureCurve.Firm, Core.Ink.SmoothingLevel.Strong));
+                });
+            var list = NewList(pages, cache);
+            WpfTestThread.PumpUntil(() => inkReads.Count >= 3);
+            var invalidated = new List<int>();
+            cache.InkInvalidated += (_, page) =>
+            {
+                Assert.True(System.Windows.Application.Current.Dispatcher.CheckAccess());
+                invalidated.Add(page);
+            };
+
+            Task.Run(() => marks.NotifyInkChanged(1)).Wait(); // as the session raises it from a load or the PDFium thread
+            WpfTestThread.PumpUntil(() => invalidated.Count == 1 && inkReads.Count(p => p == 1) == 2);
+            Assert.Equal([1], invalidated);
+            _ = list;
+        });
+    }
+
+    [Fact]
     public void A_hidden_list_reads_nothing_and_catches_up_when_shown_again()
     {
         WpfTestThread.Run(() =>

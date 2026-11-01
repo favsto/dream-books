@@ -11,4 +11,10 @@ internal interface IEdgePanelContent
 
     /// <summary>The content is no longer shown. UI thread.</summary>
     void OnHidden();
+
+    /// <summary>
+    /// Moves keyboard focus to the content's own starting point (the Pages list: the current page's row). False when it
+    /// has none, and the panel moves focus to the first focusable element instead. UI thread.
+    /// </summary>
+    bool TryFocus();
 }

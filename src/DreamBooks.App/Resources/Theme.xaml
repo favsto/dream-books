@@ -144,6 +144,9 @@
          with marks or notes show small bars at the thumbnail's top left in the rail's colours, opaque (they are tiny). -->
     <sys:Double x:Key="PagesThumbnailWidth">140</sys:Double>
     <sys:Double x:Key="PagesThumbnailMinStrokeWidth">0.75</sys:Double>
+    <!-- The page's edge, drawn over the thumbnail so white pages read on the panel in both themes. -->
+    <sys:Double x:Key="PagesThumbnailFrameThickness">1</sys:Double>
+    <SolidColorBrush x:Key="PagesThumbnailBorderBrush" Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
     <Thickness x:Key="PagesRowPadding">4</Thickness>
     <Thickness x:Key="PagesNumberMargin">0,2,0,0</Thickness>
     <Thickness x:Key="PagesCurrentRingThickness">3</Thickness>

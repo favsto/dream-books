@@ -14,7 +14,9 @@ namespace DreamBooks.App.Views;
 /// that did not move (a scroll is not a tap) or Enter on the selected row goes to the page through
 /// <see cref="PagesViewModel.GoToPageCommand"/>; the panel stays open. Each time the list is shown (the panel opens on
 /// this tab, or the tab is chosen) it starts a new visit (<see cref="PagesViewModel.BeginBrowsing"/>) and brings the
-/// current page's row into view, selected, so the arrows start from it.
+/// current page's row into view, selected, so the arrows start from it; while shown, the selection follows the current
+/// page (the ring and the highlight stay on one row), and opening or switching to the tab puts keyboard focus on that
+/// row (<see cref="TryFocus"/>).
 /// </summary>
 /// <remarks>
 /// The thumbnails of the old document are dropped when the view model reports a document change (another file, or the
@@ -27,6 +29,8 @@ public partial class PagesListView : UserControl, IEdgePanelContent
     private PageThumbnailCache? _thumbnails;
     private Point? _pressAt;
     private int _scrollVersion;
+    private bool _shown;
+    private bool _selectionPending;
 
     public PagesListView()
     {
@@ -51,13 +55,42 @@ public partial class PagesListView : UserControl, IEdgePanelContent
     /// <summary>The list is shown (the hosting panel says so): a new visit, and the current page's row in view.</summary>
     public void OnShown()
     {
+        _shown = true;
         _thumbnails?.SetPaused(false);
         _pages?.BeginBrowsing();
         ScrollToCurrent();
     }
 
     /// <summary>The list is hidden (panel closed, or the other tab): no thumbnail is read meanwhile.</summary>
-    public void OnHidden() => _thumbnails?.SetPaused(true);
+    public void OnHidden()
+    {
+        _shown = false;
+        _thumbnails?.SetPaused(true);
+    }
+
+    /// <summary>Keyboard focus to the current page's row (the arrows and Enter start from it); false with no pages.</summary>
+    public bool TryFocus()
+    {
+        if (_pages?.CurrentItem is not { } current)
+        {
+            return false;
+        }
+
+        LastFocusedItem = current;
+        if (List.ItemContainerGenerator.ContainerFromItem(current) is ListBoxItem row)
+        {
+            row.Focus();
+        }
+        else
+        {
+            List.Focus();
+        }
+
+        return true;
+    }
+
+    /// <summary>The page whose row keyboard focus was last moved to (tests: an unshown window takes no real focus).</summary>
+    internal PageItem? LastFocusedItem { get; private set; }
 
     /// <summary>Selects the current page's row and brings it into view (after layout, so the rows exist).</summary>
     internal void ScrollToCurrent()
@@ -145,9 +178,23 @@ public partial class PagesListView : UserControl, IEdgePanelContent
 
     private void OnPagesPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(PagesViewModel.Pages) && IsVisible)
+        if (e.PropertyName == nameof(PagesViewModel.Pages) && _shown)
         {
             ScrollToCurrent(); // a document opened while the list is shown
+        }
+        else if (e.PropertyName == nameof(PagesViewModel.CurrentItem) && _shown && !_selectionPending)
+        {
+            // The document moved under the open list (wheel, keys, Back): the selection follows the ring, once per
+            // dispatcher pass however many pages went by (the current page itself is already debounced).
+            _selectionPending = true;
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+            {
+                _selectionPending = false;
+                if (_shown && _pages?.CurrentItem is { } current)
+                {
+                    List.SelectedItem = current;
+                }
+            });
         }
     }
 

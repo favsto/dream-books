@@ -58,6 +58,8 @@ public partial class MainWindow : Window
                 : Task.FromResult<PageInk?>(null));
         thumbnails.SetPaused(true); // until the Pages tab is shown
         PagesList.Thumbnails = thumbnails;
+        DocumentViewer.ThumbnailScaleChanged += (_, _) => thumbnails.ClearBitmaps(); // rendered for the old scale
+        DocumentViewer.ThumbnailRetryRequested += (_, _) => thumbnails.RetryMissing(); // the file is back after a save
 
         // "Nessun altro segno" is a live region: Narrator reads it when it appears (NFR-31).
         _statusText.AddValueChanged(MarkStatusText, OnMarkStatusTextChanged);
