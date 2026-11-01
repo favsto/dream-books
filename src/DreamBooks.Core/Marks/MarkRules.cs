@@ -50,4 +50,10 @@ public static class MarkRules
 
     /// <summary>A note smaller than this in both directions (a dot, a tap of the pen) is ignored, in text lines.</summary>
     public const double NoteMinSizeLines = 0.5;
+
+    /// <summary>
+    /// How far, in text lines, a short, mostly vertical stroke may lie beside a margin line's strokes and still be a pass
+    /// of the same line (drawn again over it, or continued): it joins the mark instead of becoming a note.
+    /// </summary>
+    public const double PassReachLines = 1;
 }

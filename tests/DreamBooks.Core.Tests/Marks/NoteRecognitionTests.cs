@@ -154,4 +154,83 @@ public class NoteRecognitionTests
         Assert.All(lineStrokes, s => Assert.DoesNotContain(s.Id, noteIds));
         Assert.All(otherStrokes, s => Assert.Contains(s.Id, noteIds));
     }
+
+    [Fact]
+    public void Fausto_line_drawn_in_three_passes_is_one_mark_and_no_note()
+    {
+        var passes = new[] { RealPenStrokes.LinePassShort, RealPenStrokes.LinePassLong, RealPenStrokes.LinePassLonger }
+            .Select(RealPenStrokes.Parse)
+            .ToArray();
+        var page = new MarkRecognizer().RecognizePage(0, RealPenStrokes.PageWidthPt, passes);
+
+        var mark = Assert.Single(page.Marks);
+        Assert.Equal(passes.Select(s => s.Id).Order(), mark.StrokeIds.Order());
+        Assert.Equal(MarkSide.Left, mark.Side);
+        Assert.Empty(page.Notes);
+    }
+
+    [Fact]
+    public void A_short_nearly_vertical_pass_along_a_margin_line_belongs_to_its_mark_and_can_extend_it()
+    {
+        var line = MarginLine(40, 200, 240);
+        var along = MarginLine(43, 210, 230); // 20 pt: too short alone, on top of the line
+        var below = MarginLine(41, 250, 270); // continues the line after a 10 pt gap
+        var page = new MarkRecognizer().RecognizePage(0, _width, [line, along, below]);
+
+        var mark = Assert.Single(page.Marks);
+        Assert.Equal([line.Id, along.Id, below.Id], mark.StrokeIds);
+        Assert.Equal(200, mark.TopPt);
+        Assert.Equal(270, mark.BottomPt);
+        Assert.Empty(page.Notes);
+    }
+
+    [Fact]
+    public void Strokes_beside_a_margin_line_that_are_not_passes_of_it_stay_notes()
+    {
+        var line = MarginLine(30, 200, 260);
+        var letterAway = MarginLine(30 + _line + 1, 210, 222); // a vertical letter of a margin note, more than a line away
+        var crossing = Stroke([(20, 230), (300, 232)]); // an underline crossing the line's height
+        var tilted = Stroke([(28, 205), (48, 220)]); // a short slanted stroke on the line (53 degrees)
+        var dotOnIt = Stroke([(30, 230), (30.5, 231)]); // a dot: never a pass
+        var page = new MarkRecognizer().RecognizePage(0, _width, [line, letterAway, crossing, tilted, dotOnIt]);
+
+        Assert.Equal([line.Id], Assert.Single(page.Marks).StrokeIds);
+        var noteIds = page.Notes.SelectMany(n => n.StrokeIds).ToHashSet();
+        Assert.Contains(letterAway.Id, noteIds);
+        Assert.Contains(crossing.Id, noteIds);
+        Assert.Contains(tilted.Id, noteIds);
+        Assert.Contains(dotOnIt.Id, noteIds); // joins the note it sits in
+    }
+
+    [Fact]
+    public void A_pass_exactly_one_line_from_the_margin_line_belongs_to_it_and_just_beyond_does_not()
+    {
+        var r = new MarkRecognizer();
+        var line = MarginLine(30, 200, 260);
+        Assert.Empty(r.RecognizePage(0, _width, [line, MarginLine(30 + _line, 210, 230)]).Notes);
+        Assert.Single(r.RecognizePage(0, _width, [line, MarginLine(30 + _line + 0.5, 210, 230)]).Notes);
+        Assert.Empty(r.RecognizePage(0, _width, [line, MarginLine(30, 260 + (MarkRules.MergeGapLines * _line), 280 + (MarkRules.MergeGapLines * _line))]).Notes);
+        Assert.Single(r.RecognizePage(0, _width, [line, MarginLine(30, 260.5 + (MarkRules.MergeGapLines * _line), 280.5 + (MarkRules.MergeGapLines * _line))]).Notes);
+    }
+
+    [Fact]
+    public void A_short_vertical_stroke_in_the_margin_without_a_margin_line_is_a_note()
+    {
+        var s = MarginLine(40, 210, 230);
+        var page = new MarkRecognizer().RecognizePage(0, _width, [s]);
+        Assert.Empty(page.Marks);
+        Assert.Equal([s.Id], Assert.Single(page.Notes).StrokeIds);
+    }
+
+    [Fact]
+    public void The_margin_notes_of_a_mark_never_repeat_its_own_passes()
+    {
+        var line = MarginLine(40, 200, 240);
+        var along = MarginLine(43, 210, 230);
+        var word = Word(70, 215, 227);
+        var strokes = new[] { line, along, word };
+        var r = new MarkRecognizer();
+        var mark = Assert.Single(r.Recognize(0, _width, strokes));
+        Assert.Equal([word.Id], r.MarginNotes(mark, _width, strokes).Select(s => s.Id));
+    }
 }
