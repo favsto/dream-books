@@ -1,4 +1,5 @@
 using DreamBooks.Core.Layout;
+using DreamBooks.Core.Search;
 
 namespace DreamBooks.Core.Marks;
 
@@ -35,6 +36,35 @@ public static class RailTickLayout
     {
         ArgumentNullException.ThrowIfNull(notes);
         return Positions(notes.Select(n => (n.PageIndex, n.TopPt, n.BottomPt)).ToArray(), layout, windowHeightPt, trackLengthDip, mergeDip);
+    }
+
+    /// <summary>
+    /// The search results' ticks (FR-105): the same mapping, jump-target rule and merging as the marks', for each hit's
+    /// vertical extent (the top of its first line to the bottom of its last). Hits without a rectangle are ignored.
+    /// </summary>
+    public static IReadOnlyList<double> SearchPositions(
+        IReadOnlyList<SearchHit> hits, DocumentLayout layout, double windowHeightPt, double trackLengthDip, double mergeDip = 1)
+    {
+        ArgumentNullException.ThrowIfNull(hits);
+        var extents = new List<(int PageIndex, double TopPt, double BottomPt)>(hits.Count);
+        foreach (var hit in hits)
+        {
+            if (hit.Rects.Count == 0)
+            {
+                continue;
+            }
+
+            double top = double.PositiveInfinity, bottom = double.NegativeInfinity;
+            foreach (var rect in hit.Rects)
+            {
+                top = Math.Min(top, rect.TopPt);
+                bottom = Math.Max(bottom, rect.BottomPt);
+            }
+
+            extents.Add((hit.PageIndex, top, bottom));
+        }
+
+        return Positions([.. extents], layout, windowHeightPt, trackLengthDip, mergeDip);
     }
 
     private static IReadOnlyList<double> Positions(
