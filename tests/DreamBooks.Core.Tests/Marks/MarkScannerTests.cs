@@ -370,7 +370,7 @@ public class MarkScannerTests
                 await WaitUntilAsync(() => scanner.IsCompleted);
             }
 
-            // ...a scan disposed mid-load, paused and busy, and one whose index shrank under it, end quietly.
+            // ...a scan disposed mid-load, paused and busy, and one whose index is smaller than the source, end quietly.
             var gate = NewGate();
             var held = new FakeMarkPageSource(50) { Gate = p => p == 10 ? gate.Task : null };
             var scanner2 = Create(held, new MarkIndex(50), isBusy: () => false);
@@ -381,11 +381,10 @@ public class MarkScannerTests
             gate.SetException(new IOException("after dispose"));
             await scanner2.WhenIdleAsync().WaitAsync(_timeout);
 
-            var shrinking = new MarkIndex(30);
+            var shrinking = new MarkIndex(10); // smaller than the source: the pages past its end fail, quietly
             var source3 = new FakeMarkPageSource(30) { Strokes = _ => WithLine() };
             using (var scanner3 = Create(source3, shrinking))
             {
-                shrinking.Reset(10);
                 scanner3.Start(0);
                 await WaitUntilAsync(() => scanner3.IsCompleted);
                 Assert.Equal(10, shrinking.ScannedCount);

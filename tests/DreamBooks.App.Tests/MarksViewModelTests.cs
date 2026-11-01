@@ -57,7 +57,7 @@ public sealed class MarksViewModelTests : IDisposable
         Assert.Equal([(1, 50.0), (1, 400.0), (5, 100.0)], marks.Items.Select(i => (i.Mark.PageIndex, i.Mark.TopPt)));
         Assert.Equal(["pag. 2", "pag. 2", "pag. 6"], marks.Items.Select(i => i.PageLabel));
 
-        index.ClearPage(1);
+        index.SetPage(1, []);
         _scheduler.Advance(MarksViewModel.RefreshInterval);
         Assert.Equal(5, Assert.Single(marks.Items).Mark.PageIndex);
     }
@@ -410,7 +410,7 @@ public sealed class MarksViewModelTests : IDisposable
         Assert.Equal(3, marks.Count);
         Assert.Same(row, marks.Items[1]);
 
-        index.ClearPage(2);
+        index.SetPage(2, []);
         _scheduler.Advance(MarksViewModel.RefreshInterval);
         Assert.Same(row, marks.Items[0]);
         Assert.Equal([5, 8], marks.Items.Select(i => i.Mark.PageIndex));

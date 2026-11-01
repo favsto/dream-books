@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using DreamBooks.Core.Marks;
 
 namespace DreamBooks.Core.Tests.Marks;
@@ -18,6 +17,7 @@ public class MarkIndexTests
         var all = index.AllMarks();
 
         Assert.Equal([(0, 100.0), (0, 300.0), (2, 50.0)], all.Select(m => (m.PageIndex, m.TopPt)));
+        Assert.Equal([100.0, 300.0], index.MarksOnPage(0).Select(m => m.TopPt));
     }
 
     [Fact]
@@ -36,72 +36,17 @@ public class MarkIndexTests
     }
 
     [Fact]
-    public void TryNext_from_inside_a_mark_goes_to_the_following_one()
-    {
-        var index = new MarkIndex(2);
-        index.SetPage(0, [M(0, 100, 140), M(0, 400)]);
-
-        Assert.True(index.TryNext(0, 120, out var mark));
-        Assert.Equal(400, mark.TopPt);
-        Assert.True(index.TryNext(0, 100, out mark));
-        Assert.Equal(400, mark.TopPt);
-    }
-
-    [Fact]
-    public void TryNext_returns_false_after_the_last_mark()
-    {
-        var index = new MarkIndex(2);
-        index.SetPage(0, [M(0, 100)]);
-        index.SetPage(1, [M(1, 100)]);
-
-        Assert.True(index.TryNext(0, 100, out var mark));
-        Assert.Equal(1, mark.PageIndex);
-        Assert.False(index.TryNext(1, 100, out _));
-    }
-
-    [Fact]
-    public void TryPrevious_returns_false_before_the_first_mark()
-    {
-        var index = new MarkIndex(2);
-        index.SetPage(0, [M(0, 100)]);
-
-        Assert.False(index.TryPrevious(0, 100, out _));
-        Assert.False(index.TryPrevious(0, 50, out _));
-    }
-
-    [Fact]
-    public void Repeated_previous_walks_back_through_every_mark()
+    public void Unscanned_and_out_of_range_pages_have_no_marks_and_are_not_scanned()
     {
         var index = new MarkIndex(3);
-        index.SetPage(0, [M(0, 100), M(0, 300)]);
-        index.SetPage(2, [M(2, 200)]);
-        var tops = new List<(int, double)>();
-        var page = 2;
-        var y = 500.0;
-
-        while (index.TryPrevious(page, y, out var mark))
-        {
-            tops.Add((mark.PageIndex, mark.TopPt));
-            page = mark.PageIndex;
-            y = mark.TopPt;
-        }
-
-        Assert.Equal([(2, 200.0), (0, 300.0), (0, 100.0)], tops);
-    }
-
-    [Fact]
-    public void Neighbour_lookup_skips_unscanned_pages_without_failing()
-    {
-        var index = new MarkIndex(5);
         index.SetPage(0, [M(0, 10)]);
-        index.SetPage(1, []);
-        index.SetPage(4, [M(4, 10)]);
 
-        Assert.True(index.TryNext(0, 10, out var next));
-        Assert.Equal(4, next.PageIndex);
-        Assert.True(index.TryPrevious(3, 0, out var prev));
-        Assert.Equal(0, prev.PageIndex);
-        Assert.False(new MarkIndex(3).TryNext(0, 0, out _));
+        Assert.Empty(index.MarksOnPage(1));
+        Assert.Empty(index.MarksOnPage(-1));
+        Assert.Empty(index.MarksOnPage(3));
+        Assert.False(index.IsScanned(1));
+        Assert.False(index.IsScanned(3));
+        Assert.Throws<ArgumentOutOfRangeException>(() => index.SetPage(3, []));
     }
 
     [Fact]
@@ -119,10 +64,10 @@ public class MarkIndexTests
         Assert.Equal(2, index.ScannedCount);
         Assert.Equal(2, index.TotalMarkCount);
 
-        index.ClearPage(0);
+        index.SetPage(0, []); // the line erased: the page stays scanned, without marks
 
-        Assert.False(index.IsScanned(0));
-        Assert.Equal(1, index.ScannedCount);
+        Assert.True(index.IsScanned(0));
+        Assert.Equal(2, index.ScannedCount);
         Assert.Equal(0, index.TotalMarkCount);
         Assert.Empty(index.MarksOnPage(0));
     }
@@ -138,8 +83,8 @@ public class MarkIndexTests
             {
                 index.SetPage(p, [M(p, 10), M(p, 20 + round)]);
                 _ = index.AllMarks();
-                _ = index.TryNext(p, 0, out _);
-                _ = index.TryPrevious(p, 1000, out _);
+                _ = index.MarksOnPage((p + 1) % 50);
+                _ = index.IsScanned((p + 7) % 50);
                 _ = index.TotalMarkCount;
             }
         });
@@ -147,20 +92,6 @@ public class MarkIndexTests
         Assert.Equal(50, index.ScannedCount);
         Assert.Equal(100, index.TotalMarkCount);
         Assert.Equal(100, index.AllMarks().Count);
-    }
-
-    [Fact]
-    public void Reset_clears_everything_and_changes_page_count()
-    {
-        var index = new MarkIndex(2);
-        index.SetPage(1, [M(1, 5)]);
-
-        index.Reset(6);
-        index.SetPage(5, [M(5, 5)]);
-
-        Assert.Equal(1, index.ScannedCount);
-        Assert.False(index.IsScanned(1));
-        Assert.Single(index.AllMarks());
     }
 
     [Fact]
@@ -181,27 +112,5 @@ public class MarkIndexTests
         Assert.Empty(index.MarksOnPage(2));
         Assert.Equal([1, 2], raised);
         Assert.Throws<ArgumentOutOfRangeException>(() => index.TrySetPageIfUnscanned(3, []));
-    }
-
-    [Fact]
-    public void Ten_thousand_marks_lookup_is_fast()
-    {
-        var index = new MarkIndex(100);
-        for (var p = 0; p < 100; p++)
-        {
-            index.SetPage(p, Enumerable.Range(0, 100).Select(i => M(p, i * 5)).ToArray());
-        }
-
-        index.TryNext(50, 100, out _);
-        index.TryPrevious(50, 100, out _);
-        var sw = Stopwatch.StartNew();
-        for (var i = 0; i < 10_000; i++)
-        {
-            index.TryNext(i % 100, (i % 97) * 5 + 1, out _);
-            index.TryPrevious(i % 100, (i % 97) * 5 + 1, out _);
-        }
-
-        sw.Stop();
-        Assert.True(sw.ElapsedMilliseconds < 50, $"took {sw.ElapsedMilliseconds} ms");
     }
 }

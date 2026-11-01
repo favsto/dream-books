@@ -337,7 +337,7 @@ public sealed class MarkScanner : IDisposable
                 : _recognizer.Recognize(page, _source.GetPageDimensions(page).WidthPt, strokes.Strokes);
             ct.ThrowIfCancellationRequested();
 
-            // Throws ArgumentOutOfRangeException if the index was reset to fewer pages: counted as failed.
+            // Throws ArgumentOutOfRangeException for a page past the end of a smaller index: counted as failed.
             _index.TrySetPageIfUnscanned(page, marks);
         }
         catch (Exception) when (!ct.IsCancellationRequested)
