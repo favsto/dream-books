@@ -75,7 +75,7 @@ public sealed class MarkPageSourceTests : IDisposable
     }
 
     [Fact]
-    public async Task Page_with_our_strokes_returns_them_identical_to_LoadStrokesAsync()
+    public async Task Page_with_our_strokes_returns_them_equal_to_LoadStrokesAsync_without_caching_or_hiding_them()
     {
         InkStroke a = Stroke(300);
         InkStroke b = Stroke(400);
@@ -85,14 +85,72 @@ public sealed class MarkPageSourceTests : IDisposable
         var source = new MarkPageSource(renderer);
 
         PageStrokes? scanned = await source.TryLoadStrokesForScanAsync(1, CancellationToken.None);
-        PageStrokes loaded = await renderer.LoadStrokesAsync(1);
 
+        // The scan keeps nothing (marks, not strokes, for pages nobody opened) and leaves the page as it was.
         Assert.NotNull(scanned);
-        Assert.Same(loaded, scanned); // the first-touch cache, not a second parse
+        Assert.Equal(0, renderer.FirstTouchReadCount);
+        Assert.Equal(0, await renderer.CachedStrokePageCountAsync());
         Assert.Equal([a.Id, b.Id], scanned.Strokes.Select(s => s.Id).ToArray());
-        Assert.Equal(StrokeJson.Serialize(a), StrokeJson.Serialize(scanned.Strokes[0]));
         Assert.Equal(0, scanned.UnreadableCount);
+
+        // The editor's first touch afterwards still finds every stroke, the same as the scan saw.
+        PageStrokes loaded = await renderer.LoadStrokesAsync(1);
         Assert.Equal(1, renderer.FirstTouchReadCount);
+        Assert.Equal(loaded.Strokes.Select(StrokeJson.Serialize), scanned.Strokes.Select(StrokeJson.Serialize));
+        Assert.Equal(StrokeJson.Serialize(a), StrokeJson.Serialize(scanned.Strokes[0]));
+
+        // Once cached, the scan answers from the cache.
+        Assert.Same(loaded, await source.TryLoadStrokesForScanAsync(1, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task A_full_scan_of_a_heavily_inked_document_caches_no_strokes_and_editing_still_sees_them_all()
+    {
+        int[] inked = Enumerable.Range(0, 100).Select(i => i * 3).ToArray();
+        string path = await AuthorAsync(
+            300, inked.ToDictionary(p => p, _ => Enumerable.Range(0, 40).Select(i => Stroke(60 + (i * 18), points: 100)).ToArray()));
+
+        await using var renderer = await PdfRenderer.OpenAsync(path);
+        var source = new MarkPageSource(renderer);
+        long before = ManagedBytes();
+        var watch = Stopwatch.StartNew();
+        int found = 0;
+        for (int page = 0; page < source.PageCount; page++)
+        {
+            if (await source.TryLoadStrokesForScanAsync(page, CancellationToken.None) is { } strokes)
+            {
+                Assert.Equal(40, strokes.Strokes.Count);
+                found++;
+            }
+        }
+
+        watch.Stop();
+        long afterScan = ManagedBytes();
+
+        Assert.Equal(100, found);
+        Assert.Equal(0, renderer.FirstTouchReadCount);
+        Assert.Equal(0, await renderer.CachedStrokePageCountAsync());
+
+        // Pages opened for editing afterwards: every stroke is there (the scan hid nothing).
+        foreach (int page in inked.Take(5))
+        {
+            Assert.Equal(40, (await renderer.LoadStrokesAsync(page)).Strokes.Count);
+        }
+
+        // For comparison: what holding every inked page's strokes (the first-touch cache) costs.
+        foreach (int page in inked)
+        {
+            await renderer.LoadStrokesAsync(page);
+        }
+
+        long afterCaching = ManagedBytes();
+        Assert.Equal(100, await renderer.CachedStrokePageCountAsync());
+        _output.WriteLine(string.Create(
+            CultureInfo.InvariantCulture,
+            $"pages=300 inked=100 strokes_per_page=40 points_per_stroke=100 scan_ms={watch.Elapsed.TotalMilliseconds:0} "
+            + $"managed_delta_after_scan_mb={(afterScan - before) / (1024.0 * 1024.0):0.0} "
+            + $"managed_delta_if_cached_mb={(afterCaching - before) / (1024.0 * 1024.0):0.0}"));
+        Assert.True(afterScan - before < 10L * 1024 * 1024, $"the scan kept {(afterScan - before) / (1024 * 1024)} MB");
     }
 
     [Fact]
@@ -201,7 +259,7 @@ public sealed class MarkPageSourceTests : IDisposable
         watch.Stop();
 
         Assert.Equal(marked, found.ToArray());
-        Assert.Equal(20, renderer.FirstTouchReadCount);
+        Assert.Equal(0, renderer.FirstTouchReadCount); // read for the scan, not cached
         _output.WriteLine(string.Create(
             CultureInfo.InvariantCulture,
             $"pages=300 total_ms={watch.Elapsed.TotalMilliseconds:0.0} per_page_ms={watch.Elapsed.TotalMilliseconds / 300:0.000}"));
@@ -250,8 +308,16 @@ public sealed class MarkPageSourceTests : IDisposable
             + $"per_page_ms={watch.Elapsed.TotalMilliseconds / Math.Max(source.PageCount, 1):0.000}"));
     }
 
-    private static InkStroke Stroke(double y) =>
-        new(Guid.NewGuid(), InkTool.Pen, InkColor.FromRgb(0, 0, 0), 6, Line(200, 400, y, 40));
+    private static InkStroke Stroke(double y, int points = 40) =>
+        new(Guid.NewGuid(), InkTool.Pen, InkColor.FromRgb(0, 0, 0), 6, Line(200, 400, y, points));
+
+    private static long ManagedBytes()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        return GC.GetTotalMemory(forceFullCollection: true);
+    }
 
     private static InkPoint[] Line(double x0, double x1, double y, int count)
     {

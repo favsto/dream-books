@@ -122,6 +122,14 @@ public sealed class MarksIntegrationTests : IDisposable
                 Assert.True(probe.MaxInFlight <= 1, $"{probe.MaxInFlight} loads in flight");
                 Assert.Equal(12, probe.NonNullCount); // only the pages with our annotations got their strokes parsed
 
+                // The scan kept marks, not strokes: only pages the viewer touched are in the renderer's stroke cache,
+                // and a scanned page opened for editing afterwards shows all its strokes.
+                Assert.InRange(Wait(vm.Renderer!.CachedStrokePageCountAsync()), 0, view.ActiveSurfaces.Count);
+                Assert.False(vm.Session!.IsPageLoaded(150));
+                Assert.Equal(
+                    strokes[150].Select(s => s.Id),
+                    Wait(vm.EnsureEditorAsync(150)).Page.Strokes.Select(s => s.Id));
+
                 // The ticks are the marks, laid out with the knob's own mapping.
                 var rail = view.Rail;
                 var ticks = ExpectedTicks(vm, rail);

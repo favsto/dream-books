@@ -4,14 +4,15 @@ using DreamBooks.Core.Marks;
 namespace DreamBooks.Pdf;
 
 /// <summary>
-/// The background mark scan's view of an open PDF (FR-100, NFR-02): a cheap pre-check per page, then the
-/// renderer's own stroke loader (and its first-touch cache) only for pages that hold the app's annotations.
+/// The background mark scan's view of an open PDF (FR-100, NFR-02): one PDFium job per page, a cheap key check and,
+/// only for pages that hold the app's annotations, an uncached read of their strokes.
 /// </summary>
 /// <remarks>
-/// A page costs at most two PDFium jobs: the pre-check (open the page, read each annotation's subtype and the
-/// private key's presence, close the page) and, only when the key is there, <see cref="PdfRenderer.LoadStrokesAsync"/>.
-/// No payload is read for a page without the app's annotations. A page PDFium cannot load returns null.
-/// Cancellation surfaces as <see cref="OperationCanceledException"/>; a job not started yet never runs.
+/// See <see cref="PdfRenderer.ReadStrokesForScanAsync"/>: no payload is read for a page without the app's
+/// annotations; the strokes read are neither cached nor hidden from the page (a page already touched by the viewer
+/// answers from the first-touch cache), so the scan keeps marks, not strokes, for pages nobody opened. A page PDFium
+/// cannot load returns null. Cancellation surfaces as <see cref="OperationCanceledException"/>; a job not started yet
+/// never runs.
 /// </remarks>
 public sealed class MarkPageSource(PdfRenderer renderer) : IMarkPageSource
 {
@@ -26,12 +27,7 @@ public sealed class MarkPageSource(PdfRenderer renderer) : IMarkPageSource
     {
         try
         {
-            if (!await _renderer.MayHoldAppStrokesAsync(pageIndex, ct).ConfigureAwait(false))
-            {
-                return null;
-            }
-
-            return await _renderer.LoadStrokesAsync(pageIndex, ct).ConfigureAwait(false);
+            return await _renderer.ReadStrokesForScanAsync(pageIndex, ct).ConfigureAwait(false);
         }
         catch (InvalidOperationException ex) when (ex is not ObjectDisposedException)
         {
