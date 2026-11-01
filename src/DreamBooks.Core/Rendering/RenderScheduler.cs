@@ -300,6 +300,22 @@ public sealed class RenderScheduler<TBitmap> : IDisposable
         toCancel?.Cancel();
     }
 
+    /// <summary>
+    /// True while a render is in progress or its event is being delivered (the next render is claimed as one
+    /// finishes, so a wanted page without its bitmap keeps this true). Any thread; lets background work such as the
+    /// mark scan stay out of the renders' way.
+    /// </summary>
+    public bool HasPendingWork
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _current is not null || _raising > 0;
+            }
+        }
+    }
+
     /// <summary>Completes when no render is in progress and none is due (tests).</summary>
     internal Task WhenIdleAsync()
     {

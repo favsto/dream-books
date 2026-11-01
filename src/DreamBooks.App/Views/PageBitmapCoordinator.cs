@@ -85,6 +85,12 @@ internal sealed class PageBitmapCoordinator : IDisposable
     /// <summary>The scheduler of the current document, or null without one (tests).</summary>
     internal RenderScheduler<BitmapSource>? Scheduler => _scheduler;
 
+    /// <summary>True while a render runs or is due; any thread (the mark scan parks meanwhile).</summary>
+    internal bool HasPendingRenders => _scheduler?.HasPendingWork ?? false;
+
+    /// <summary>The document's first sharp bitmap is shown and no render is running or due. UI thread.</summary>
+    internal bool FirstRendersDone => _sharpShown && !HasPendingRenders;
+
     /// <summary>Bytes held by the rail preview cache (tests).</summary>
     internal long PreviewBytes
     {

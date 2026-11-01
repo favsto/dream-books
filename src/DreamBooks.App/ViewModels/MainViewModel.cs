@@ -78,6 +78,7 @@ public sealed class MainViewModel : ObservableObject
     private DocumentSession? _markSession;
     private bool _scanPausedForInk;
     private bool _scanPausedForSave;
+    private IDisposable? _pendingScanStart;
 
     /// <param name="dialogs">The dialogs.</param>
     /// <param name="recovery">
@@ -181,6 +182,11 @@ public sealed class MainViewModel : ObservableObject
             if (SetProperty(ref _isSaving, value))
             {
                 SetScanPause(ref _scanPausedForSave, value);
+                if (!value && _markScanner is null)
+                {
+                    Marks.SetScanner(null); // the save is over and no renderer came back: nothing is pending any more
+                }
+
                 OpenPdfCommand.NotifyCanExecuteChanged();
                 SaveCommand.NotifyCanExecuteChanged();
                 SaveAsCommand.NotifyCanExecuteChanged();
@@ -300,6 +306,27 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>Test seam: the scan's pause between pages; the scanner's default when null.</summary>
     internal TimeSpan? MarkScanIdleGap { get; set; }
+
+    /// <summary>
+    /// At open, the scan waits for the window's first renders (<see cref="FirstRendersDone"/>), checked every
+    /// <see cref="MarkScanStartPoll"/>, at most this long (I2: the first pages render with the PDFium thread to themselves).
+    /// </summary>
+    public static readonly TimeSpan MarkScanStartDelay = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>How often the deferred scan start checks <see cref="FirstRendersDone"/>.</summary>
+    public static readonly TimeSpan MarkScanStartPoll = TimeSpan.FromMilliseconds(50);
+
+    /// <summary>
+    /// Set by the view: true once the window's first visible pages show their bitmaps and no render is running. While
+    /// it is null (no view: nothing renders), the scan starts at once.
+    /// </summary>
+    internal Func<bool>? FirstRendersDone { get; set; }
+
+    /// <summary>
+    /// Set by the view, called from the scan's thread: true while page renders are running or due; the scan parks
+    /// meanwhile (the scanner's busy hook), so it never sits in front of a render on the PDFium thread.
+    /// </summary>
+    internal Func<bool>? RendersPending { get; set; }
 
     /// <summary>Test hook: the mark index of the open document.</summary>
     internal MarkIndex? MarkIndexForTest => _markIndex;
@@ -1127,7 +1154,7 @@ public sealed class MainViewModel : ObservableObject
         _markSession = session;
         session.PageStrokesChanged += OnMarkPageStrokesChanged;
         Marks.Attach(index);
-        StartScan();
+        StartScan(deferred: true);
     }
 
     // Any thread (the session raises it where the edit or the load happened): the rows of that page redraw their ink.
@@ -1202,9 +1229,12 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>
     /// A scan over the document's current renderer, into the current index: pages already scanned (by an earlier scan
     /// over a replaced renderer, or tracked live) are skipped, so a renderer swap loses no marks and loads no page twice.
-    /// No scan while there is no renderer (a plain Save released it); the reopened one starts the next.
+    /// No scan while there is no renderer (a plain Save released it); the reopened one starts the next. Meanwhile the
+    /// list still counts as scanning when pages are left (M1: "no other mark" would be wrong during a save).
+    /// <paramref name="deferred"/> (at open, with a view): the scan starts once the first renders are done, or after
+    /// <see cref="MarkScanStartDelay"/>, whichever comes first.
     /// </summary>
-    private void StartScan()
+    private void StartScan(bool deferred)
     {
         if (_markIndex is not { } index || _document is not { } document || Session is not { } session)
         {
@@ -1226,11 +1256,12 @@ public sealed class MainViewModel : ObservableObject
         // A source of another page count would not match the index (a save never changes it): no scan then.
         if (source is null || source.PageCount != session.PageCount)
         {
-            Marks.SetScanner(null);
+            // Released by a save, with pages left: the scan resumes on the reopened renderer.
+            Marks.SetScanner(null, pending: IsSaving && index.ScannedCount < session.PageCount);
             return;
         }
 
-        var scanner = new MarkScanner(source, _markRecognizer, index, isBusy: null, MarkScanIdleGap);
+        var scanner = new MarkScanner(source, _markRecognizer, index, IsRenderPending, MarkScanIdleGap);
         if (_scanPausedForInk)
         {
             scanner.Pause();
@@ -1242,12 +1273,59 @@ public sealed class MainViewModel : ObservableObject
         }
 
         _markScanner = scanner;
-        scanner.Start(Math.Max(session.CurrentPageIndex, 0));
         Marks.SetScanner(scanner);
+        if (deferred && FirstRendersDone is not null)
+        {
+            ScheduleScanStart(scanner, MarkScanStartDelay);
+        }
+        else
+        {
+            scanner.Start(Math.Max(session.CurrentPageIndex, 0));
+        }
+    }
+
+    // The scan's thread: the view's renders come first.
+    private bool IsRenderPending() => RendersPending?.Invoke() ?? false;
+
+    /// <summary>Checks every <see cref="MarkScanStartPoll"/> whether the first renders are done; starts at the latest when <paramref name="left"/> runs out.</summary>
+    private void ScheduleScanStart(MarkScanner scanner, TimeSpan left)
+    {
+        _pendingScanStart = _scheduler.Schedule(MarkScanStartPoll, () =>
+        {
+            _pendingScanStart = null;
+            if (!ReferenceEquals(scanner, _markScanner) || Session is not { } session)
+            {
+                return; // replaced or stopped meanwhile
+            }
+
+            var remaining = left - MarkScanStartPoll;
+            bool ready;
+            try
+            {
+                ready = remaining <= TimeSpan.Zero || FirstRendersDone?.Invoke() != false;
+            }
+#pragma warning disable CA1031 // A failing probe must not keep the scan from starting.
+            catch (Exception)
+#pragma warning restore CA1031
+            {
+                ready = true;
+            }
+
+            if (ready)
+            {
+                scanner.Start(Math.Max(session.CurrentPageIndex, 0));
+            }
+            else
+            {
+                ScheduleScanStart(scanner, remaining);
+            }
+        });
     }
 
     private void StopScan()
     {
+        _pendingScanStart?.Dispose();
+        _pendingScanStart = null;
         var scanner = _markScanner;
         _markScanner = null;
         scanner?.Dispose();
@@ -1648,7 +1726,7 @@ public sealed class MainViewModel : ObservableObject
             // The scan reads through one renderer: it follows the swap (stopped while released, resumed over the
             // reopened one with the same index, so the pages already scanned stay and are not loaded again).
             StopScan();
-            StartScan();
+            StartScan(deferred: false);
         }
     }
 

@@ -646,6 +646,124 @@ public sealed class MarksViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task With_a_view_the_scan_starts_once_the_first_renders_are_done()
+    {
+        var pages = Pages(6);
+        var source = new FakeMarkPageSource(pages);
+        var vm = NewVm(pages, _ => source);
+        var rendered = false;
+        vm.FirstRendersDone = () => rendered;
+        await OpenAsync(vm, "a.pdf");
+        var scanner = vm.MarkScannerForTest!;
+        Assert.True(vm.Marks.IsScanning); // waiting, not done
+
+        _scheduler.Advance(MainViewModel.MarkScanStartPoll * 3);
+        await Task.Delay(50);
+        Assert.Empty(source.Loads); // no scan job before the first renders
+
+        rendered = true;
+        _scheduler.Advance(MainViewModel.MarkScanStartPoll);
+        await WaitCompletedAsync(scanner);
+        Assert.Equal([1, 2, 3, 4, 5], source.Loads.Order());
+    }
+
+    [Fact]
+    public async Task With_a_view_the_scan_starts_after_the_start_delay_when_the_renders_take_longer()
+    {
+        var pages = Pages(6);
+        var source = new FakeMarkPageSource(pages);
+        var vm = NewVm(pages, _ => source);
+        vm.FirstRendersDone = () => false;
+        await OpenAsync(vm, "a.pdf");
+        var scanner = vm.MarkScannerForTest!;
+
+        _scheduler.Advance(MainViewModel.MarkScanStartDelay - TimeSpan.FromMilliseconds(1));
+        await Task.Delay(50);
+        Assert.Empty(source.Loads);
+
+        _scheduler.Advance(TimeSpan.FromMilliseconds(1));
+        await WaitCompletedAsync(scanner);
+        Assert.Equal(5, source.Loads.Count);
+    }
+
+    [Fact]
+    public async Task The_scan_parks_while_page_renders_are_pending()
+    {
+        var pages = Pages(6);
+        var source = new FakeMarkPageSource(pages);
+        var vm = NewVm(pages, _ => source);
+        var pending = true;
+        vm.RendersPending = () => Volatile.Read(ref pending);
+        await OpenAsync(vm, "a.pdf");
+        var scanner = vm.MarkScannerForTest!;
+
+        await scanner.WhenIdleAsync().WaitAsync(_timeout);
+        await Task.Delay(60);
+        Assert.Empty(source.Loads);
+        Assert.False(scanner.IsCompleted);
+
+        Volatile.Write(ref pending, false);
+        await WaitCompletedAsync(scanner);
+        Assert.Equal(5, source.Loads.Count);
+    }
+
+    [Fact]
+    public async Task While_a_plain_save_has_the_renderer_released_the_scan_counts_as_pending_and_no_other_mark_is_not_said()
+    {
+        // Regression (final review M1): the release left the list "not scanning", so Next said "Nessun altro segno".
+        var pages = Pages(6);
+        pages.Strokes[4] = [MarginLine()];
+        var viewer = new FakeViewerHandle(_log);
+        var sources = new List<FakeMarkPageSource>();
+        var vm = NewVm(pages, _ =>
+        {
+            if (viewer.IsReleased)
+            {
+                return null;
+            }
+
+            var source = new FakeMarkPageSource(pages);
+            if (sources.Count == 0)
+            {
+                source.Hold(1);
+            }
+
+            sources.Add(source);
+            return source;
+        }, viewer);
+        var replaceStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var replaceGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        vm.SaveService = new DocumentSaveService(new FakeDocumentWriter(_log), _dialogs, async (_, _) =>
+        {
+            replaceStarted.TrySetResult();
+            await replaceGate.Task;
+        });
+        await OpenAsync(vm, "a.pdf");
+        vm.Viewport.ViewportWidthDip = _viewportWidthDip;
+        vm.Viewport.ViewportHeightDip = _viewportHeightDip;
+        await sources[0].Started[1].Task.WaitAsync(_timeout);
+
+        var save = vm.SaveCommand.ExecuteAsync(null);
+        await replaceStarted.Task.WaitAsync(_timeout);
+        Assert.True(viewer.IsReleased);
+        Assert.Null(vm.MarkScannerForTest);
+        _scheduler.Advance(MarksViewModel.RefreshInterval);
+
+        Assert.True(vm.Marks.IsScanning);
+        Assert.True(vm.Marks.NextCommand.CanExecute(null));
+        vm.Marks.NextCommand.Execute(null);
+        Assert.Null(vm.Marks.StatusText);
+
+        replaceGate.SetResult();
+        await save.WaitAsync(_timeout);
+        sources[0].Gates[1].SetResult();
+        await WaitCompletedAsync(vm.MarkScannerForTest!);
+        Assert.Single(vm.MarkIndexForTest!.MarksOnPage(4));
+        _scheduler.Advance(MarksViewModel.RefreshInterval);
+        Assert.False(vm.Marks.IsScanning);
+    }
+
+    [Fact]
     public async Task Recentre_follows_a_jump_to_a_distant_page()
     {
         var pages = Pages(100);
@@ -748,6 +866,16 @@ public sealed class MarksViewModelTests : IDisposable
 
     private static void Draw(MainViewModel vm) =>
         Assert.True(vm.Editor!.CommitStroke(MarginLine(x: 300).Points, InkTool.Pen, InkColor.FromRgb(0, 0, 0), 1.5));
+
+    private static async Task WaitCompletedAsync(MarkScanner scanner)
+    {
+        var deadline = DateTime.UtcNow + _timeout;
+        while (!scanner.IsCompleted)
+        {
+            Assert.True(DateTime.UtcNow < deadline, "The scan did not complete.");
+            await Task.Delay(5);
+        }
+    }
 
     private static FakePageSource Pages(int count) => new(Enumerable.Repeat((612.0, 792.0), count).ToArray());
 

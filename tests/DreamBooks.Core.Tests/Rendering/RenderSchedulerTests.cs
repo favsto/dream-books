@@ -44,6 +44,25 @@ public class RenderSchedulerTests
     }
 
     [Fact]
+    public async Task HasPendingWork_is_true_while_a_render_is_running_or_due_and_false_when_idle()
+    {
+        var renderer = new FakeRenderer();
+        using var s = Create(renderer);
+        Assert.False(s.HasPendingWork);
+
+        s.SetWanted([Req(0, 0), Req(1, 0)]);
+        var first = await renderer.NextCallAsync();
+        Assert.True(s.HasPendingWork);
+        first.Succeed();
+        var second = await renderer.NextCallAsync();
+        Assert.True(s.HasPendingWork); // the next one started at once
+        second.Succeed();
+        await s.WhenIdleAsync().WaitAsync(_timeout);
+
+        Assert.False(s.HasPendingWork);
+    }
+
+    [Fact]
     public async Task Visible_pages_render_before_neighbours()
     {
         var renderer = new FakeRenderer();

@@ -101,6 +101,10 @@ public sealed class MarksIntegrationTests : IDisposable
             {
                 Wait(vm.OpenPdfCommand.ExecuteAsync(null));
                 LayOut(view, 1000, 800);
+                Thread.Sleep(30);
+                Assert.Empty(probe.Loads); // with a view, no scan job before the first renders (or the start delay)
+                Idle(view);
+                scheduler.Advance(MainViewModel.MarkScanStartPoll); // the first renders are done: the scan starts
                 var scanner = vm.MarkScannerForTest!;
                 WaitScanCompleted(scanner);
                 Refresh(scheduler, view);
@@ -289,6 +293,7 @@ public sealed class MarksIntegrationTests : IDisposable
             {
                 Wait(vm.OpenPdfCommand.ExecuteAsync(null));
                 LayOut(view, 1000, 800);
+                scheduler.Advance(MainViewModel.MarkScanStartDelay); // the deferred scan start (first renders or the delay)
                 vm.ZoomVm.Zoom = 1;
                 Settle(view);
                 LoadEditors(view);
@@ -404,6 +409,7 @@ public sealed class MarksIntegrationTests : IDisposable
                 {
                     Wait(vm.OpenPdfCommand.ExecuteAsync(null));
                     LayOut(view, 1000, 800);
+                    scheduler.Advance(MainViewModel.MarkScanStartDelay); // the deferred scan start (first renders or the delay)
                     var scanner = vm.MarkScannerForTest!;
                     var index = vm.MarkIndexForTest!;
                     var session = vm.Session!;
@@ -470,6 +476,7 @@ public sealed class MarksIntegrationTests : IDisposable
             {
                 Wait(vm.OpenPdfCommand.ExecuteAsync(null));
                 LayOut(view, 1000, 800);
+                scheduler.Advance(MainViewModel.MarkScanStartDelay); // the deferred scan start (first renders or the delay)
                 var scanner = vm.MarkScannerForTest!;
                 WaitScanCompleted(scanner);
                 Refresh(scheduler, view);
@@ -514,6 +521,7 @@ public sealed class MarksIntegrationTests : IDisposable
             {
                 Wait(vm.OpenPdfCommand.ExecuteAsync(null));
                 LayOut(view, 1000, 800);
+                scheduler.Advance(MainViewModel.MarkScanStartDelay); // the deferred scan start (first renders or the delay)
                 WaitScanCompleted(vm.MarkScannerForTest!);
                 Refresh(scheduler, view);
                 scheduler.Advance(MainViewModel.ViewSettleDelay);
@@ -621,6 +629,7 @@ public sealed class MarksIntegrationTests : IDisposable
             {
                 Wait(vm.OpenPdfCommand.ExecuteAsync(null));
                 LayOut(view, 1000, 800);
+                scheduler.Advance(MainViewModel.MarkScanStartDelay); // the deferred scan start (first renders or the delay)
                 WpfTestThread.PumpUntil(() => view.SurfaceFor(vm.Viewport.VisiblePages[0])!.PageImage is not null, _timeoutMs);
                 IdleBitmaps(view); // the window's renders are done: what grows from here is the scan's
                 var scanner = vm.MarkScannerForTest!;
@@ -648,7 +657,7 @@ public sealed class MarksIntegrationTests : IDisposable
 
                 Assert.Equal(pages, index.ScannedCount);
                 Assert.Equal(0, scanner.FailedCount);
-                Assert.Equal(expectedPagesWithMarks, probe.NonNullCount);
+                Assert.InRange(probe.NonNullCount, 0, expectedPagesWithMarks); // a page loaded for the window is tracked live
                 Assert.Equal(expectedPagesWithMarks, index.AllMarks().Select(m => m.PageIndex).Distinct().Count());
                 Assert.True(probe.MaxInFlight <= 1, $"{probe.MaxInFlight} loads in flight");
                 Assert.True(after - before < 100L * 1024 * 1024, $"memory grew by {deltaMb:0.0} MB");
@@ -1028,6 +1037,8 @@ public sealed class MarksIntegrationTests : IDisposable
         view.Viewport.ScrollToVerticalOffset(y);
         Settle(view);
     }
+
+    private static void Idle(DocumentView view) => IdleBitmaps(view);
 
     private static void IdleBitmaps(DocumentView view)
     {

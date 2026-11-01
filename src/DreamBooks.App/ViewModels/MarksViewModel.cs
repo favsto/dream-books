@@ -51,6 +51,7 @@ public sealed class MarksViewModel : ObservableObject
     private readonly ObservableCollection<MarkItem> _items = [];
     private MarkIndex? _index;
     private MarkScanner? _scanner;
+    private bool _scanPending;
     private IReadOnlyList<Mark> _marks = [];
     private bool _isScanning;
     private string? _statusText;
@@ -174,8 +175,12 @@ public sealed class MarksViewModel : ObservableObject
         Rebuild();
     }
 
-    /// <summary>The scan filling the index now (it is replaced when the renderer is), or none.</summary>
-    internal void SetScanner(MarkScanner? scanner)
+    /// <summary>
+    /// The scan filling the index now (it is replaced when the renderer is), or none. <paramref name="pending"/>: no
+    /// scan right now, but one will resume with pages left (the renderer is released by a save), so the list still
+    /// counts as scanning and previous/next never claim there is no other mark.
+    /// </summary>
+    internal void SetScanner(MarkScanner? scanner, bool pending = false)
     {
         if (_scanner is { } previous)
         {
@@ -183,17 +188,20 @@ public sealed class MarksViewModel : ObservableObject
         }
 
         _scanner = scanner;
+        _scanPending = scanner is null && pending;
         if (scanner is not null)
         {
             scanner.Progress += OnScanProgress;
         }
 
-        IsScanning = scanner is { IsCompleted: false };
+        IsScanning = ScanRunsOrPending;
         if (IsScanning)
         {
             ScheduleRefresh();
         }
     }
+
+    private bool ScanRunsOrPending => _scanPending || _scanner is { IsCompleted: false };
 
     private bool CanStep() => Count > 0 || IsScanning;
 
@@ -238,7 +246,7 @@ public sealed class MarksViewModel : ObservableObject
             Rebuild();
         }
 
-        IsScanning = _scanner is { IsCompleted: false };
+        IsScanning = ScanRunsOrPending;
         if (IsScanning)
         {
             ScheduleRefresh(); // see the end of the scan, also while it is paused
@@ -338,7 +346,7 @@ public sealed class MarksViewModel : ObservableObject
             return;
         }
 
-        var scanning = _scanner is { IsCompleted: false };
+        var scanning = ScanRunsOrPending;
         if (index.TotalMarkCount == 0 && !scanning)
         {
             return; // nothing to go to at all: the commands are disabled

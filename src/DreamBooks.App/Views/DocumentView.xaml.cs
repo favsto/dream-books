@@ -258,6 +258,8 @@ public partial class DocumentView : UserControl
             old.ZoomVm.StepZoomed -= OnStepZoomed;
             old.Viewport.PropertyChanged -= OnViewportPropertyChanged;
             old.PropertyChanged -= OnViewModelPropertyChanged;
+            old.FirstRendersDone = null;
+            old.RendersPending = null;
         }
 
         ReleaseAll();
@@ -278,6 +280,10 @@ public partial class DocumentView : UserControl
             viewModel.ZoomVm.StepZoomed += OnStepZoomed;
             viewModel.Viewport.PropertyChanged += OnViewportPropertyChanged;
             viewModel.PropertyChanged += OnViewModelPropertyChanged;
+
+            // The mark scan waits for the first renders and parks while renders are due (the current coordinator).
+            viewModel.FirstRendersDone = () => _bitmaps.FirstRendersDone;
+            viewModel.RendersPending = () => _bitmaps.HasPendingRenders;
             ReportViewportSize();
         }
 
