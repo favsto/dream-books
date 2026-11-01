@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using DreamBooks.Core.Documents;
 using DreamBooks.Core.Model;
+using DreamBooks.Core.Search;
 using DreamBooks.Pdf.Interop;
 
 namespace DreamBooks.Pdf;
@@ -109,6 +110,31 @@ public sealed class PdfRenderer : IAsyncDisposable, IPageSource
         ArgumentOutOfRangeException.ThrowIfNegative(pageIndex);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(pageIndex, _pageSizes.Length);
         return PdfiumThread.RunAsync(() => ReadStrokesForScan(pageIndex), ct);
+    }
+
+    /// <summary>
+    /// Searches one page for <paramref name="foldedQuery"/> (a query already folded by
+    /// <see cref="TextFolding.FoldQuery"/>; folding it again changes nothing) in ONE job on the PDFium thread (FR-13,
+    /// NFR-04). See <see cref="PdfTextSearcher.Search"/>: the page and its text page are closed whatever happens,
+    /// the app's annotations and the first-touch stroke cache are not touched, and no page text is kept. At most
+    /// <paramref name="maxHits"/> hits are returned; <see cref="SearchPageResult.Truncated"/> says more exist.
+    /// Throws <see cref="InvalidOperationException"/> when PDFium cannot load the page or its text.
+    /// </summary>
+    public Task<SearchPageResult> SearchPageAsync(int pageIndex, string foldedQuery, int maxHits, CancellationToken ct)
+    {
+        ThrowIfDisposed();
+        ArgumentOutOfRangeException.ThrowIfNegative(pageIndex);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(pageIndex, _pageSizes.Length);
+        ArgumentNullException.ThrowIfNull(foldedQuery);
+        ArgumentOutOfRangeException.ThrowIfNegative(maxHits);
+        return PdfiumThread.RunAsync(
+            () =>
+            {
+                // Re-checked on the worker: a dispose queued earlier has already closed the document.
+                ObjectDisposedException.ThrowIf(_document == 0, this);
+                return PdfTextSearcher.Search(_document, pageIndex, foldedQuery, maxHits, ct);
+            },
+            ct);
     }
 
     /// <summary>

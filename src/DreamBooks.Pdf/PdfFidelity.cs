@@ -97,7 +97,7 @@ internal static class PdfFidelity
     /// <summary>Extracted text of a loaded page. PDFium thread only.</summary>
     internal static unsafe string ReadPageText(nint page)
     {
-        nint textPage = PdfiumNative.FPDFText_LoadPage(page);
+        nint textPage = PdfiumText.FPDFText_LoadPage(page);
         if (textPage == 0)
         {
             throw new InvalidOperationException("PDFium could not load the page text.");
@@ -105,7 +105,7 @@ internal static class PdfFidelity
 
         try
         {
-            int count = PdfiumNative.FPDFText_CountChars(textPage);
+            int count = PdfiumText.FPDFText_CountChars(textPage);
             if (count <= 0)
             {
                 return string.Empty;
@@ -115,14 +115,14 @@ internal static class PdfFidelity
             int written;
             fixed (char* p = buffer)
             {
-                written = PdfiumNative.FPDFText_GetText(textPage, 0, count, p);
+                written = PdfiumText.FPDFText_GetText(textPage, 0, count, p);
             }
 
             return new string(buffer, 0, Math.Clamp(written - 1, 0, count));
         }
         finally
         {
-            PdfiumNative.FPDFText_ClosePage(textPage);
+            PdfiumText.FPDFText_ClosePage(textPage);
         }
     }
 
