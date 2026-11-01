@@ -26,7 +26,7 @@ public class MarkRecognizerTests
         => new MarkRecognizer().Recognize(3, _width, strokes);
 
     [Fact]
-    public void A_straight_vertical_pen_line_in_the_margin_longer_than_three_lines_is_a_mark()
+    public void A_straight_vertical_pen_line_in_the_margin_longer_than_two_lines_is_a_mark()
     {
         var s = Line(30, 100, 260);
         var marks = Recognize(s);
@@ -59,9 +59,9 @@ public class MarkRecognizerTests
     }
 
     [Fact]
-    public void A_line_shorter_than_three_lines_is_not_a_mark()
+    public void A_line_shorter_than_two_lines_is_not_a_mark()
     {
-        Assert.Empty(Recognize(Line(30, 100, 200)));
+        Assert.Empty(Recognize(Line(30, 100, 170)));
     }
 
     [Fact]
@@ -202,10 +202,10 @@ public class MarkRecognizerTests
     }
 
     [Fact]
-    public void An_extent_of_exactly_three_lines_is_a_mark_and_just_under_is_not()
+    public void An_extent_of_exactly_two_lines_is_a_mark_and_just_under_is_not()
     {
-        Assert.Single(Recognize(Line(30, 100, 208)));
-        Assert.Empty(Recognize(Line(30, 100, 207.9)));
+        Assert.Single(Recognize(Line(30, 100, 172)));
+        Assert.Empty(Recognize(Line(30, 100, 171.9)));
     }
 
     [Fact]
@@ -240,8 +240,8 @@ public class MarkRecognizerTests
             return Stroke([(30.0, 100.0), (30 + w, 200.0), (30.0, 300.0)]);
         }
 
-        Assert.Single(Recognize(Detour(1.29)));
-        Assert.Empty(Recognize(Detour(1.31)));
+        Assert.Single(Recognize(Detour(1.49)));
+        Assert.Empty(Recognize(Detour(1.51)));
     }
 
     [Fact]
@@ -273,8 +273,74 @@ public class MarkRecognizerTests
     [Fact]
     public void Custom_line_metrics_change_the_minimum_extent()
     {
-        var s = Line(30, 100, 200); // 100 pt
+        var s = Line(30, 100, 160); // 60 pt: under two default lines, over two 20 pt lines
         Assert.Empty(new MarkRecognizer().Recognize(0, _width, [s]));
         Assert.Single(new MarkRecognizer(new FixedLineMetrics(20)).Recognize(0, _width, [s]));
+    }
+
+    /// <summary>
+    /// A margin line as the digitizer delivers it (bug: no mark was ever found on the device): hundreds of raw samples
+    /// less than a point apart, each with ±0.75 pt of jitter (±1 DIP at 100 % zoom), a dwell where the pen lands and
+    /// a slight bow. Measured sample by sample its path is about 1.6 times its length, so the path rule rejected it.
+    /// </summary>
+    [Theory]
+    [InlineData(80, 400)]
+    [InlineData(120, 300)]
+    [InlineData(200, 600)]
+    public void A_dense_jittery_hand_drawn_margin_line_is_a_mark(double heightPt, int samples)
+    {
+        var random = new Random(11);
+        double Jitter() => ((random.NextDouble() * 2) - 1) * 0.75;
+        var pts = new List<(double X, double Y)>();
+        for (var i = 0; i < 10; i++)
+        {
+            pts.Add((40 + (Jitter() * 0.3), 100 + (Jitter() * 0.3))); // the pen lands and rests
+        }
+
+        for (var i = 0; i < samples; i++)
+        {
+            var t = (double)i / (samples - 1);
+            var eased = t - (Math.Sin(2 * Math.PI * t) / (2 * Math.PI)); // slow at both ends
+            pts.Add((40 + (3 * Math.Sin(Math.PI * t)) + Jitter(), 100 + (heightPt * eased) + Jitter()));
+        }
+
+        var m = Assert.Single(Recognize(Stroke(pts)));
+        Assert.Equal(MarkSide.Left, m.Side);
+    }
+
+    [Fact]
+    public void The_path_rule_does_not_depend_on_how_densely_the_same_line_is_sampled()
+    {
+        // The same small zig-zag-free waver, at 20 and at 2000 samples.
+        static InkStroke Sampled(int n) => Stroke(Enumerable.Range(0, n).Select(i =>
+        {
+            var t = i / (double)(n - 1);
+            return (40 + (0.6 * Math.Sin(i * 2.0)), 100 + (100 * t));
+        }));
+
+        Assert.Single(Recognize(Sampled(20)));
+        Assert.Single(Recognize(Sampled(2000)));
+    }
+
+    [Fact]
+    public void A_square_bracket_in_the_margin_is_a_mark()
+    {
+        // "[" over two lines with 15 pt serifs: path 102 pt over 72 pt end to end (ratio 1.42).
+        Assert.Single(Recognize(Stroke([(55.0, 100.0), (40.0, 100.0), (40.0, 172.0), (55.0, 172.0)])));
+    }
+
+    [Fact]
+    public void A_scribble_drawn_with_many_samples_is_still_not_a_mark()
+    {
+        // Back and forth 30 pt wide every 10 pt down, sampled densely.
+        var pts = new List<(double X, double Y)>();
+        for (var i = 0; i <= 2000; i++)
+        {
+            var t = i / 2000.0;
+            var phase = (t * 16) % 2;
+            pts.Add((20 + (30 * (phase < 1 ? phase : 2 - phase)), 100 + (160 * t)));
+        }
+
+        Assert.Empty(Recognize(Stroke(pts)));
     }
 }

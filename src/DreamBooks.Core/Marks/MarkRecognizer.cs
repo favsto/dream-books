@@ -126,25 +126,19 @@ public sealed class MarkRecognizer(IPageLineMetrics? metrics = null)
         }
 
         var pts = s.Points;
-        double path = 0, sumX = 0;
+        double sumX = 0;
         double minY = double.MaxValue, maxY = double.MinValue;
         for (var i = 0; i < pts.Count; i++)
         {
             sumX += pts[i].X;
             minY = Math.Min(minY, pts[i].Y);
             maxY = Math.Max(maxY, pts[i].Y);
-            if (i > 0)
-            {
-                var ddx = pts[i].X - pts[i - 1].X;
-                var ddy = pts[i].Y - pts[i - 1].Y;
-                path += Math.Sqrt((ddx * ddx) + (ddy * ddy));
-            }
         }
 
         var dx = pts[^1].X - pts[0].X;
         var dy = pts[^1].Y - pts[0].Y;
         var dist = Math.Sqrt((dx * dx) + (dy * dy));
-        if (dist <= 0 || path > MarkRules.MaxPathToDistanceRatio * dist)
+        if (dist <= 0 || ResampledPathLength(pts, MarkRules.PathSampleSpacingFraction * dist) > MarkRules.MaxPathToDistanceRatio * dist)
         {
             return false;
         }
@@ -173,5 +167,29 @@ public sealed class MarkRecognizer(IPageLineMetrics? metrics = null)
         top = minY;
         bottom = maxY;
         return true;
+    }
+
+    /// <summary>
+    /// The path length over the points kept at least <paramref name="spacing"/> apart (the first, each one that far
+    /// from the last kept, and the last): the shape of the stroke without the digitizer's sample-to-sample jitter, so
+    /// the result does not grow with the sampling density (see <see cref="MarkRules.PathSampleSpacingFraction"/>).
+    /// </summary>
+    private static double ResampledPathLength(IReadOnlyList<InkPoint> pts, double spacing)
+    {
+        double path = 0;
+        var kept = pts[0];
+        for (var i = 1; i < pts.Count; i++)
+        {
+            var ddx = pts[i].X - kept.X;
+            var ddy = pts[i].Y - kept.Y;
+            var d = Math.Sqrt((ddx * ddx) + (ddy * ddy));
+            if (d >= spacing || i == pts.Count - 1)
+            {
+                path += d;
+                kept = pts[i];
+            }
+        }
+
+        return path;
     }
 }

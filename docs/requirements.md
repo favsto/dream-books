@@ -249,7 +249,7 @@ Il salvataggio è il requisito più delicato: il file prodotto deve essere un PD
 
 | ID | Requisito | Priorità |
 | --- | --- | --- |
-| FR-100 | Una linea laterale tracciata a penna (quasi verticale, lunga almeno 3 righe di testo, nel margine esterno della pagina) è riconosciuta come segno; anche un passaggio evidenziato diventa un segno quando esiste l'evidenziatore (3c). I segni sono ricavati dai tratti a ogni apertura e modifica: non si scrive nulla di nuovo nel PDF | Must |
+| FR-100 | Una linea laterale tracciata a penna (quasi verticale, lunga almeno 2 righe di testo, nel margine esterno della pagina; tracciata a mano libera: il tremolio della penna non conta) è riconosciuta come segno; anche un passaggio evidenziato diventa un segno quando esiste l'evidenziatore (3c). I segni sono ricavati dai tratti a ogni apertura e modifica: non si scrive nulla di nuovo nel PDF | Must |
 | FR-101 | I segni compaiono come tacche sulla barra di scorrimento (UI-07) | Must |
 | FR-102 | Salto al segno precedente/successivo (pulsanti nel menu, scorciatoie Alt+Su e Alt+Giù), che registra la posizione nello storico del tasto Indietro (FR-09); agli estremi non salta e avvisa "Nessun altro segno" | Must |
 | FR-103 | Elenco dei segni nel pannello laterale sinistro (UI-04; si apre con swipe dal bordo, dal menu o con Ctrl+M): miniatura del passaggio con le note scritte accanto, numero di pagina; un tocco porta al passaggio | Should |

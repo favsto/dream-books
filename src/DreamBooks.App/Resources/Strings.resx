@@ -110,7 +110,7 @@
   <data name="GoToPageHint" xml:space="preserve"><value>Scrivi il numero della pagina e premi Invio (Esc per annullare)</value></data>
   <data name="Back" xml:space="preserve"><value>Indietro</value></data>
   <data name="MarkPageLabelFormat" xml:space="preserve"><value>pag. {0}</value></data>
-  <data name="MarksEmpty" xml:space="preserve"><value>Nessun segno. Un segno è una linea verticale sul fianco della pagina, lunga almeno 3 righe.</value></data>
+  <data name="MarksEmpty" xml:space="preserve"><value>Nessun segno. Un segno è una linea verticale sul fianco della pagina, lunga almeno 2 righe.</value></data>
   <data name="MarksNoOther" xml:space="preserve"><value>Nessun altro segno</value></data>
   <data name="PreviousMark" xml:space="preserve"><value>Segno precedente</value></data>
   <data name="NextMark" xml:space="preserve"><value>Segno successivo</value></data>

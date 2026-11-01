@@ -6,11 +6,22 @@ public static class MarkRules
     /// <summary>Maximum angle between the stroke's end-to-end line and the vertical, in degrees.</summary>
     public const double MaxDeviationFromVerticalDegrees = 20;
 
-    /// <summary>Maximum path length as a multiple of the end-to-end distance (rejects zig-zags and scribbles).</summary>
-    public const double MaxPathToDistanceRatio = 1.3;
+    /// <summary>
+    /// Maximum path length as a multiple of the end-to-end distance (rejects zig-zags and scribbles; a square bracket
+    /// with short serifs still passes). The path is measured on the stroke resampled at
+    /// <see cref="PathSampleSpacingFraction"/>, never sample by sample.
+    /// </summary>
+    public const double MaxPathToDistanceRatio = 1.5;
+
+    /// <summary>
+    /// Spacing of the points the path length is measured on, as a fraction of the end-to-end distance. The raw pen
+    /// samples are often less than a point apart with about a DIP of jitter each: summed one by one, a straight line
+    /// is half again as long as it is, and the ratio would depend on the zoom and on how slowly the line was drawn.
+    /// </summary>
+    public const double PathSampleSpacingFraction = 0.05;
 
     /// <summary>Minimum vertical extent, in text lines.</summary>
-    public const double MinExtentLines = 3;
+    public const double MinExtentLines = 2;
 
     /// <summary>Line height used until the text layer supplies a real one (3b-2).</summary>
     public const double DefaultLineHeightPt = 36;
