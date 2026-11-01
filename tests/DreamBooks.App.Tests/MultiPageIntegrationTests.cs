@@ -549,6 +549,51 @@ public sealed class MultiPageIntegrationTests : IDisposable
         });
     }
 
+    [Fact]
+    public void A_fling_is_remembered_once_its_glide_has_settled_and_leaves_no_back_entry()
+    {
+        var path = WritePdf("fling.pdf", 20);
+        var store = new ViewPositionStore(PositionsRoot);
+        WpfTestThread.Run(() =>
+        {
+            var scheduler = new ManualScheduler();
+            var vm = NewVm(path, scheduler);
+            var view = new DocumentView { BitmapRenderer = new FakeBitmapRenderer { Auto = true }, DataContext = vm };
+            try
+            {
+                Wait(vm.OpenPdfCommand.ExecuteAsync(null));
+                LayOut(view, 1000, 800);
+                ScrollTo(view, view.Pages.PageRect(3).Top);
+                var before = vm.Viewport.Position;
+
+                Assert.True(view.StartGlide(new System.Windows.Vector(0, -4)));
+                var now = TimeSpan.FromSeconds(5);
+                for (var i = 0; view.IsGliding; i++)
+                {
+                    Assert.True(i < 1000);
+                    view.AdvanceGlide(now);
+                    now += TimeSpan.FromMilliseconds(16);
+                }
+
+                var landed = vm.Viewport.Position;
+                Assert.True(landed.PageIndex > before.PageIndex + 2, $"{before} -> {landed}");
+                Assert.False(vm.Viewport.History.CanGoBack); // not a jump
+
+                scheduler.Advance(MainViewModel.ViewSettleDelay - TimeSpan.FromMilliseconds(1));
+                Wait(vm.PositionWritesForTest);
+                Assert.Null(store.TryLoad(path)); // the glide's last step restarted the settle delay
+                scheduler.Advance(TimeSpan.FromMilliseconds(1));
+                Wait(vm.PositionWritesForTest);
+                Assert.Equal(landed, store.TryLoad(path)?.Position);
+                Assert.Equal(vm.Viewport.CurrentPage, vm.Session!.CurrentPageIndex);
+            }
+            finally
+            {
+                Close(vm, view);
+            }
+        });
+    }
+
     /// <summary>
     /// Scrolls from the top to the bottom in steps of 90% of the viewport (renders are cancelled as pages fly past),
     /// waiting for the renders every <paramref name="idleEvery"/> steps. At every step the surfaces are the retained

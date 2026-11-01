@@ -139,7 +139,7 @@ L'utente deve poter aprire qualsiasi PDF standard e muoversi nel documento con d
 | FR-02 | Apertura di PDF protetti da password, con richiesta della password | Should |
 | FR-03 | Elenco degli ultimi 8 file aperti, con miniatura della prima pagina | Should |
 | FR-04 | Riapertura del documento alla pagina, allo zoom e alla posizione dell'ultima sessione, anche per i documenti senza modifiche non salvate; la posizione si conserva fuori dal PDF, in un piccolo file locale per documento (il PDF non viene toccato) | Should |
-| FR-05 | Scorrimento verticale continuo con un dito, rotellina o barra di scorrimento sottile a scomparsa | Must |
+| FR-05 | Scorrimento verticale continuo con un dito, rotellina o barra di scorrimento sottile a scomparsa. Lo scorrimento col dito ha inerzia: lanciata, la pagina prosegue e rallenta progressivamente, tanto più lontano quanto più veloce è il lancio; si ferma subito a inizio e fine documento (senza rimbalzo), a un nuovo tocco, quando la penna si avvicina o scrive, con tastiera, rotellina, barra, salti e zoom. Il pinch non ha inerzia | Must |
 | FR-06 | Zoom con pinch a due dita, Ctrl + rotellina, Ctrl + / Ctrl −; range 25%–800% | Must |
 | FR-07 | Doppio tocco con un dito: alterna "adatta larghezza" e zoom 200% sul punto toccato | Should |
 | FR-08 | Modalità di visualizzazione: pagina singola continua (predefinita), due pagine affiancate | Could |

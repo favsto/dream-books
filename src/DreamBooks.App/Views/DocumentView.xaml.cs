@@ -27,7 +27,9 @@ namespace DreamBooks.App.Views;
 /// <see cref="DocumentLayout.ZoomAt"/>, fit width, jumps, restore) is applied to the scroll viewer, so nothing jumps
 /// under the fingers (FR-06, FR-07, FR-04). Every visible page with loaded strokes inks at once; pen-down never changes
 /// the current page; an eraser gesture belongs to the page where it starts; a stroke is clipped to its page (FR-26,
-/// FR-27). Fingers pan and zoom, never while a surface is inking; the pen never scrolls (FR-30). The scroll bars are
+/// FR-27). Fingers pan and zoom, never while a surface is inking; the pen never scrolls (FR-30). A flicked pan glides
+/// on and slows down (<see cref="StartGlide"/>, <see cref="FlingSettings"/>) until it stops, reaches an end, or any
+/// touch, pen, key, wheel, jump or zoom stops it (FR-05). The scroll bars are
 /// replaced by the fading <see cref="ScrollRail"/> (UI-07); the navigation keys go through the view model's commands
 /// (<see cref="HandleNavigationKey"/>, FR-10). A finger swipe from the left edge raises <see cref="LeftEdgeSwiped"/>
 /// (the window opens the left-edge panel, UI-04); the pen there inks.
@@ -60,6 +62,9 @@ public partial class DocumentView : UserControl
     private const double _wheelLineDip = 16;
     private const int _defaultWheelLines = 3;
 
+    /// <summary>How close to an end of the document (DIPs) a glide counts as having reached it.</summary>
+    private const double _glideEdgeDip = 1e-3;
+
     private readonly Dictionary<int, PageSlot> _slots = [];
     private readonly HashSet<int> _touches = [];
     private readonly DispatcherTimer _editorTimer;
@@ -78,6 +83,10 @@ public partial class DocumentView : UserControl
     private int? _railTouchId;
     private TouchDevice? _edgeTouch;
     private Point? _edgeSwipeStart;
+    private readonly FlingGlide _glide = new();
+    private FlingSettings? _fling;
+    private bool _framesHooked;
+    private bool _gestureZoomed;
 
     public DocumentView()
     {
@@ -97,6 +106,7 @@ public partial class DocumentView : UserControl
         };
         Unloaded += (_, _) =>
         {
+            StopGlide();
             _editorTimer.Stop();
 
             // Renders stop and the cache (up to its budget) is released; the surfaces keep what they show. A view that
@@ -256,12 +266,14 @@ public partial class DocumentView : UserControl
             old.Viewport.LayoutChanged -= OnLayoutChanged;
             old.Viewport.Jumped -= OnJumped;
             old.ZoomVm.StepZoomed -= OnStepZoomed;
+            old.ZoomVm.PropertyChanged -= OnZoomPropertyChanged;
             old.Viewport.PropertyChanged -= OnViewportPropertyChanged;
             old.PropertyChanged -= OnViewModelPropertyChanged;
             old.FirstRendersDone = null;
             old.RendersPending = null;
         }
 
+        StopGlide();
         ReleaseAll();
         _pool.Clear();
         _viewModel = viewModel;
@@ -278,6 +290,7 @@ public partial class DocumentView : UserControl
             viewModel.Viewport.LayoutChanged += OnLayoutChanged;
             viewModel.Viewport.Jumped += OnJumped;
             viewModel.ZoomVm.StepZoomed += OnStepZoomed;
+            viewModel.ZoomVm.PropertyChanged += OnZoomPropertyChanged;
             viewModel.Viewport.PropertyChanged += OnViewportPropertyChanged;
             viewModel.PropertyChanged += OnViewModelPropertyChanged;
 
@@ -294,6 +307,7 @@ public partial class DocumentView : UserControl
     private void OnLayoutChanged(object? sender, EventArgs e)
     {
         // Another document (or none): every surface goes, a live gesture on one is dropped, every render is cancelled.
+        StopGlide();
         ReleaseAll();
         _pendingOffsets = null;
         _requestedFrom = _viewModel?.Renderer;
@@ -362,6 +376,7 @@ public partial class DocumentView : UserControl
     /// <summary>After a jump the visible pages were never neighbours: their strokes load at once (the others wait).</summary>
     private void OnJumped(object? sender, EventArgs e)
     {
+        StopGlide(); // go to page, Back, Home/End, Page Up/Down, a mark, a rail scrub: the glide is over
         if (_viewModel?.Viewport is not { } viewport)
         {
             return;
@@ -377,7 +392,20 @@ public partial class DocumentView : UserControl
     }
 
     /// <summary>Ctrl + / Ctrl − (or the panel's buttons): the user's zoom, the indicator shows (UI-05).</summary>
-    private void OnStepZoomed(object? sender, EventArgs e) => Rail.NotifyActivity();
+    private void OnStepZoomed(object? sender, EventArgs e)
+    {
+        StopGlide();
+        Rail.NotifyActivity();
+    }
+
+    /// <summary>The zoom lock engages (a stroke or an erase starts): a glide stops at once.</summary>
+    private void OnZoomPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ZoomViewModel.IsLocked) && sender is ZoomViewModel { IsLocked: true })
+        {
+            StopGlide();
+        }
+    }
 
     private void LoadEditorNow(PageSlot slot)
     {
@@ -672,6 +700,8 @@ public partial class DocumentView : UserControl
 
     private void OnManipulationStarting(object? sender, ManipulationStartingEventArgs e)
     {
+        StopGlide(); // a finger came down: like on every phone, the glide stops under it
+        _gestureZoomed = false;
         e.ManipulationContainer = Viewport;
         e.Mode = ManipulationModes.Translate | ManipulationModes.Scale;
         e.Handled = true;
@@ -680,8 +710,150 @@ public partial class DocumentView : UserControl
     private void OnManipulationDelta(object? sender, ManipulationDeltaEventArgs e)
     {
         e.Handled = true;
+        if (e.IsInertial)
+        {
+            e.Complete(); // WPF's own inertia is never used: the glide runs per frame (OnManipulationInertiaStarting)
+            return;
+        }
+
         var delta = e.DeltaManipulation;
-        ApplyManipulation(delta.Translation, (delta.Scale.X + delta.Scale.Y) / 2, e.ManipulationOrigin);
+        var scale = (delta.Scale.X + delta.Scale.Y) / 2;
+        _gestureZoomed |= Math.Abs(scale - 1) > _minScaleDelta;
+        ApplyManipulation(delta.Translation, scale, e.ManipulationOrigin);
+    }
+
+    /// <summary>
+    /// The fingers lifted: the pan glides on from the release velocity (<see cref="StartGlide"/>); a pinch ends where
+    /// it is (no zoom inertia, no pan glide). WPF's own inertia is given nothing to do: it advances on a dispatcher
+    /// timer out of step with the screen's frames (judder at reading speeds), so the glide is integrated once per
+    /// rendered frame instead, with the same constant-deceleration physics.
+    /// </summary>
+    private void OnManipulationInertiaStarting(object? sender, ManipulationInertiaStartingEventArgs e)
+    {
+        e.Handled = true;
+        var release = e.InitialVelocities.LinearVelocity;
+        var deceleration = Fling.Deceleration;
+        e.TranslationBehavior.InitialVelocity = default;
+        e.TranslationBehavior.DesiredDeceleration = deceleration;
+        e.ExpansionBehavior.InitialVelocity = default;
+        e.ExpansionBehavior.DesiredDeceleration = deceleration;
+        StartGlide(release, afterPinch: _gestureZoomed);
+    }
+
+    /// <summary>The fling settings from the theme dictionary (<see cref="FlingSettings.From"/>).</summary>
+    internal FlingSettings Fling => _fling ??= FlingSettings.From(key => TryFindResource(key));
+
+    /// <summary>True while a fling glides on after the finger lifted.</summary>
+    internal bool IsGliding => _glide.IsActive;
+
+    /// <summary>
+    /// Starts a fling from the finger's velocity at the lift (DIP/ms, the direction the content moves) at the
+    /// <see cref="Fling"/> launch speed. Nothing after a pinch, for a lift slower than the minimum, without a document,
+    /// while the zoom is locked or a page is inking. Rendered frames advance it (<see cref="AdvanceGlide"/>) while the
+    /// view is on screen. True when a glide started.
+    /// </summary>
+    internal bool StartGlide(Vector releaseVelocity, bool afterPinch = false)
+    {
+        StopGlide();
+        if (afterPinch || _viewModel is not { Viewport.Layout: not null } vm || vm.ZoomVm.IsLocked || AnyInking())
+        {
+            return false;
+        }
+
+        var launch = Fling.LaunchVelocity(releaseVelocity);
+        if (launch == default)
+        {
+            return false;
+        }
+
+        _glide.Start(launch, Fling.Deceleration);
+        HookFrames(true);
+        return true;
+    }
+
+    /// <summary>
+    /// One rendered frame of the glide at <paramref name="frameTime"/>: the step goes through
+    /// <see cref="ApplyManipulation"/> like a finger's (sub-DIP remainder kept, the rail shows). It stops when the
+    /// document reaches its top or bottom (exactly there: the scroll is clamped, no bounce), when it has slowed to a
+    /// stop, and at once while a page is inking, the zoom is locked or without a document. Separate so tests can
+    /// drive it.
+    /// </summary>
+    internal void AdvanceGlide(TimeSpan frameTime)
+    {
+        if (!_glide.IsActive
+            || _viewModel is not { Viewport: { Layout: { } layout } viewport } vm
+            || vm.ZoomVm.IsLocked
+            || AnyInking())
+        {
+            StopGlide();
+            return;
+        }
+
+        var step = _glide.Step(frameTime);
+        if (step.X != 0 || step.Y != 0)
+        {
+            ApplyManipulation(step, 1, default);
+            if (ReachedEnd(layout, viewport, step))
+            {
+                StopGlide();
+                return;
+            }
+        }
+
+        if (!_glide.IsActive)
+        {
+            StopGlide();
+        }
+    }
+
+    /// <summary>Stops a glide where it is (a new touch, the pen, a key, the wheel, a jump, a zoom, another document).</summary>
+    internal void StopGlide()
+    {
+        _glide.Stop();
+        HookFrames(false);
+    }
+
+    /// <summary>The pen came into range: a glide stops before it touches.</summary>
+    internal void NotifyPenNear() => StopGlide();
+
+    /// <summary>
+    /// The glide reached the top or the bottom in the direction it moves (or, for a purely sideways glide, the side):
+    /// there is nothing more to scroll.
+    /// </summary>
+    private static bool ReachedEnd(DocumentLayout layout, DocumentViewportViewModel viewport, Vector step)
+    {
+        var width = viewport.ViewportWidthDip;
+        var height = viewport.ViewportHeightDip;
+        var zoom = viewport.Position.Zoom;
+        var (x, y) = layout.ToOffsets(viewport.Position, width, height);
+        var maxY = Math.Max(0, layout.ExtentHeightDip(zoom) - height);
+        var maxX = Math.Max(0, layout.ExtentWidthDip(zoom, width) - width);
+        var blockedY = step.Y > 0 ? y <= _glideEdgeDip : step.Y < 0 && y >= maxY - _glideEdgeDip;
+        var blockedX = step.X > 0 ? x <= _glideEdgeDip : step.X < 0 && x >= maxX - _glideEdgeDip;
+        return blockedY || (step.Y == 0 && blockedX);
+    }
+
+    /// <summary>Rendered frames drive the glide only while the view is on screen (tests drive it themselves).</summary>
+    private void HookFrames(bool on)
+    {
+        if (on && !_framesHooked && PresentationSource.FromVisual(this) is not null)
+        {
+            CompositionTarget.Rendering += OnRendering;
+            _framesHooked = true;
+        }
+        else if (!on && _framesHooked)
+        {
+            CompositionTarget.Rendering -= OnRendering;
+            _framesHooked = false;
+        }
+    }
+
+    private void OnRendering(object? sender, EventArgs e)
+    {
+        if (e is RenderingEventArgs frame)
+        {
+            AdvanceGlide(frame.RenderingTime);
+        }
     }
 
     /// <summary>
@@ -736,6 +908,11 @@ public partial class DocumentView : UserControl
             return false;
         }
 
+        if (key is Key.PageUp or Key.PageDown or Key.Home or Key.End or Key.Up or Key.Down or Key.Left or Key.Right)
+        {
+            StopGlide(); // the keyboard takes over
+        }
+
         var command = key switch
         {
             Key.PageUp => viewport.PageUpCommand,
@@ -786,6 +963,7 @@ public partial class DocumentView : UserControl
     /// </summary>
     internal bool RoutePointerDown(Point position, PointerKind kind, Size contact = default)
     {
+        StopGlide(); // any press, anywhere (the rail included), stops a glide
         if (Rail.IsEditing && !Rail.IsOnGoToPageBox(position))
         {
             Rail.CancelGoToPage();
@@ -905,6 +1083,7 @@ public partial class DocumentView : UserControl
             return;
         }
 
+        StopGlide(); // the wheel or a touchpad takes over
         if (AnyInking())
         {
             // Never move a page under a stroke being written: the wheel, a touchpad's two-finger scroll, Ctrl+wheel and
@@ -935,6 +1114,7 @@ public partial class DocumentView : UserControl
     /// </summary>
     internal void ZoomByWheel(int delta, Point anchor)
     {
+        StopGlide();
         if (_viewModel?.Viewport is not { Layout: not null } viewport || AnyInking())
         {
             return;
@@ -1010,6 +1190,7 @@ public partial class DocumentView : UserControl
     /// <summary>A finger press: in the shown rail's strip or on its indicator it is the rail's (never panned).</summary>
     private void OnHostTouchDown(object? sender, TouchEventArgs e)
     {
+        StopGlide(); // a finger (or the pen's tip) touching down stops a glide, wherever it lands
         var kind = IsPenInput() ? PointerKind.Pen : PointerKind.Finger;
         if (kind == PointerKind.Pen || Rail.IsPressed)
         {
@@ -1073,6 +1254,15 @@ public partial class DocumentView : UserControl
         {
             _railTouchId = null;
             Rail.PointerCancel();
+        }
+    }
+
+    /// <summary>The pen comes into range (hovering on its way to write): a glide stops before it touches.</summary>
+    private void OnHostStylusInRange(object sender, StylusEventArgs e)
+    {
+        if (e.StylusDevice.TabletDevice?.Type == TabletDeviceType.Stylus)
+        {
+            NotifyPenNear();
         }
     }
 

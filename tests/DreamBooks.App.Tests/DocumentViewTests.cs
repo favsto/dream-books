@@ -905,6 +905,234 @@ public sealed class DocumentViewTests : IDisposable
             bitmaps);
     }
 
+    [Fact]
+    public async Task A_fling_glides_through_the_view_model_slows_down_and_leaves_no_history()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            ScrollTo(view, 5000);
+            var start = OffsetY(vm);
+            Assert.True(view.StartGlide(new Vector(0, -2))); // the finger was moving up: the document goes on down
+            Assert.True(view.IsGliding);
+
+            var now = TimeSpan.FromSeconds(10);
+            var previous = OffsetY(vm);
+            var lastStep = double.MaxValue;
+            var frames = 0;
+            while (view.IsGliding)
+            {
+                view.AdvanceGlide(now);
+                now += _frame;
+                var step = OffsetY(vm) - previous;
+                previous = OffsetY(vm);
+                Assert.True(step >= 0, $"frame {frames} went back");
+                Assert.True(step <= lastStep + 1, $"frame {frames} sped up: {step} after {lastStep}"); // up to the remainder
+                lastStep = step;
+                Assert.True(++frames < 500);
+            }
+
+            Assert.Equal(view.Fling.DistanceDip(2), OffsetY(vm) - start, 0); // within half a DIP
+            Assert.False(vm.Viewport.History.CanGoBack); // a fling is not a jump
+            Settle(view);
+            Assert.Equal(OffsetY(vm), view.Viewport.VerticalOffset, 6);
+
+            // The current page reaches the session after the glide, as after any scroll.
+            _scheduler.Advance(DocumentViewportViewModel.CurrentPageDelay);
+            Assert.Equal(vm.Viewport.CurrentPage, vm.Session!.CurrentPageIndex);
+        });
+    }
+
+    [Fact]
+    public async Task A_fling_stops_exactly_at_the_end_and_at_the_start()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            var bottom = view.Viewport.ScrollableHeight;
+            ScrollTo(view, bottom - 300);
+            Assert.True(view.StartGlide(new Vector(0, -8)));
+            RunGlide(view, maxFrames: 10);
+            Assert.Equal(bottom, OffsetY(vm), 6);
+            Settle(view);
+            Assert.Equal(bottom, view.Viewport.VerticalOffset, 3);
+
+            ScrollTo(view, 300);
+            Assert.True(view.StartGlide(new Vector(0, 8)));
+            RunGlide(view, maxFrames: 10);
+            Assert.Equal(0, OffsetY(vm), 6);
+            Settle(view);
+            Assert.Equal(0, view.Viewport.VerticalOffset, 6);
+        });
+    }
+
+    [Fact]
+    public async Task Slow_glide_steps_below_half_a_dip_still_add_up()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            ScrollTo(view, 5000);
+            var start = OffsetY(vm);
+            Assert.True(view.StartGlide(new Vector(0, -0.3)));
+            var now = TimeSpan.FromSeconds(10);
+            view.AdvanceGlide(now); // the first frame
+            for (var i = 0; i < 400 && view.IsGliding; i++)
+            {
+                now += TimeSpan.FromMilliseconds(1); // every step well under half a DIP
+                view.AdvanceGlide(now);
+            }
+
+            Assert.False(view.IsGliding);
+            Assert.InRange(OffsetY(vm) - start, view.Fling.DistanceDip(0.3) - 0.5, view.Fling.DistanceDip(0.3) + 0.5);
+        });
+    }
+
+    [Fact]
+    public async Task No_glide_after_a_pinch_a_slow_lift_or_while_the_zoom_is_locked()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            ScrollTo(view, 5000);
+            Assert.False(view.StartGlide(new Vector(0, -3), afterPinch: true)); // no zoom inertia, no pan after a pinch
+            Assert.False(view.StartGlide(new Vector(0, -0.1)));
+            vm.ZoomVm.IsLocked = true;
+            Assert.False(view.StartGlide(new Vector(0, -3)));
+            vm.ZoomVm.IsLocked = false;
+            Assert.False(view.IsGliding);
+        });
+    }
+
+    [Fact]
+    public async Task The_rail_shows_while_a_fling_glides()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            ScrollTo(view, 5000);
+            view.Rail.HideNow();
+            Assert.False(view.Rail.IsShown);
+            Assert.True(view.StartGlide(new Vector(0, -3)));
+            view.AdvanceGlide(TimeSpan.FromSeconds(10));
+            Assert.True(view.Rail.IsShown);
+        });
+    }
+
+    [Fact]
+    public async Task Any_new_input_or_jump_stops_a_glide_at_once()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            var centre = new Point(500, 400);
+            (string Name, Action Act)[] stops =
+            [
+                ("finger down", () => view.RoutePointerDown(centre, PointerKind.Finger)),
+                ("pen down", () => view.RoutePointerDown(centre, PointerKind.Pen)),
+                ("mouse down", () => view.RoutePointerDown(centre, PointerKind.Mouse)),
+                ("pen near", view.NotifyPenNear),
+                ("rail press", () =>
+                {
+                    view.Rail.NotifyActivity();
+                    view.RoutePointerDown(new Point(view.Rail.ActualWidth - 5, 400), PointerKind.Finger);
+                    view.RoutePointerUp();
+                }),
+                ("page down", () => view.HandleNavigationKey(Key.PageDown, ModifierKeys.None, view.Viewport)),
+                ("arrow key", () => view.HandleNavigationKey(Key.Down, ModifierKeys.None, view.Viewport)),
+                ("go to page", () => vm.Viewport.GoToPageCommand.Execute(12)),
+                ("back", () => vm.Viewport.BackCommand.Execute(null)),
+                ("zoom lock", () =>
+                {
+                    vm.ZoomVm.IsLocked = true;
+                    vm.ZoomVm.IsLocked = false;
+                }),
+                ("ctrl+wheel", () => view.ZoomByWheel(120, centre)),
+                ("zoom step", () => vm.ZoomVm.ZoomOutCommand.Execute(null)),
+                ("wheel", () => Wheel(view, -120)),
+            ];
+
+            foreach (var (name, act) in stops)
+            {
+                StartGliding(view);
+                act();
+                Assert.False(view.IsGliding, name);
+                Settle(view);
+                var at = OffsetY(vm);
+                view.AdvanceGlide(TimeSpan.FromSeconds(20));
+                Assert.Equal(at, OffsetY(vm), 6);
+            }
+
+            // Unloading the view stops it too.
+            StartGliding(view);
+            view.RaiseEvent(new RoutedEventArgs(FrameworkElement.UnloadedEvent));
+            Assert.False(view.IsGliding);
+        });
+    }
+
+    [Fact]
+    public async Task A_page_starting_to_ink_stops_a_glide_and_nothing_moves_under_the_pen()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            ScrollTo(view, 5000);
+            LoadEditors(view);
+            StartGliding(view);
+            var surface = vm.Viewport.VisiblePages.Select(view.SurfaceFor).First(s => s?.Editor is not null)!;
+            var at = OffsetY(vm);
+            MouseDown(surface);
+            Assert.True(surface.IsInking);
+            view.AdvanceGlide(TimeSpan.FromSeconds(20));
+            Assert.Equal(at, OffsetY(vm), 6);
+            Assert.False(view.IsGliding);
+            MouseUp(surface);
+        });
+    }
+
+    [Fact]
+    public async Task Another_document_stops_a_glide()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            StartGliding(view);
+            vm.Viewport.Attach(vm.Session, vm.Viewport.Layout, restored: null, startPage: 3);
+            Assert.False(view.IsGliding);
+        });
+    }
+
+    [Fact]
+    public async Task The_fling_settings_are_the_theme_tokens()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            Assert.Equal(FlingSettings.From(key => Application.Current.TryFindResource(key)), view.Fling);
+            Assert.Equal(new FlingSettings(0.002, 0.2, 1, 0.1, 16), view.Fling);
+        });
+    }
+
+    private static readonly TimeSpan _frame = TimeSpan.FromMilliseconds(1000.0 / 60);
+
+    private static double OffsetY(MainViewModel vm)
+    {
+        var viewport = vm.Viewport;
+        return viewport.Layout!.ToOffsets(viewport.Position, viewport.ViewportWidthDip, viewport.ViewportHeightDip).OffsetYDip;
+    }
+
+    /// <summary>A glide in the middle of the document, already moving.</summary>
+    private static void StartGliding(DocumentView view)
+    {
+        ScrollTo(view, 5000);
+        Assert.True(view.StartGlide(new Vector(0, -3)));
+        view.AdvanceGlide(TimeSpan.FromSeconds(10));
+        view.AdvanceGlide(TimeSpan.FromSeconds(10) + _frame);
+        Assert.True(view.IsGliding);
+    }
+
+    private static void RunGlide(DocumentView view, int maxFrames)
+    {
+        var now = TimeSpan.FromSeconds(10);
+        for (var i = 0; view.IsGliding; i++)
+        {
+            Assert.True(i < maxFrames, "the glide did not stop");
+            view.AdvanceGlide(now);
+            now += _frame;
+        }
+    }
+
     private async Task<MainViewModel> OpenFakeAsync()
     {
         var source = new FakePageSource(Enumerable.Repeat((_widthPt, _heightPt), _pageCount).ToArray());

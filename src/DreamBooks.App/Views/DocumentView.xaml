@@ -8,8 +8,10 @@
           PreviewMouseLeftButtonDown="OnHostMouseDown" PreviewMouseMove="OnHostMouseMove"
           PreviewMouseLeftButtonUp="OnHostMouseUp" LostMouseCapture="OnHostLostMouseCapture" MouseLeave="OnHostMouseLeave"
           PreviewTouchDown="OnHostTouchDown" PreviewTouchMove="OnHostTouchMove" PreviewTouchUp="OnHostTouchUp"
-          LostTouchCapture="OnHostLostTouchCapture" PreviewStylusDown="OnHostStylusDown">
-        <!-- The continuous document (FR-05): fingers pan and pinch (manipulation), Ctrl+wheel zooms, Shift+wheel pans
+          LostTouchCapture="OnHostLostTouchCapture" PreviewStylusDown="OnHostStylusDown"
+          PreviewStylusInRange="OnHostStylusInRange">
+        <!-- The continuous document (FR-05): fingers pan and pinch (manipulation; a flicked pan glides on per frame,
+             FlingSettings), Ctrl+wheel zooms, Shift+wheel pans
              sideways (Ctrl/Shift+wheel works over the rail too), a one-finger double tap toggles fit width / 200% (FR-06, FR-07); the pen only inks (FR-30). No
              layout rounding inside: the scroll offsets and geometry stay exact (zoom anchored to the sub-pixel) and
              VirtualPagePanel snaps each page itself to whole device pixels on screen, so the bitmap maps 1:1 (the window
@@ -25,6 +27,7 @@
                       ScrollChanged="OnScrollChanged"
                       ManipulationStarting="OnManipulationStarting"
                       ManipulationDelta="OnManipulationDelta"
+                      ManipulationInertiaStarting="OnManipulationInertiaStarting"
                       ManipulationBoundaryFeedback="OnManipulationBoundaryFeedback"
                       PreviewMouseWheel="OnPreviewMouseWheel"
                       PreviewTouchDown="OnPreviewTouchDown"
