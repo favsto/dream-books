@@ -116,8 +116,7 @@
                                 ToolTip="{x:Static res:Strings.OpenMarksList}" />
                     </StackPanel>
                     <TextBlock x:Name="MarkStatusText" Text="{Binding Marks.StatusText}" TextWrapping="Wrap"
-                               Margin="{StaticResource Gap}" AutomationProperties.LiveSetting="Polite"
-                               AutomationProperties.Name="{x:Static res:Strings.MarkStatusLabel}">
+                               Margin="{StaticResource Gap}" AutomationProperties.LiveSetting="Polite">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Style.Triggers>
@@ -261,7 +260,8 @@
              inks), the pen on it never presses its controls (MarksPanel.RoutePress). -->
         <Grid x:Name="PageHost"
               PreviewMouseLeftButtonDown="OnPageHostMouseDown" PreviewTouchDown="OnPageHostTouchDown"
-              PreviewStylusDown="OnPageHostStylusDown">
+              PreviewTouchMove="OnPageHostTouchMove" PreviewTouchUp="OnPageHostTouchUp"
+              LostTouchCapture="OnPageHostLostTouchCapture" PreviewStylusDown="OnPageHostStylusDown">
             <views:DocumentView x:Name="DocumentViewer" />
             <!-- Shown until a document is open; the error line stays visible over the page. -->
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
@@ -283,7 +283,7 @@
             <!-- The left-edge panel (UI-04) with the marks list (FR-103): a finger swipe from the left edge, the menu
                  entry; it closes with the close button, Esc, a swipe, a press outside and after a jump. -->
             <views:EdgePanel x:Name="MarksPanel" Title="{x:Static res:Strings.MarksList}"
-                             HeaderDetail="{Binding Marks.Count}" HeaderDetailName="{x:Static res:Strings.MarksCountLabel}">
+                             HeaderDetail="{Binding Marks.Count}" HeaderDetailNameFormat="{x:Static res:Strings.MarksCountNameFormat}">
                 <views:MarksListView DataContext="{Binding Marks}" />
             </views:EdgePanel>
         </Grid>

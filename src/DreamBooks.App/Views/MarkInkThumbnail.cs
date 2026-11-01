@@ -38,9 +38,11 @@ public sealed class MarkInkThumbnail : FrameworkElement
         Loaded += (_, _) =>
         {
             Listen(Cache);
-            if (_thumbnail is null && _load is null)
+            if (_load is null)
             {
-                Request(); // loaded again after an unload cancelled its read
+                // Loaded again (an unload cancelled its read and stopped it listening): ask again, keeping what is
+                // shown; a cache hit when nothing changed, a new read when its page was invalidated meanwhile.
+                Request(keepShown: true);
             }
         };
         Unloaded += (_, _) =>
@@ -58,6 +60,9 @@ public sealed class MarkInkThumbnail : FrameworkElement
 
     /// <summary>True once the ink of the current mark is drawn (false while the placeholder shows).</summary>
     internal bool HasInk => _thumbnail is not null;
+
+    /// <summary>How many strokes the drawn ink has (0 while the placeholder shows).</summary>
+    internal int StrokeCount => _thumbnail?.Strokes.Count ?? 0;
 
     internal MarkThumbnailCache? Cache => (MarkThumbnailCache?)GetValue(CacheProperty);
 
@@ -149,12 +154,14 @@ public sealed class MarkInkThumbnail : FrameworkElement
         if (_listeningTo is { } old)
         {
             old.PageInvalidated -= OnPageInvalidated;
+            old.Cleared -= OnCleared;
         }
 
         _listeningTo = cache;
         if (cache is not null)
         {
             cache.PageInvalidated += OnPageInvalidated;
+            cache.Cleared += OnCleared;
         }
     }
 
@@ -165,6 +172,9 @@ public sealed class MarkInkThumbnail : FrameworkElement
             Request(keepShown: true); // the old ink stays until the new one arrives: no flash
         }
     }
+
+    /// <summary>Another document: the old ink goes at once (an equal mark may have other notes now).</summary>
+    private void OnCleared(object? sender, EventArgs e) => Request();
 
     /// <summary>Shows the current mark's ink: at once from the cache, otherwise the placeholder until it is read.</summary>
     private void Request(bool keepShown = false)

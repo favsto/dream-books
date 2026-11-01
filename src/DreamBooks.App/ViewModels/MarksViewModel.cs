@@ -139,6 +139,13 @@ public sealed class MarksViewModel : ObservableObject
     /// </summary>
     internal event EventHandler<PageStrokesChangedEventArgs>? InkChanged;
 
+    /// <summary>
+    /// Another index was attached (another document, or the same file reopened): what was drawn for the old marks is
+    /// no longer true, even for equal marks (their notes may have been discarded). Raised on the UI thread, before
+    /// <see cref="Items"/> follows the new index.
+    /// </summary>
+    internal event EventHandler? DocumentChanged;
+
     /// <summary>Raises <see cref="InkChanged"/>; any thread.</summary>
     internal void NotifyInkChanged(int pageIndex) => InkChanged?.Invoke(this, new PageStrokesChangedEventArgs(pageIndex));
 
@@ -163,6 +170,7 @@ public sealed class MarksViewModel : ObservableObject
         }
 
         Interlocked.Exchange(ref _dirty, 0);
+        DocumentChanged?.Invoke(this, EventArgs.Empty);
         Rebuild();
     }
 

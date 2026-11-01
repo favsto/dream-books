@@ -15,6 +15,7 @@
                 CornerRadius="{StaticResource EdgePanelCornerRadius}"
                 Background="{StaticResource EdgePanelBackgroundBrush}" Effect="{StaticResource EdgePanelShadow}"
                 Stylus.IsPressAndHoldEnabled="False" Stylus.IsFlicksEnabled="False"
+                KeyboardNavigation.TabNavigation="Cycle" KeyboardNavigation.ControlTabNavigation="Cycle"
                 PreviewStylusDown="OnSheetStylusDown" PreviewMouseDown="OnSheetMouseButton" PreviewMouseUp="OnSheetMouseButton"
                 PreviewTouchDown="OnSheetTouchDown" PreviewTouchMove="OnSheetTouchMove" PreviewTouchUp="OnSheetTouchUp">
             <Border.RenderTransform>
@@ -32,11 +33,11 @@
                               Width="{StaticResource GlyphSize}" Height="{StaticResource GlyphSize}" />
                     </Button>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock x:Name="TitleText" Text="{Binding Title, ElementName=Self}" FontWeight="SemiBold"
+                        <TextBlock x:Name="TitleText" FontWeight="SemiBold"
                                    FontSize="{StaticResource EdgePanelTitleSize}" VerticalAlignment="Center" />
-                        <ContentPresenter x:Name="Detail" Content="{Binding HeaderDetail, ElementName=Self}"
-                                          Margin="{StaticResource EdgePanelDetailMargin}" VerticalAlignment="Center" TextElement.FontSize="{StaticResource EdgePanelTitleSize}"
-                                          AutomationProperties.Name="{Binding HeaderDetailName, ElementName=Self}" />
+                        <!-- The count: text and automation name ("Numero di segni: 12") are set by the code. -->
+                        <TextBlock x:Name="DetailText" Margin="{StaticResource EdgePanelDetailMargin}" VerticalAlignment="Center"
+                                   FontSize="{StaticResource EdgePanelTitleSize}" />
                     </StackPanel>
                 </DockPanel>
                 <ContentPresenter x:Name="BodyHost" Content="{Binding Body, ElementName=Self}" Margin="{StaticResource Gap}" />

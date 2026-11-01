@@ -26,6 +26,7 @@ internal sealed class MarkThumbnailCache
     private readonly Func<Mark, CancellationToken, Task<MarkInk?>> _source;
     private readonly Dictionary<Mark, LinkedListNode<(Mark Key, MarkThumbnail Value)>> _entries = [];
     private readonly LinkedList<(Mark Key, MarkThumbnail Value)> _order = new();
+    private int _generation;
 
     public MarkThumbnailCache(Func<Mark, CancellationToken, Task<MarkInk?>> source, int capacity = DefaultCapacity)
     {
@@ -37,6 +38,9 @@ internal sealed class MarkThumbnailCache
 
     /// <summary>The ink of a page changed: its thumbnails were dropped and the ones shown should load again.</summary>
     public event EventHandler<int>? PageInvalidated;
+
+    /// <summary>Everything was dropped (another document): the shown rows load again.</summary>
+    public event EventHandler? Cleared;
 
     public int Capacity { get; }
 
@@ -72,6 +76,7 @@ internal sealed class MarkThumbnailCache
         }
 
         LoadCount++;
+        var generation = _generation;
         var ink = await _source(mark, ct); // back on the UI thread
         if (ink is null)
         {
@@ -81,8 +86,25 @@ internal sealed class MarkThumbnailCache
         var outlines = await Task.Run(() => BuildOutlines(ink), ct);
         ct.ThrowIfCancellationRequested();
         var thumbnail = ToThumbnail(ink, outlines);
+        if (generation != _generation)
+        {
+            return null; // read for a document that is gone: never stored or shown
+        }
+
         Store(mark, thumbnail);
         return thumbnail;
+    }
+
+    /// <summary>
+    /// Drops every thumbnail (the document changed: equal marks may now have other notes) and tells the shown rows to
+    /// load again; reads started before are not stored.
+    /// </summary>
+    public void Clear()
+    {
+        _generation++;
+        _entries.Clear();
+        _order.Clear();
+        Cleared?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Drops the thumbnails of a page and tells the shown ones to load again.</summary>

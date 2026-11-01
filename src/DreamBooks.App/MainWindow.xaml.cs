@@ -1,6 +1,9 @@
 using System.ComponentModel;
 using System.IO;
 using System.Windows;
+using System.Windows.Automation.Peers;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using DreamBooks.App.Services;
@@ -15,6 +18,11 @@ public partial class MainWindow : Window
     private readonly MainViewModel _viewModel = new(
         new FileDialogService(), new RecoveryStore(RecoveryRoot()), new ViewPositionStore(PositionsRoot()));
 
+    private static readonly DependencyPropertyDescriptor _statusText =
+        DependencyPropertyDescriptor.FromProperty(TextBlock.TextProperty, typeof(TextBlock));
+
+    private int? _dismissTouchId;
+
     // Set once the view model allowed closing, so the second Close() goes through.
     private bool _closeAllowed;
     private bool _closeCheckRunning;
@@ -26,10 +34,24 @@ public partial class MainWindow : Window
         Loaded += OnLoaded;
         PreviewKeyDown += OnPreviewKeyDown;
         DocumentViewer.LeftEdgeSwiped += (_, _) => MarksPanel.Open(); // a finger swipe from the left edge (UI-04)
+
+        // Ctrl+M opens and closes the marks list (FR-103; free in 3a). Added here: the panel's command is not reachable
+        // from the window's input bindings in XAML.
+        InputBindings.Add(new KeyBinding(MarksPanel.ToggleCommand, Key.M, ModifierKeys.Control));
+
+        // "Nessun altro segno" is a live region: Narrator reads it when it appears (NFR-31).
+        _statusText.AddValueChanged(MarkStatusText, OnMarkStatusTextChanged);
+        Closed += (_, _) => _statusText.RemoveValueChanged(MarkStatusText, OnMarkStatusTextChanged);
     }
 
     /// <summary>The marks list hosted by <see cref="MarksPanel"/> (not named in XAML: the panel is a user control).</summary>
     internal MarksListView MarksList => (MarksListView)MarksPanel.Body!;
+
+    /// <summary>How many times the marks status was announced as a live region (tests).</summary>
+    internal int StatusAnnouncements { get; private set; }
+
+    /// <summary>The finger that closed the panel from outside, held by the page host until it lifts; null otherwise.</summary>
+    internal int? DismissTouchId => _dismissTouchId;
 
     /// <summary>Journals and document locks: <c>%LOCALAPPDATA%\DreamBooks\recovery</c> (FR-84), outside the user's folders.</summary>
     internal static string RecoveryRoot() =>
@@ -157,13 +179,14 @@ public partial class MainWindow : Window
     {
         if (MarksPanel.IsOpen)
         {
-            if (key == Key.Escape && modifiers == ModifierKeys.None)
+            var inPanel = source is DependencyObject element && IsWithin(element, MarksPanel);
+            if (key == Key.Escape && modifiers == ModifierKeys.None && (inPanel || source is not TextBoxBase))
             {
-                MarksPanel.Close(); // Esc closes the left-edge panel (UI-04)
+                MarksPanel.Close(); // Esc closes the left-edge panel (UI-04); a field outside it keeps its own Esc
                 return true;
             }
 
-            if (source is DependencyObject element && IsWithin(element, MarksPanel))
+            if (inPanel)
             {
                 return false;
             }
@@ -197,7 +220,11 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>A finger press over the document while the panel is open: outside it, a light dismiss.</summary>
+    /// <summary>
+    /// A finger press over the document while the panel is open: outside it, a light dismiss. The finger is captured by
+    /// the page host (not manipulation-enabled) until it lifts, so a drag never pans the page (same as the rail's
+    /// press on DocumentView's host).
+    /// </summary>
     private void OnPageHostTouchDown(object? sender, TouchEventArgs e)
     {
         if (Stylus.CurrentStylusDevice?.TabletDevice?.Type == TabletDeviceType.Stylus)
@@ -205,10 +232,86 @@ public partial class MainWindow : Window
             return; // the pen's own touch events: routed by its stylus press
         }
 
-        if (MarksPanel.RoutePress(e.GetTouchPoint(MarksPanel).Position, PointerKind.Finger))
+        var device = e.TouchDevice;
+        if (RouteDismissTouchDown(e.GetTouchPoint(MarksPanel).Position, device.Id, () => PageHost.CaptureTouch(device)))
         {
-            e.Handled = true; // not promoted to the mouse, never panned
+            e.Handled = true; // not promoted to the mouse
         }
+    }
+
+    private void OnPageHostTouchMove(object? sender, TouchEventArgs e)
+    {
+        if (RouteDismissTouchMove(e.TouchDevice.Id))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private void OnPageHostTouchUp(object? sender, TouchEventArgs e)
+    {
+        var device = e.TouchDevice;
+        if (RouteDismissTouchUp(device.Id, () => PageHost.ReleaseTouchCapture(device)))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private void OnPageHostLostTouchCapture(object? sender, TouchEventArgs e)
+    {
+        if (e.TouchDevice.Id == _dismissTouchId)
+        {
+            _dismissTouchId = null;
+        }
+    }
+
+    /// <summary>
+    /// A finger down at <paramref name="position"/> (panel coordinates): when it closes the open panel from outside,
+    /// <paramref name="capture"/> holds it on the page host and the press is taken (true). Separate so tests can drive it.
+    /// </summary>
+    internal bool RouteDismissTouchDown(Point position, int touchId, Func<bool> capture)
+    {
+        ArgumentNullException.ThrowIfNull(capture);
+        if (!MarksPanel.RoutePress(position, PointerKind.Finger))
+        {
+            return false;
+        }
+
+        if (capture())
+        {
+            _dismissTouchId = touchId;
+        }
+
+        return true;
+    }
+
+    /// <summary>The dismissing finger moves: taken (true), so nothing under it pans.</summary>
+    internal bool RouteDismissTouchMove(int touchId) => touchId == _dismissTouchId;
+
+    /// <summary>The dismissing finger lifts: <paramref name="release"/> lets it go; taken (true).</summary>
+    internal bool RouteDismissTouchUp(int touchId, Action release)
+    {
+        ArgumentNullException.ThrowIfNull(release);
+        if (touchId != _dismissTouchId)
+        {
+            return false;
+        }
+
+        _dismissTouchId = null;
+        release();
+        return true;
+    }
+
+    /// <summary>The status line's text changed: announced as a live region when it says something.</summary>
+    private void OnMarkStatusTextChanged(object? sender, EventArgs e)
+    {
+        if (string.IsNullOrEmpty(MarkStatusText.Text))
+        {
+            return;
+        }
+
+        StatusAnnouncements++;
+        var peer = UIElementAutomationPeer.FromElement(MarkStatusText) ?? UIElementAutomationPeer.CreatePeerForElement(MarkStatusText);
+        peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
     }
 
     /// <summary>The pen's press: outside the open panel it closes it and inks; on it, it closes it and is taken.</summary>

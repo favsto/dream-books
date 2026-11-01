@@ -33,10 +33,10 @@ public partial class EdgePanel : UserControl
         nameof(Title), typeof(string), typeof(EdgePanel), new PropertyMetadata(string.Empty, OnTitleChanged));
 
     public static readonly DependencyProperty HeaderDetailProperty = DependencyProperty.Register(
-        nameof(HeaderDetail), typeof(object), typeof(EdgePanel), new PropertyMetadata(null));
+        nameof(HeaderDetail), typeof(object), typeof(EdgePanel), new PropertyMetadata(null, OnDetailChanged));
 
-    public static readonly DependencyProperty HeaderDetailNameProperty = DependencyProperty.Register(
-        nameof(HeaderDetailName), typeof(string), typeof(EdgePanel), new PropertyMetadata(null));
+    public static readonly DependencyProperty HeaderDetailNameFormatProperty = DependencyProperty.Register(
+        nameof(HeaderDetailNameFormat), typeof(string), typeof(EdgePanel), new PropertyMetadata(null, OnDetailChanged));
 
     public static readonly DependencyProperty BodyProperty = DependencyProperty.Register(
         nameof(Body), typeof(object), typeof(EdgePanel), new PropertyMetadata(null, OnBodyChanged));
@@ -60,6 +60,17 @@ public partial class EdgePanel : UserControl
         InitializeComponent();
         OpenCommand = new RelayCommand(Open);
         CloseCommand = new RelayCommand(Close);
+        ToggleCommand = new RelayCommand(() =>
+        {
+            if (_isOpen)
+            {
+                Close();
+            }
+            else
+            {
+                Open();
+            }
+        });
         CloseButton.Command = CloseCommand;
         AddHandler(ContentActivatedEvent, new RoutedEventHandler((_, _) => Close()));
         Loaded += (_, _) =>
@@ -97,11 +108,11 @@ public partial class EdgePanel : UserControl
         set => SetValue(HeaderDetailProperty, value);
     }
 
-    /// <summary>The automation name of <see cref="HeaderDetail"/>.</summary>
-    public string? HeaderDetailName
+    /// <summary>The automation name of <see cref="HeaderDetail"/>: a format with {0} for the detail ("Numero di segni: {0}").</summary>
+    public string? HeaderDetailNameFormat
     {
-        get => (string?)GetValue(HeaderDetailNameProperty);
-        set => SetValue(HeaderDetailNameProperty, value);
+        get => (string?)GetValue(HeaderDetailNameFormatProperty);
+        set => SetValue(HeaderDetailNameFormatProperty, value);
     }
 
     /// <summary>The hosted content; a logical child, so it inherits the panel's data context while closed too.</summary>
@@ -115,6 +126,9 @@ public partial class EdgePanel : UserControl
 
     public ICommand CloseCommand { get; }
 
+    /// <summary>Opens the panel when closed, closes it when open (the keyboard shortcut).</summary>
+    public ICommand ToggleCommand { get; }
+
     /// <summary>True from <see cref="Open"/> until <see cref="Close"/> (not while it slides out).</summary>
     public bool IsOpen => _isOpen;
 
@@ -126,6 +140,9 @@ public partial class EdgePanel : UserControl
 
     /// <summary>True while the sheet slides in or out.</summary>
     internal bool IsAnimating { get; private set; }
+
+    /// <summary>How many times opening asked to move keyboard focus into the content (tests).</summary>
+    internal int FocusRequests { get; private set; }
 
     protected override IEnumerator LogicalChildren
     {
@@ -165,6 +182,7 @@ public partial class EdgePanel : UserControl
         // After layout, so the content (a list) can take focus: arrows and Enter work at once.
         Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
         {
+            FocusRequests++;
             if (_isOpen && !IsKeyboardFocusWithin)
             {
                 (Body as UIElement)?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
@@ -271,8 +289,25 @@ public partial class EdgePanel : UserControl
         }
     }
 
-    private static void OnTitleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
-        System.Windows.Automation.AutomationProperties.SetName(d, (string?)e.NewValue ?? string.Empty);
+    private static void OnTitleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var panel = (EdgePanel)d;
+        var title = (string?)e.NewValue ?? string.Empty;
+        System.Windows.Automation.AutomationProperties.SetName(panel, title);
+        panel.TitleText.Text = title;
+    }
+
+    /// <summary>The count and its automation name, on a text block (which has an automation peer).</summary>
+    private static void OnDetailChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var panel = (EdgePanel)d;
+        var text = Convert.ToString(panel.HeaderDetail, System.Globalization.CultureInfo.CurrentCulture) ?? string.Empty;
+        panel.DetailText.Text = text;
+        var format = panel.HeaderDetailNameFormat;
+        System.Windows.Automation.AutomationProperties.SetName(
+            panel.DetailText,
+            format is null ? text : string.Format(System.Globalization.CultureInfo.CurrentCulture, format, text));
+    }
 
     private static void OnBodyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {

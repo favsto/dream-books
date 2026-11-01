@@ -83,7 +83,6 @@ public sealed class EdgePanelTests : IDisposable
                 window.MarksPanel.AnimationsEnabled = () => false;
                 Assert.False(window.RouteKey(Key.Escape, ModifierKeys.None, null));
                 window.MarksPanel.Open();
-                Assert.False(window.RouteKey(Key.PageDown, ModifierKeys.None, window.MarksList.List)); // the list scrolls
                 Assert.True(window.RouteKey(Key.Escape, ModifierKeys.None, null));
                 Assert.False(window.MarksPanel.IsOpen);
             }
@@ -376,6 +375,273 @@ public sealed class EdgePanelTests : IDisposable
             vm.Viewport.BackCommand.Execute(null);
             Assert.Equal(0, vm.Viewport.Position.PageIndex);
         });
+    }
+
+    [Fact]
+    public void Edge_swipe_rejects_a_palm_and_a_second_finger()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var view = new DocumentView();
+            ScrollRailTests.LayOut(view, 1000, 800);
+            var swipes = 0;
+            view.LeftEdgeSwiped += (_, _) => swipes++;
+            var edge = new Point(5, 400);
+
+            // A palm-sized contact at the edge (the heel of the writing hand) never starts a swipe.
+            Assert.False(view.BeginEdgeSwipe(edge, PointerKind.Finger, new Size(ScrollRail.MaxFingerContactDip + 1, 20)));
+            view.MoveEdgeSwipe(new Point(80, 400));
+            Assert.Equal(0, swipes);
+
+            // A finger-sized one does.
+            Assert.True(view.BeginEdgeSwipe(edge, PointerKind.Finger, new Size(12, 12)));
+
+            // A second finger lands (a pinch): the candidate is dropped and the pinch is not a swipe.
+            Assert.False(view.BeginEdgeSwipe(new Point(300, 400), PointerKind.Finger, new Size(12, 12)));
+            view.MoveEdgeSwipe(new Point(80, 400));
+            Assert.Equal(0, swipes);
+            view.EndEdgeSwipe();
+
+            Assert.True(view.BeginEdgeSwipe(edge, PointerKind.Finger, new Size(12, 12)));
+            view.MoveEdgeSwipe(new Point(80, 400));
+            Assert.Equal(1, swipes);
+        });
+    }
+
+    [Fact]
+    public async Task Edge_swipe_never_starts_or_continues_while_a_page_is_inking()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            var swipes = 0;
+            view.LeftEdgeSwiped += (_, _) => swipes++;
+            LoadEditors(view);
+            var surface = view.SurfaceFor(vm.Viewport.CurrentPage)!;
+
+            // Started before the pen comes down: the pen's stroke ends it.
+            Assert.True(view.BeginEdgeSwipe(new Point(5, 400), PointerKind.Finger));
+            StartInking(surface);
+            view.MoveEdgeSwipe(new Point(80, 400));
+            Assert.Equal(0, swipes);
+
+            // While the page is inking: none starts.
+            Assert.False(view.BeginEdgeSwipe(new Point(5, 400), PointerKind.Finger));
+            view.MoveEdgeSwipe(new Point(80, 400));
+            Assert.Equal(0, swipes);
+            StopInking(surface);
+        });
+    }
+
+    [Fact]
+    public void Finger_light_dismiss_captures_the_touch_until_it_lifts()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var window = new MainWindow();
+            try
+            {
+                ScrollRailTests.LayOut((FrameworkElement)window.Content, 1200, 800);
+                window.MarksPanel.AnimationsEnabled = () => false;
+                var outside = new Point(700, 300);
+                var captured = 0;
+                var released = 0;
+
+                // Closed: nothing is taken or captured.
+                Assert.False(window.RouteDismissTouchDown(outside, 7, () => ++captured > 0));
+                Assert.Equal(0, captured);
+
+                // Open: the dismissing finger closes it and stays with the host (not the document's manipulation)
+                // until it lifts, so a drag never pans the page.
+                window.MarksPanel.Open();
+                Assert.True(window.RouteDismissTouchDown(outside, 7, () => ++captured > 0));
+                Assert.False(window.MarksPanel.IsOpen);
+                Assert.Equal(1, captured);
+                Assert.Equal(7, window.DismissTouchId);
+                Assert.True(window.RouteDismissTouchMove(7));
+                Assert.False(window.RouteDismissTouchMove(8)); // another finger is the document's
+                Assert.True(window.RouteDismissTouchUp(7, () => released++));
+                Assert.Equal(1, released);
+                Assert.Null(window.DismissTouchId);
+                Assert.False(window.RouteDismissTouchMove(7));
+
+                // A finger on the sheet is the sheet's: not captured.
+                window.MarksPanel.Open();
+                Assert.False(window.RouteDismissTouchDown(new Point(100, 300), 9, () => ++captured > 0));
+                Assert.Equal(1, captured);
+                Assert.True(window.MarksPanel.IsOpen);
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    [Fact]
+    public async Task Keys_inside_the_open_panel_stay_the_panel_s_with_a_document_open()
+    {
+        await WithWindowAsync((vm, window) =>
+        {
+            var list = window.MarksList.List;
+            var before = vm.Viewport.Position;
+
+            // Open: PgDn in the list scrolls the list, the document stays.
+            window.MarksPanel.Open();
+            Assert.False(window.RouteKey(Key.PageDown, ModifierKeys.None, list));
+            Assert.Equal(before, vm.Viewport.Position);
+
+            // Control case: the same key from the same source with the panel closed moves the document.
+            window.MarksPanel.Close();
+            Assert.True(window.RouteKey(Key.PageDown, ModifierKeys.None, list));
+            Assert.NotEqual(before, vm.Viewport.Position);
+        });
+    }
+
+    [Fact]
+    public void Esc_in_the_go_to_page_field_clears_it_and_keeps_the_panel_open()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var window = new MainWindow();
+            try
+            {
+                ScrollRailTests.LayOut((FrameworkElement)window.Content, 1200, 800);
+                window.MarksPanel.AnimationsEnabled = () => false;
+                window.MarksPanel.Open();
+                Assert.False(window.RouteKey(Key.Escape, ModifierKeys.None, window.GoToPageField)); // the field's own Esc
+                Assert.True(window.MarksPanel.IsOpen);
+                Assert.True(window.RouteKey(Key.Escape, ModifierKeys.None, window.MarksList.List));
+                Assert.False(window.MarksPanel.IsOpen);
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    [Fact]
+    public void Opening_moves_focus_into_the_panel_and_Tab_cycles_inside_it()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var panel = NewPanel();
+            Assert.Equal(KeyboardNavigationMode.Cycle, KeyboardNavigation.GetTabNavigation(panel.Sheet));
+            Assert.Equal(KeyboardNavigationMode.Cycle, KeyboardNavigation.GetControlTabNavigation(panel.Sheet));
+            var requests = panel.FocusRequests;
+            panel.Open();
+            WpfTestThread.Drain();
+            Assert.Equal(requests + 1, panel.FocusRequests); // after layout, focus goes to the first control inside
+        });
+    }
+
+    [Fact]
+    public void Ctrl_M_opens_and_closes_the_marks_list()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var window = new MainWindow();
+            try
+            {
+                ScrollRailTests.LayOut((FrameworkElement)window.Content, 1200, 800);
+                window.MarksPanel.AnimationsEnabled = () => false;
+                var binding = window.InputBindings.OfType<KeyBinding>()
+                    .Single(b => b.Key == Key.M && b.Modifiers == ModifierKeys.Control);
+                Assert.Same(window.MarksPanel.ToggleCommand, binding.Command);
+                Assert.Single(window.InputBindings.OfType<KeyBinding>(), b => b.Key == Key.M); // no clash
+                binding.Command.Execute(null);
+                Assert.True(window.MarksPanel.IsOpen);
+                binding.Command.Execute(null);
+                Assert.False(window.MarksPanel.IsOpen);
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    [Fact]
+    public async Task Status_text_is_announced_by_its_text_and_the_count_is_named()
+    {
+        await WithWindowAsync((vm, window) =>
+        {
+            // The status is named by its own text (no fixed label overriding it) and announced when it changes.
+            Assert.True(string.IsNullOrEmpty(AutomationProperties.GetName(window.MarkStatusText)));
+            Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(window.MarkStatusText));
+            WpfTestThread.PumpUntil(() =>
+            {
+                _scheduler.Advance(MarksViewModel.RefreshInterval);
+                return !vm.Marks.IsScanning;
+            });
+            vm.MarkIndexForTest!.SetPage(5, [new Core.Marks.Mark(5, Core.Marks.MarkSide.Left, 100, 300, [Guid.NewGuid()])]);
+            _scheduler.Advance(MarksViewModel.RefreshInterval);
+            var announced = window.StatusAnnouncements;
+            vm.Marks.PreviousCommand.Execute(null); // nothing above the first page
+            Assert.Equal(Strings.MarksNoOther, vm.Marks.StatusText);
+            WpfTestThread.Drain();
+            Assert.Equal(Visibility.Visible, window.MarkStatusText.Visibility);
+            Assert.Equal(announced + 1, window.StatusAnnouncements);
+            var statusPeer = System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(window.MarkStatusText);
+            Assert.Equal(Strings.MarksNoOther, statusPeer.GetName());
+
+            // The count in the panel's header has a peer and a name that includes the number.
+            var countPeer = System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(window.MarksPanel.DetailText);
+            Assert.NotNull(countPeer);
+            Assert.Equal(
+                string.Format(System.Globalization.CultureInfo.CurrentCulture, Strings.MarksCountNameFormat, 1),
+                countPeer.GetName());
+        });
+    }
+
+    private static void LoadEditors(DocumentView view)
+    {
+        view.FlushEditorLoads();
+        WpfTestThread.PumpUntil(() => view.ActiveSurfaces.Values.All(s => s.Editor is not null));
+    }
+
+    private static void StartInking(InkSurface surface)
+    {
+        surface.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left) { RoutedEvent = Mouse.MouseDownEvent });
+        Assert.True(surface.IsInking);
+    }
+
+    private static void StopInking(InkSurface surface) =>
+        surface.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left) { RoutedEvent = Mouse.MouseUpEvent });
+
+    /// <summary>Opens a generated PDF in a view model and runs the test on a main window bound to it (never shown).</summary>
+    private async Task WithWindowAsync(Action<MainViewModel, MainWindow> test)
+    {
+        var path = Path.Combine(_dir, "win.pdf");
+        TestPdfFactory.Write(path, Enumerable.Repeat((612.0, 792.0), _pageCount).ToArray());
+        var vm = new MainViewModel(new FakeFileDialogService { NextPath = path }, scheduler: _scheduler)
+        {
+            MarkScanIdleGap = TimeSpan.Zero,
+        };
+        await vm.OpenPdfCommand.ExecuteAsync(null);
+        try
+        {
+            WpfTestThread.Run(() =>
+            {
+                var window = new MainWindow { DataContext = vm };
+                try
+                {
+                    window.DocumentViewer.BitmapRenderer = new FakeBitmapRenderer();
+                    window.MarksPanel.AnimationsEnabled = () => false;
+                    ScrollRailTests.LayOut((FrameworkElement)window.Content, 1200, 800);
+                    ScrollRailTests.Settle(window.DocumentViewer);
+                    test(vm, window);
+                }
+                finally
+                {
+                    window.Close();
+                }
+            });
+        }
+        finally
+        {
+            await vm.Renderer!.DisposeAsync();
+        }
     }
 
     private static EdgePanel NewPanel(bool animations = false)

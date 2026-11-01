@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using DreamBooks.App.Resources;
+using DreamBooks.App.Services;
 using DreamBooks.App.ViewModels;
 using DreamBooks.App.Views;
 using DreamBooks.Core.Documents;
@@ -220,13 +221,13 @@ public sealed class MarksListViewTests : IDisposable
                 Assert.Empty(window.MarksList.List.Items);
 
                 // The scan's thread: the real dispatcher scheduler brings the list up to date on the UI thread.
-                Task.Run(() => index.SetPage(4, [Mark(4, 100, 300)])).Wait(_timeout);
+                Assert.True(Task.Run(() => index.SetPage(4, [Mark(4, 100, 300)])).Wait(_timeout));
                 WpfTestThread.PumpUntil(() => window.MarksList.List.Items.Count == 1);
                 ((FrameworkElement)window.Content).UpdateLayout();
                 Assert.Equal(Visibility.Collapsed, window.MarksList.EmptyText.Visibility);
                 Assert.Single(Rows(window.MarksList));
 
-                Task.Run(() => index.SetPage(4, [])).Wait(_timeout);
+                Assert.True(Task.Run(() => index.SetPage(4, [])).Wait(_timeout));
                 WpfTestThread.PumpUntil(() => window.MarksList.List.Items.Count == 0);
                 vm.Marks.Attach(null);
             }
@@ -275,7 +276,160 @@ public sealed class MarksListViewTests : IDisposable
         Assert.Contains(0, changed);
     }
 
+    [Fact]
+    public void A_note_discarded_by_reopening_without_saving_never_shows_in_the_row()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var pages = new FakePageSource(Enumerable.Repeat((612.0, 792.0), 6).ToArray());
+            pages.Strokes[0] = [Line(Guid.NewGuid(), x: 30, top: 100, bottom: 260)]; // the saved margin line
+            var dialogs = new FakeFileDialogService { SaveChangesAnswer = SaveChangesAnswer.DontSave };
+            var vm = new MainViewModel(dialogs, scheduler: _scheduler)
+            {
+                MarkSourceFactory = _ => new FakeMarkPageSource(pages),
+                MarkScanIdleGap = TimeSpan.Zero,
+            };
+            vm.OpenDocument = (path, _) => Task.FromResult(new OpenedDocument(pages, pages, path, null));
+            var path = Path.Combine(_dir, "a.pdf");
+            File.WriteAllBytes(path, [1, 2, 3]);
+            Open(vm, dialogs, path);
+
+            var list = new MarksListView { DataContext = vm.Marks };
+            ScrollRailTests.LayOut(list, 320, 800);
+            var thumb = Thumbnail(list);
+            WpfTestThread.PumpUntil(() => thumb.StrokeCount == 1);
+
+            // A margin note next to the mark: the row draws it (cached with it).
+            var note = Enumerable.Range(0, 10).Select(i => new InkPoint(60 + (i * 6), 150, 0.5f, null, null, null, i)).ToArray();
+            Assert.True(vm.Editor!.CommitStroke(note, InkTool.Pen, InkColor.FromRgb(0, 0, 0), 1.5));
+            _scheduler.Advance(MarksViewModel.RefreshInterval);
+            WpfTestThread.PumpUntil(() => thumb.StrokeCount == 2);
+
+            // Reopened without saving: the same mark (same stroke ids), but the note is gone.
+            Open(vm, dialogs, path);
+            Assert.Equal(1, dialogs.SaveChangesAsks);
+            list.UpdateLayout();
+            thumb = Thumbnail(list);
+            WpfTestThread.PumpUntil(() => thumb.StrokeCount == 1);
+            WpfTestThread.Drain();
+            Assert.Equal(1, thumb.StrokeCount);
+        });
+    }
+
+    [Fact]
+    public void A_row_loaded_again_with_the_same_mark_shows_the_current_ink()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var mark = Mark(0, 100, 260);
+            var strokes = new List<InkStroke> { Line(mark.StrokeIds[0], x: 30, top: 100, bottom: 260) };
+            var cache = new MarkThumbnailCache((m, _) => Task.FromResult<MarkInk?>(
+                new MarkInk(m, 612, strokes.ToArray(), PressureCurve.Firm, SmoothingLevel.Strong)));
+            var thumb = new MarkInkThumbnail { Width = 120, Height = 60 };
+            MarkInkThumbnail.SetCache(thumb, cache);
+            thumb.Mark = mark;
+            WpfTestThread.PumpUntil(() => thumb.StrokeCount == 1);
+
+            // Unloaded (scrolled out of a recycling list): it no longer listens; meanwhile a note is added.
+            thumb.RaiseEvent(new RoutedEventArgs(FrameworkElement.UnloadedEvent));
+            strokes.Add(Line(Guid.NewGuid(), x: 60, top: 150, bottom: 160));
+            cache.Invalidate(0);
+            Assert.Equal(1, thumb.StrokeCount);
+
+            // Loaded again with the same mark: it asks again and shows the note.
+            thumb.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent));
+            WpfTestThread.PumpUntil(() => thumb.StrokeCount == 2);
+        });
+    }
+
+    [Fact]
+    public void Cache_keeps_the_most_recently_used_thumbnails_up_to_its_capacity()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var cache = new MarkThumbnailCache(
+                (m, _) => Task.FromResult<MarkInk?>(new MarkInk(m, 612, [], PressureCurve.Firm, SmoothingLevel.Strong)),
+                capacity: 2);
+            var a = Mark(0, 100, 260);
+            var b = Mark(1, 100, 260);
+            var c = Mark(2, 100, 260);
+            Get(cache, a);
+            Get(cache, b);
+            Assert.True(cache.TryGet(a, out _)); // a is now the most recent
+            Get(cache, c); // evicts b, the least recently used
+            Assert.Equal(2, cache.Count);
+            Assert.True(cache.TryGet(a, out _));
+            Assert.True(cache.TryGet(c, out _));
+            Assert.False(cache.TryGet(b, out _));
+            Assert.Equal(3, cache.LoadCount);
+
+            // Clear (another document): everything goes and shown rows are told to load again.
+            var cleared = 0;
+            cache.Cleared += (_, _) => cleared++;
+            cache.Clear();
+            Assert.Equal(0, cache.Count);
+            Assert.Equal(1, cleared);
+        });
+    }
+
+    [Fact]
+    public void Invalidating_a_page_drops_its_thumbnails_and_the_shown_rows_load_again()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var version = 1;
+            var cache = new MarkThumbnailCache((m, _) => Task.FromResult<MarkInk?>(new MarkInk(
+                m,
+                612,
+                Enumerable.Range(0, version).Select(i => Line(Guid.NewGuid(), x: 30 + i, top: 100, bottom: 260)).ToArray(),
+                PressureCurve.Firm,
+                SmoothingLevel.Strong)));
+            var onPage = Mark(3, 100, 260);
+            var other = Mark(4, 100, 260);
+            Get(cache, other);
+            var thumb = new MarkInkThumbnail { Width = 120, Height = 60 };
+            MarkInkThumbnail.SetCache(thumb, cache);
+            thumb.Mark = onPage;
+            WpfTestThread.PumpUntil(() => thumb.StrokeCount == 1);
+            var invalidated = new List<int>();
+            cache.PageInvalidated += (_, p) => invalidated.Add(p);
+
+            version = 2;
+            cache.Invalidate(3);
+            Assert.Equal([3], invalidated);
+            Assert.True(cache.TryGet(other, out _)); // another page keeps its thumbnail
+            WpfTestThread.PumpUntil(() => thumb.StrokeCount == 2); // the shown row read it again
+        });
+    }
+
     // ---- Helpers ------------------------------------------------------------------------------------------
+
+    private static void Get(MarkThumbnailCache cache, Mark mark)
+    {
+        var task = cache.GetAsync(mark, CancellationToken.None);
+        WpfTestThread.PumpUntil(() => task.IsCompleted);
+        Assert.NotNull(task.Result);
+    }
+
+    private static void Open(MainViewModel vm, FakeFileDialogService dialogs, string path)
+    {
+        dialogs.NextPath = path;
+        var open = vm.OpenPdfCommand.ExecuteAsync(null);
+        WpfTestThread.PumpUntil(() => open.IsCompleted);
+        Assert.True(open.IsCompletedSuccessfully);
+        Assert.Null(vm.ErrorMessage);
+    }
+
+    private MarkInkThumbnail Thumbnail(MarksListView list)
+    {
+        WpfTestThread.PumpUntil(() =>
+        {
+            _scheduler.Advance(MarksViewModel.RefreshInterval);
+            list.UpdateLayout();
+            return Rows(list).Count == 1;
+        });
+        return FindDescendant<MarkInkThumbnail>(Rows(list)[0])!;
+    }
 
     private (DocumentViewportViewModel Viewport, MarksViewModel Marks, MarkIndex Index) Standalone(int pageCount = 10)
     {

@@ -91,6 +91,7 @@ public partial class MarksListView : UserControl
         if (_marks is { } old)
         {
             old.InkChanged -= OnInkChanged;
+            old.DocumentChanged -= OnDocumentChanged;
         }
 
         _marks = marks;
@@ -100,9 +101,13 @@ public partial class MarksListView : UserControl
         }
 
         marks.InkChanged += OnInkChanged;
+        marks.DocumentChanged += OnDocumentChanged;
         var source = marks.InkSource ?? ((_, _) => Task.FromResult<MarkInk?>(null));
         Thumbnails = new MarkThumbnailCache(source);
     }
+
+    // UI thread: equal marks of the new document may have other ink; reads in flight are dropped.
+    private void OnDocumentChanged(object? sender, EventArgs e) => Thumbnails?.Clear();
 
     // Any thread: the session raises it where the edit or the load happened.
     private void OnInkChanged(object? sender, PageStrokesChangedEventArgs e) =>
@@ -130,6 +135,9 @@ public partial class MarksListView : UserControl
             e.Handled = true;
         }
     }
+
+    /// <summary>A finger fling past the end of the list: no window "bounce" (as for the document).</summary>
+    private void OnListBoundaryFeedback(object? sender, ManipulationBoundaryFeedbackEventArgs e) => e.Handled = true;
 
     private void OnListKeyDown(object sender, KeyEventArgs e)
     {

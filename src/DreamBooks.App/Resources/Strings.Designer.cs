@@ -208,8 +208,8 @@ internal static class Strings
     /// <summary>Shown in the marks list while the background scan is still running.</summary>
     public static string MarksScanning => Get(nameof(MarksScanning));
 
-    /// <summary>Automation name of the count in the marks panel's header.</summary>
-    public static string MarksCountLabel => Get(nameof(MarksCountLabel));
+    /// <summary>Automation name of the count in the marks panel's header: {0} the number of marks.</summary>
+    public static string MarksCountNameFormat => Get(nameof(MarksCountNameFormat));
 
     /// <summary>A row's automation name: {0} page number, {1} side, {2} text line of the mark's top.</summary>
     public static string MarkRowNameFormat => Get(nameof(MarkRowNameFormat));
@@ -217,9 +217,6 @@ internal static class Strings
     public static string MarkSideLeft => Get(nameof(MarkSideLeft));
 
     public static string MarkSideRight => Get(nameof(MarkSideRight));
-
-    /// <summary>Automation name of the "no other mark" message next to previous/next.</summary>
-    public static string MarkStatusLabel => Get(nameof(MarkStatusLabel));
 
     private static string Get(string name) =>
         Manager.GetString(name, System.Globalization.CultureInfo.CurrentUICulture) ?? name;

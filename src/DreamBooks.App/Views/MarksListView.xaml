@@ -42,7 +42,8 @@
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.PanningMode="VerticalOnly"
                  ScrollViewer.CanContentScroll="True"
                  AutomationProperties.Name="{x:Static res:Strings.MarksListLabel}"
-                 PreviewMouseLeftButtonDown="OnListPress" PreviewKeyDown="OnListKeyDown">
+                 PreviewMouseLeftButtonDown="OnListPress" PreviewKeyDown="OnListKeyDown"
+                 ManipulationBoundaryFeedback="OnListBoundaryFeedback">
             <ListBox.ItemsPanel>
                 <ItemsPanelTemplate>
                     <VirtualizingStackPanel />

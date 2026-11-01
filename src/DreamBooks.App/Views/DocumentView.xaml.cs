@@ -821,13 +821,21 @@ public partial class DocumentView : UserControl
 
     /// <summary>
     /// A press at <paramref name="position"/> (this view's coordinates) that may start a swipe from the left edge: only
-    /// a finger, only within <c>EdgeSwipeZoneWidth</c> of the left edge. The press itself is never taken (the finger
-    /// still pans the document, as near the rail). True when a swipe candidate started.
+    /// a finger-sized contact (never a palm, <see cref="ScrollRail.IsPalmContact"/>), only within
+    /// <c>EdgeSwipeZoneWidth</c> of the left edge, never while a page is inking. A second finger while a candidate is
+    /// live (a pinch) drops it. The press itself is never taken (the finger still pans the document, as near the rail).
+    /// True when a candidate started.
     /// </summary>
-    internal bool BeginEdgeSwipe(Point position, PointerKind kind)
+    internal bool BeginEdgeSwipe(Point position, PointerKind kind, Size contact = default)
     {
-        _edgeSwipeStart = null;
-        if (kind != PointerKind.Finger || position.X < 0 || position.X > EdgeZoneWidth())
+        if (_edgeSwipeStart is not null)
+        {
+            _edgeSwipeStart = null; // a second finger: a pinch, not a swipe
+            return false;
+        }
+
+        if (kind != PointerKind.Finger || ScrollRail.IsPalmContact(contact) || AnyInking()
+            || position.X < 0 || position.X > EdgeZoneWidth())
         {
             return false;
         }
@@ -844,6 +852,12 @@ public partial class DocumentView : UserControl
     {
         if (_edgeSwipeStart is not { } start)
         {
+            return;
+        }
+
+        if (AnyInking())
+        {
+            _edgeSwipeStart = null; // the pen came down: never open a panel over a stroke being written
             return;
         }
 
@@ -997,9 +1011,14 @@ public partial class DocumentView : UserControl
         }
 
         var touch = e.GetTouchPoint(Rail);
-        if (_edgeTouch is not { IsActive: true } && BeginEdgeSwipe(e.GetTouchPoint(this).Position, kind))
+        if (_edgeTouch is not { IsActive: true })
         {
-            _edgeTouch = e.TouchDevice; // not taken: the same finger may still pan (a lift elsewhere is seen as inactive)
+            _edgeSwipeStart = null; // a candidate whose finger lifted elsewhere
+        }
+
+        if (BeginEdgeSwipe(e.GetTouchPoint(this).Position, kind, touch.Size))
+        {
+            _edgeTouch = e.TouchDevice; // not taken: the same finger may still pan
         }
 
         if (RoutePointerDown(touch.Position, kind, touch.Size))
