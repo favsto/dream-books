@@ -5,10 +5,10 @@
              xmlns:local="clr-namespace:DreamBooks.App.Views"
              Focusable="False" IsTabStop="False" Opacity="0"
              AutomationProperties.Name="{x:Static res:Strings.RailLabel}">
-    <!-- The scroll rail (UI-07, design B) over the document's right edge. Nothing of it hit-tests (Visuals), so the
-         pen always reaches the page under it and inks (FR-30); fingers and the mouse reach the strip and the indicator
-         through DocumentView, which routes them by position (ZoneAt). Only the page field, while open, takes input
-         and keyboard focus. -->
+    <!-- The scroll rail (UI-07, design B) over the document's right edge. Its visuals never hit-test, so the pen
+         reaches the page under them and inks (FR-30), except on the knob: while the rail is shown the pen grabs it
+         (KnobGrip). Fingers and the mouse reach the knob (a wider zone), the strip and the indicator through
+         DocumentView, which routes them by position (ZoneAt). Only the page field, while open, takes keyboard focus. -->
     <Grid>
         <Grid x:Name="Visuals" IsHitTestVisible="False">
             <!-- One large preview beside the knob while scrubbing: the page number and a light render (white until
@@ -61,6 +61,12 @@
                     Focusable="False" Click="OnIndicatorClick"
                     AutomationProperties.Name="{x:Static res:Strings.PageIndicatorLabel}" />
         </Grid>
+
+        <!-- The only part of the rail the pen can take: the knob plus a small slop, while the rail is shown (the grip
+             follows the knob; the canvas itself has no background and never hit-tests). -->
+        <Canvas x:Name="GripLayer">
+            <local:RailKnobGrip x:Name="KnobGrip" IsHitTestVisible="False" />
+        </Canvas>
 
         <!-- The page field in the indicator's place; Enter goes, Esc cancels, any press outside it closes it. -->
         <TextBox x:Name="GoToPageBox" HorizontalAlignment="Right" VerticalAlignment="Bottom"

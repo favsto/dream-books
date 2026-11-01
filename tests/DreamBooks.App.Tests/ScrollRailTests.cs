@@ -597,6 +597,138 @@ public sealed class ScrollRailTests : IDisposable
     }
 
     [Fact]
+    public async Task Pen_grabs_only_the_knob_and_inks_everywhere_else_on_the_rail()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            var rail = view.Rail;
+            var surface = view.SurfaceFor(0)!;
+            var pushes = 0;
+            vm.Viewport.History.Changed += (_, _) => pushes++;
+
+            // Hidden: the knob's place is the page's, the pen inks there as before.
+            rail.HideNow();
+            Settle(view);
+            var knob = KnobCentre(rail);
+            Assert.Equal(RailZone.None, rail.ZoneAt(knob, PointerKind.Pen));
+            Assert.True(IsWithin(HitAt(view, knob), surface));
+            Assert.False(view.RoutePointerDown(knob, PointerKind.Pen));
+            Assert.False(rail.IsPressed);
+
+            // Shown: the knob and about 8 DIP around it take the pen, ahead of the page (UI hit test, and a stylus
+            // plug-in on top so the real-time stylus targets the grip and no wet ink starts on the page).
+            rail.NotifyActivity();
+            Settle(view);
+            knob = KnobCentre(rail);
+            Assert.Equal(RailZone.Knob, rail.ZoneAt(knob, PointerKind.Pen));
+            Assert.True(IsWithin(HitAt(view, knob), rail.KnobGrip));
+            Assert.True(rail.KnobGrip.HasStylusPlugIn);
+            var slop = new Point(knob.X + (rail.Knob.ActualWidth / 2) + 6, knob.Y + (rail.KnobHeight / 2) + 6);
+            Assert.Equal(RailZone.Knob, rail.ZoneAt(slop, PointerKind.Pen));
+            Assert.True(IsWithin(HitAt(view, slop), rail.KnobGrip));
+
+            // Beside the knob on the strip, and to its left over the page (the finger's wider zone), the pen inks.
+            var below = new Point(knob.X, knob.Y + (rail.KnobHeight / 2) + 30);
+            var left = new Point(knob.X - 30, knob.Y);
+            foreach (var point in new[] { below, left })
+            {
+                Assert.Equal(RailZone.None, rail.ZoneAt(point, PointerKind.Pen));
+                Assert.True(IsWithin(HitAt(view, point), surface), point.ToString());
+                Assert.False(view.RoutePointerDown(point, PointerKind.Pen));
+                Assert.False(rail.IsPressed);
+            }
+
+            // The pen grabs the knob and scrubs like a finger: preview bubble, one Back entry on the first move.
+            Assert.True(view.RoutePointerDown(knob, PointerKind.Pen));
+            Assert.True(rail.IsDragging);
+            Assert.Equal(Visibility.Visible, rail.PreviewBubble.Visibility);
+            Assert.Equal(0, pushes);
+            var y = rail.TrackYAt(knob);
+            rail.PointerMove(y + (0.5 * rail.TrackLength));
+            Settle(view);
+            Near(0.5 * Scrollable(view), view.Viewport.VerticalOffset);
+            rail.PointerMove(y + (0.6 * rail.TrackLength));
+            Settle(view);
+            view.RoutePointerUp();
+            Assert.False(rail.IsDragging);
+            Assert.Equal(1, pushes);
+            Assert.Equal(Visibility.Collapsed, rail.PreviewBubble.Visibility);
+            Near(0.6 * Scrollable(view), view.Viewport.VerticalOffset);
+
+            // Faded out: the grip no longer takes anything.
+            rail.HideNow();
+            Assert.False(rail.KnobGrip.IsHitTestVisible);
+        });
+    }
+
+    [Fact]
+    public async Task Finger_and_mouse_grab_the_knob_from_a_wider_zone_without_panning()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            var rail = view.Rail;
+            var jump = vm.Viewport.GoToPageCommand.ExecuteAsync(15); // the knob in the middle of the track
+            WpfTestThread.PumpUntil(() => jump.IsCompleted);
+            Settle(view);
+            vm.Viewport.History.Clear();
+            rail.NotifyActivity();
+            Settle(view);
+
+            var knob = KnobCentre(rail);
+            var zoneWidth = (double)Application.Current.FindResource("RailKnobFingerZoneWidth");
+            var padding = (double)Application.Current.FindResource("RailKnobFingerZonePadding");
+            Assert.True(zoneWidth >= 56 && padding >= 20);
+
+            // Left of the strip, over the page, and above the knob: still the knob, for a finger and the mouse.
+            var beside = new Point(rail.ActualWidth - zoneWidth + 4, knob.Y - (rail.KnobHeight / 2) - padding + 4);
+            foreach (var kind in new[] { PointerKind.Finger, PointerKind.Mouse })
+            {
+                Assert.Equal(RailZone.Knob, rail.ZoneAt(beside, kind));
+                var before = view.Viewport.VerticalOffset;
+                Assert.True(view.RoutePointerDown(beside, kind)); // taken: never a page pan start
+                Assert.True(rail.IsDragging, kind.ToString()); // grabbed, not a track tap
+                Settle(view);
+                Near(before, view.Viewport.VerticalOffset); // grabbing does not jump
+                rail.PointerMove(rail.TrackYAt(beside) + 100);
+                Settle(view);
+                Assert.True(view.Viewport.VerticalOffset > before + 50);
+                view.RoutePointerUp();
+                Assert.False(rail.IsPressed);
+                rail.NotifyActivity();
+                Settle(view);
+                knob = KnobCentre(rail);
+                beside = new Point(rail.ActualWidth - zoneWidth + 4, knob.Y - (rail.KnobHeight / 2) - padding + 4);
+            }
+
+            // Outside the zone: left of it is the page's; below it on the strip is a track tap (jumps on lift).
+            var outside = new Point(rail.ActualWidth - zoneWidth - 4, knob.Y);
+            Assert.Equal(RailZone.None, rail.ZoneAt(outside, PointerKind.Finger));
+            Assert.False(view.RoutePointerDown(outside, PointerKind.Finger));
+            var track = new Point(rail.ActualWidth - 20, knob.Y + (rail.KnobHeight / 2) + padding + 40);
+            Assert.Equal(RailZone.Strip, rail.ZoneAt(track, PointerKind.Finger));
+            Assert.True(view.RoutePointerDown(track, PointerKind.Finger));
+            Assert.True(rail.IsPressed);
+            Assert.False(rail.IsDragging);
+            view.RoutePointerUp();
+
+            // A palm on the zone is taken and moves nothing; a hidden rail has no zone.
+            rail.NotifyActivity();
+            Settle(view);
+            knob = KnobCentre(rail);
+            var palm = new Point(rail.ActualWidth - 30, knob.Y);
+            var offset = view.Viewport.VerticalOffset;
+            Assert.True(view.RoutePointerDown(palm, PointerKind.Finger, new Size(80, 80)));
+            Assert.False(rail.IsPressed);
+            Near(offset, view.Viewport.VerticalOffset);
+            rail.HideNow();
+            Assert.Equal(RailZone.None, rail.ZoneAt(palm, PointerKind.Finger));
+        });
+    }
+
+    private static Point KnobCentre(ScrollRail rail) =>
+        rail.Knob.TranslatePoint(new Point(rail.Knob.ActualWidth / 2, rail.Knob.ActualHeight / 2), rail);
+
+    [Fact]
     public async Task Rail_does_not_block_pen_input_outside_its_strip()
     {
         await WithViewAsync((vm, view) =>

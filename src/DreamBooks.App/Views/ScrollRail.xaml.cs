@@ -197,14 +197,26 @@ public partial class ScrollRail : UserControl
     }
 
     /// <summary>
-    /// The part of the rail under a point in rail coordinates: the strip or the indicator while the rail is shown,
-    /// otherwise none (the document's). Used only for fingers and the mouse.
+    /// The part of the rail under a point in rail coordinates while the rail is shown, otherwise none (the
+    /// document's). For the pen only the knob counts (its bounds plus <c>RailKnobPenSlop</c>): anywhere else on the
+    /// rail it writes. For a finger or the mouse the knob has a wider, taller zone reaching into the page, then the
+    /// strip and the indicator.
     /// </summary>
-    internal RailZone ZoneAt(Point point)
+    internal RailZone ZoneAt(Point point, PointerKind kind = PointerKind.Finger)
     {
-        if (!IsShown || point.Y < 0 || point.Y > ActualHeight)
+        if (!IsShown || _model?.Layout is null || point.Y < 0 || point.Y > ActualHeight)
         {
             return RailZone.None;
+        }
+
+        if (kind == PointerKind.Pen)
+        {
+            return PenKnobZone().Contains(point) ? RailZone.Knob : RailZone.None;
+        }
+
+        if (FingerKnobZone().Contains(point))
+        {
+            return RailZone.Knob;
         }
 
         if (point.X >= ActualWidth - Strip.Width && point.X <= ActualWidth)
@@ -277,7 +289,11 @@ public partial class ScrollRail : UserControl
     /// without moving (<see cref="PointerUp"/>), so a hand landing on the rail does not throw the document away. Nothing
     /// (false) while a page is inking or without a document.
     /// </summary>
-    internal bool PointerDown(double trackY)
+    /// <remarks>
+    /// With <paramref name="onKnob"/> (the press is in the knob's zone, <see cref="ZoneAt"/>) it grabs the knob wherever
+    /// in the zone it landed, without a jump.
+    /// </remarks>
+    internal bool PointerDown(double trackY, bool onKnob = false)
     {
         if (IsPressed || _model is not { Layout: not null } model || CanScroll?.Invoke() == false)
         {
@@ -286,7 +302,7 @@ public partial class ScrollRail : UserControl
 
         NotifyActivity();
         var knobTop = KnobOffset.Y;
-        if (trackY < knobTop || trackY > knobTop + KnobHeight)
+        if (!onKnob && (trackY < knobTop || trackY > knobTop + KnobHeight))
         {
             _tapPending = true;
             _tapMoved = false;
@@ -445,6 +461,58 @@ public partial class ScrollRail : UserControl
             ? element.TransformToAncestor(this).TransformBounds(new Rect(element.RenderSize))
             : Rect.Empty;
 
+    private double Token(string key) => TryFindResource(key) is double value ? value : 0;
+
+    /// <summary>Where the pen can grab the knob: its bounds plus <c>RailKnobPenSlop</c> all round (rail coordinates).</summary>
+    private Rect PenKnobZone()
+    {
+        var knob = BoundsOf(Knob);
+        if (knob.IsEmpty)
+        {
+            return Rect.Empty;
+        }
+
+        var slop = Token("RailKnobPenSlop");
+        knob.Inflate(slop, slop);
+        return knob;
+    }
+
+    /// <summary>
+    /// Where a finger or the mouse grabs the knob: from the right edge at least <c>RailKnobFingerZoneWidth</c> to the
+    /// left (into the page) and <c>RailKnobFingerZonePadding</c> above and below it, at least
+    /// <c>RailKnobFingerZoneMinHeight</c> tall (rail coordinates).
+    /// </summary>
+    private Rect FingerKnobZone()
+    {
+        var knob = BoundsOf(Knob);
+        if (knob.IsEmpty)
+        {
+            return Rect.Empty;
+        }
+
+        var width = Math.Max(Token("RailKnobFingerZoneWidth"), Strip.Width);
+        var height = Math.Max(knob.Height + (2 * Token("RailKnobFingerZonePadding")), Token("RailKnobFingerZoneMinHeight"));
+        var centreY = knob.Top + (knob.Height / 2);
+        return new Rect(ActualWidth - width, centreY - (height / 2), width, height);
+    }
+
+    /// <summary>The pen's grip follows the knob.</summary>
+    private void UpdateGrip()
+    {
+        var zone = PenKnobZone();
+        if (zone.IsEmpty)
+        {
+            KnobGrip.Width = 0;
+            KnobGrip.Height = 0;
+            return;
+        }
+
+        Canvas.SetLeft(KnobGrip, zone.Left);
+        Canvas.SetTop(KnobGrip, zone.Top);
+        KnobGrip.Width = zone.Width;
+        KnobGrip.Height = zone.Height;
+    }
+
     private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e) =>
         Dispatcher.BeginInvoke(DispatcherPriority.Background, ApplyTransparency); // raised on another thread
 
@@ -467,6 +535,8 @@ public partial class ScrollRail : UserControl
     {
         var phase = _state.Phase;
         Opacity = _state.Opacity;
+        KnobGrip.IsHitTestVisible = phase != RailPhase.Hidden && _model?.Layout is not null; // the pen inks when hidden
+        UpdateGrip();
         if (phase == RailPhase.Hidden)
         {
             HideBubble();
@@ -591,6 +661,7 @@ public partial class ScrollRail : UserControl
         }
 
         KnobOffset.Y = fraction * TrackLength;
+        UpdateGrip();
     }
 
     /// <summary>The knob's top goes to <paramref name="trackY"/> minus the grab point; the document follows.</summary>
@@ -605,6 +676,7 @@ public partial class ScrollRail : UserControl
         var top = Math.Clamp(trackY - _grab, 0, length);
         var fraction = length > 0 ? top / length : 0;
         KnobOffset.Y = top;
+        UpdateGrip();
         var (x, _) = layout.ToOffsets(model.Position, model.ViewportWidthDip, model.ViewportHeightDip);
         model.SetScroll(x, fraction * Scrollable(model, layout));
         UpdatePreview(layout, layout.PageAt(fraction * layout.TotalHeightPt));

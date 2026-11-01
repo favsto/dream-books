@@ -87,6 +87,7 @@ public partial class DocumentView : UserControl
     private (Point Position, int Time)? _tapStart;
     private (Point Position, int Time)? _lastTap;
     private int? _railTouchId;
+    private StylusDevice? _railStylus;
     private TouchDevice? _edgeTouch;
     private Point? _edgeSwipeStart;
     private readonly FlingGlide _glide = new();
@@ -974,12 +975,13 @@ public partial class DocumentView : UserControl
 
     /// <summary>
     /// A press at <paramref name="position"/> (rail coordinates, the same as this view's). Any press outside the open
-    /// page field closes it. The pen is never taken (false: it inks on the page under it, FR-30). A finger or the
-    /// mouse in the shown rail's strip presses it (the knob drags; elsewhere a tap jumps on lift), on its indicator
+    /// page field closes it. The pen is taken only on the shown rail's knob (true: it grabs it, unless
+    /// <paramref name="mayGrab"/> is false, e.g. the back end); anywhere else it inks on the page under it (false,
+    /// FR-30). A finger or the mouse on the knob's wider zone grabs it, in the strip presses it (a tap jumps on lift), on its indicator
     /// opens the page field (true: the press is the rail's); a palm-sized <paramref name="contact"/> there is taken and
     /// does nothing; a finger near the edge of a hidden rail shows it and still pans (false).
     /// </summary>
-    internal bool RoutePointerDown(Point position, PointerKind kind, Size contact = default)
+    internal bool RoutePointerDown(Point position, PointerKind kind, Size contact = default, bool mayGrab = true)
     {
         StopGlide(); // any press, anywhere (the rail included), stops a glide
         if (Rail.IsEditing && !Rail.IsOnGoToPageBox(position))
@@ -989,10 +991,13 @@ public partial class DocumentView : UserControl
 
         if (kind == PointerKind.Pen)
         {
-            return false;
+            // The pen only grabs the knob of the shown rail (UI-07); anywhere else, the strip and the ticks included,
+            // it inks (FR-30). Never while a page is inking.
+            return mayGrab && Rail.ZoneAt(position, PointerKind.Pen) == RailZone.Knob && !AnyInking()
+                && Rail.PointerDown(Rail.TrackYAt(position), onKnob: true);
         }
 
-        var zone = Rail.ZoneAt(position);
+        var zone = Rail.ZoneAt(position, kind);
         if (zone != RailZone.None && kind == PointerKind.Finger && ScrollRail.IsPalmContact(contact))
         {
             return true; // a hand coming down to write: neither the rail nor the document moves
@@ -1000,6 +1005,9 @@ public partial class DocumentView : UserControl
 
         switch (zone)
         {
+            case RailZone.Knob:
+                // Grabbed wherever in its zone (also beside the strip, over the page): taken, so no pan starts.
+                return Rail.PointerDown(Rail.TrackYAt(position), onKnob: true) || AnyInking();
             case RailZone.Strip:
                 return Rail.PointerDown(Rail.TrackYAt(position)) || AnyInking(); // while inking: taken, nothing moves
             case RailZone.Indicator:
@@ -1091,6 +1099,7 @@ public partial class DocumentView : UserControl
     internal void RoutePointerUp()
     {
         _railTouchId = null;
+        _railStylus = null;
         Rail.PointerUp();
     }
 
@@ -1284,12 +1293,51 @@ public partial class DocumentView : UserControl
         }
     }
 
-    /// <summary>The pen's press: never the rail's (it inks), but it closes an open page field.</summary>
+    /// <summary>
+    /// The pen's press: on the shown rail's knob it grabs it (the stylus is captured by the knob's grip, so the drag
+    /// goes on wherever the pen moves and nothing inks); anywhere else it inks. It closes an open page field.
+    /// </summary>
     private void OnHostStylusDown(object sender, StylusDownEventArgs e)
     {
-        if (e.StylusDevice.TabletDevice?.Type == TabletDeviceType.Stylus)
+        if (e.StylusDevice.TabletDevice?.Type != TabletDeviceType.Stylus)
         {
-            RoutePointerDown(e.GetPosition(Rail), PointerKind.Pen);
+            return; // fingers go through the touch events
+        }
+
+        // The back end never grabs (it always erases), but it still closes the page field and stops a glide.
+        if (RoutePointerDown(e.GetPosition(Rail), PointerKind.Pen, mayGrab: !e.StylusDevice.Inverted))
+        {
+            e.Handled = true; // the page under the grip never sees this press
+            _railStylus = e.StylusDevice;
+            Rail.KnobGrip.CaptureStylus();
+        }
+    }
+
+    private void OnHostStylusMove(object sender, StylusEventArgs e)
+    {
+        if (ReferenceEquals(e.StylusDevice, _railStylus))
+        {
+            e.Handled = true;
+            Rail.PointerMove(Rail.TrackYAt(e.GetPosition(Rail)));
+        }
+    }
+
+    private void OnHostStylusUp(object sender, StylusEventArgs e)
+    {
+        if (ReferenceEquals(e.StylusDevice, _railStylus))
+        {
+            e.Handled = true;
+            RoutePointerUp(); // first: the capture loss below then finds nothing pressed
+            Rail.KnobGrip.ReleaseStylusCapture();
+        }
+    }
+
+    private void OnHostLostStylusCapture(object sender, StylusEventArgs e)
+    {
+        if (_railStylus is not null && ReferenceEquals(e.StylusDevice, _railStylus))
+        {
+            _railStylus = null;
+            Rail.PointerCancel(); // capture taken away: the drag ends where it is
         }
     }
 

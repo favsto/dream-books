@@ -30,6 +30,13 @@
     <sys:Double x:Key="RailBarWidth">8</sys:Double>
     <sys:Double x:Key="RailKnobWidth">14</sys:Double>
     <sys:Double x:Key="RailKnobHeight">34</sys:Double>
+    <!-- Grabbing the knob: the pen within RailKnobPenSlop of it (elsewhere on the rail the pen writes); a finger or the
+         mouse anywhere in a zone at least RailKnobFingerZoneWidth wide from the right edge (reaching into the page) and
+         RailKnobFingerZonePadding above and below it (at least 56 tall). Invisible; only while the rail is shown. -->
+    <sys:Double x:Key="RailKnobPenSlop">8</sys:Double>
+    <sys:Double x:Key="RailKnobFingerZoneWidth">56</sys:Double>
+    <sys:Double x:Key="RailKnobFingerZonePadding">20</sys:Double>
+    <sys:Double x:Key="RailKnobFingerZoneMinHeight">56</sys:Double>
     <CornerRadius x:Key="RailBarCornerRadius">4</CornerRadius>
     <CornerRadius x:Key="RailKnobCornerRadius">7</CornerRadius>
     <Thickness x:Key="RailTrackMargin">0,12,0,12</Thickness>
