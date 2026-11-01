@@ -124,4 +124,21 @@
   <data name="MarkRowNameFormat" xml:space="preserve"><value>Segno a pagina {0}, margine {1}</value></data>
   <data name="MarkSideLeft" xml:space="preserve"><value>sinistro</value></data>
   <data name="MarkSideRight" xml:space="preserve"><value>destro</value></data>
+  <data name="Search" xml:space="preserve"><value>Cerca</value></data>
+  <data name="SearchField" xml:space="preserve"><value>Cerca nel documento</value></data>
+  <data name="SearchHint" xml:space="preserve"><value>Scrivi il testo da cercare (Ctrl+F). Invio: risultato successivo, Maiusc+Invio: precedente, Esc: annulla</value></data>
+  <data name="PreviousResult" xml:space="preserve"><value>Risultato precedente</value></data>
+  <data name="NextResult" xml:space="preserve"><value>Risultato successivo</value></data>
+  <data name="ClearSearch" xml:space="preserve"><value>Annulla la ricerca</value></data>
+  <data name="SearchCountLabel" xml:space="preserve"><value>Risultati della ricerca</value></data>
+  <data name="SearchInProgress" xml:space="preserve"><value>Ricerca in corso…</value></data>
+  <data name="SearchNoResults" xml:space="preserve"><value>Nessun risultato</value></data>
+  <data name="SearchOneResult" xml:space="preserve"><value>1 risultato</value></data>
+  <data name="SearchResultsFormat" xml:space="preserve"><value>{0} risultati</value></data>
+  <data name="SearchPositionFormat" xml:space="preserve"><value>{0} di {1}</value></data>
+  <data name="SearchTruncatedFormat" xml:space="preserve"><value>{0}+</value></data>
+  <data name="SearchNoTextLayer" xml:space="preserve"><value>Nessun testo ricercabile in questo PDF</value></data>
+  <data name="SearchFailed" xml:space="preserve"><value>Non è stato possibile cercare nel documento</value></data>
+  <data name="SearchWrappedToStart" xml:space="preserve"><value>Ripartito dall'inizio</value></data>
+  <data name="SearchWrappedToEnd" xml:space="preserve"><value>Ripartito dalla fine</value></data>
 </root>

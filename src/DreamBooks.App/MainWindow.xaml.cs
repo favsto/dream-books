@@ -42,10 +42,19 @@ public partial class MainWindow : Window
         // "Nessun altro segno" is a live region: Narrator reads it when it appears (NFR-31).
         _statusText.AddValueChanged(MarkStatusText, OnMarkStatusTextChanged);
         Closed += (_, _) => _statusText.RemoveValueChanged(MarkStatusText, OnMarkStatusTextChanged);
+
+        // Esc or the clear button emptied the search: the keyboard goes back to the document (FR-13).
+        _viewModel.Search.FocusDocumentRequested += (_, _) => FocusDocument();
     }
 
     /// <summary>The marks list hosted by <see cref="MarksPanel"/> (not named in XAML: the panel is a user control).</summary>
     internal MarksListView MarksList => (MarksListView)MarksPanel.Body!;
+
+    /// <summary>How many times Ctrl+F asked for the search field's focus (tests: an unshown window cannot take it).</summary>
+    internal int SearchFocusRequests { get; private set; }
+
+    /// <summary>How many times the keyboard was given back to the document after the search was cleared (tests).</summary>
+    internal int DocumentFocusRequests { get; private set; }
 
     /// <summary>How many times the marks status was announced as a live region (tests).</summary>
     internal int StatusAnnouncements { get; private set; }
@@ -174,9 +183,17 @@ public partial class MainWindow : Window
     /// document, or Esc for the open left-edge panel (it closes). Keys pressed inside the open panel (arrows, PgUp/PgDn,
     /// Home/End in the list) stay the panel's. Everything else (Alt+Left for Back, Alt+Up/Alt+Down for the marks, the
     /// shortcuts) is left to the key bindings.
+    /// The search keys (FR-13, FR-105) come first: Ctrl+F focuses the search field and F3 / Shift+F3 go to the next /
+    /// previous result from anywhere; in the search field Enter / Shift+Enter do the same and Esc clears the search
+    /// (the keyboard goes back to the document), as does Esc elsewhere outside a text field while a search is shown.
     /// </summary>
     internal bool RouteKey(Key key, ModifierKeys modifiers, object? source)
     {
+        if (RouteSearchKey(key, modifiers, source, panelOpen: MarksPanel.IsOpen))
+        {
+            return true;
+        }
+
         if (MarksPanel.IsOpen)
         {
             var inPanel = source is DependencyObject element && IsWithin(element, MarksPanel);
@@ -193,6 +210,51 @@ public partial class MainWindow : Window
         }
 
         return DocumentViewer.HandleNavigationKey(key, modifiers, source);
+    }
+
+    private bool RouteSearchKey(Key key, ModifierKeys modifiers, object? source, bool panelOpen)
+    {
+        var search = _viewModel.Search;
+        var inField = ReferenceEquals(source, SearchField);
+        switch (key)
+        {
+            case Key.F when modifiers == ModifierKeys.Control:
+                FocusSearchField();
+                return true;
+            case Key.F3 when modifiers is ModifierKeys.None or ModifierKeys.Shift:
+                Run(modifiers == ModifierKeys.Shift ? search.PreviousCommand : search.NextCommand);
+                return true;
+            case Key.Enter when inField && modifiers is ModifierKeys.None or ModifierKeys.Shift:
+                Run(modifiers == ModifierKeys.Shift ? search.PreviousCommand : search.NextCommand);
+                return true;
+            case Key.Escape when modifiers == ModifierKeys.None
+                                 && (inField || (!panelOpen && source is not TextBoxBase && search.QueryText.Length > 0)):
+                search.ClearCommand.Execute(null); // empties the field; the view model asks for the document's focus
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static void Run(ICommand command)
+    {
+        if (command.CanExecute(null))
+        {
+            command.Execute(null);
+        }
+    }
+
+    private void FocusSearchField()
+    {
+        SearchFocusRequests++;
+        SearchField.Focus();
+        SearchField.SelectAll();
+    }
+
+    private void FocusDocument()
+    {
+        DocumentFocusRequests++;
+        DocumentViewer.FocusDocument();
     }
 
     private static bool IsWithin(DependencyObject element, DependencyObject ancestor)

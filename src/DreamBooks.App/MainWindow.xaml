@@ -128,6 +128,69 @@
                         </TextBlock.Style>
                     </TextBlock>
 
+                    <!-- Text search (FR-13, FR-105): Ctrl+F focuses the field; Enter / Shift+Enter in it and F3 / Shift+F3
+                         anywhere go to the next / previous result; Esc clears (MainWindow.RouteKey). The count, the
+                         "no text" message and the wrap status show below. Spartan, the real placement is phase 4. -->
+                    <TextBlock Text="{x:Static res:Strings.Search}" Style="{StaticResource SectionLabel}" />
+                    <TextBox x:Name="SearchField" Text="{Binding Search.QueryText, UpdateSourceTrigger=PropertyChanged}"
+                             MinHeight="{StaticResource TouchTarget}" VerticalContentAlignment="Center"
+                             ToolTip="{x:Static res:Strings.SearchHint}"
+                             AutomationProperties.Name="{x:Static res:Strings.SearchField}"
+                             AutomationProperties.HelpText="{x:Static res:Strings.SearchHint}" />
+                    <StackPanel Orientation="Horizontal" Margin="{StaticResource Gap}">
+                        <Button x:Name="PreviousResultButton" Command="{Binding Search.PreviousCommand}"
+                                MinWidth="{StaticResource TouchTarget}" MinHeight="{StaticResource TouchTarget}"
+                                AutomationProperties.Name="{x:Static res:Strings.PreviousResult}"
+                                ToolTip="{x:Static res:Strings.PreviousResult}">
+                            <Path Data="{StaticResource PreviousMarkGlyph}" Stroke="{StaticResource GlyphBrush}"
+                                  StrokeThickness="{StaticResource GlyphStrokeThickness}"
+                                  Width="{StaticResource GlyphSize}" Height="{StaticResource GlyphSize}" />
+                        </Button>
+                        <Button x:Name="NextResultButton" Command="{Binding Search.NextCommand}"
+                                MinWidth="{StaticResource TouchTarget}" MinHeight="{StaticResource TouchTarget}"
+                                AutomationProperties.Name="{x:Static res:Strings.NextResult}"
+                                ToolTip="{x:Static res:Strings.NextResult}">
+                            <Path Data="{StaticResource NextMarkGlyph}" Stroke="{StaticResource GlyphBrush}"
+                                  StrokeThickness="{StaticResource GlyphStrokeThickness}"
+                                  Width="{StaticResource GlyphSize}" Height="{StaticResource GlyphSize}" />
+                        </Button>
+                        <Button x:Name="ClearSearchButton" Command="{Binding Search.ClearCommand}"
+                                MinWidth="{StaticResource TouchTarget}" MinHeight="{StaticResource TouchTarget}"
+                                AutomationProperties.Name="{x:Static res:Strings.ClearSearch}"
+                                ToolTip="{x:Static res:Strings.ClearSearch}">
+                            <Path Data="{StaticResource CloseGlyph}" Stroke="{StaticResource GlyphBrush}"
+                                  StrokeThickness="{StaticResource GlyphStrokeThickness}"
+                                  Width="{StaticResource GlyphSize}" Height="{StaticResource GlyphSize}" />
+                        </Button>
+                        <TextBlock x:Name="SearchCountText" Text="{Binding Search.CountText}" VerticalAlignment="Center"
+                                   Margin="4,0" AutomationProperties.Name="{x:Static res:Strings.SearchCountLabel}"
+                                   AutomationProperties.LiveSetting="Polite" />
+                    </StackPanel>
+                    <TextBlock x:Name="SearchNoTextText" Text="{Binding Search.NoTextLayerMessage}" TextWrapping="Wrap"
+                               Margin="{StaticResource Gap}" AutomationProperties.LiveSetting="Polite">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Search.NoTextLayerMessage}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock x:Name="SearchStatusText" Text="{Binding Search.StatusText}" TextWrapping="Wrap"
+                               Margin="{StaticResource Gap}" AutomationProperties.LiveSetting="Polite">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Search.StatusText}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
                     <!-- Journal warning (FR-84): unsaved changes are not being recorded for recovery -->
                     <TextBlock x:Name="JournalWarningText" Text="{Binding JournalWarning}" TextWrapping="Wrap"
                                Margin="{StaticResource Gap}" FontWeight="SemiBold"

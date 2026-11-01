@@ -254,7 +254,7 @@ Il salvataggio è il requisito più delicato: il file prodotto deve essere un PD
 | FR-102 | Salto al segno precedente/successivo (pulsanti nel menu, scorciatoie Alt+Su e Alt+Giù), che registra la posizione nello storico del tasto Indietro (FR-09); agli estremi non salta e avvisa "Nessun altro segno" | Must |
 | FR-103 | Elenco dei segni nel pannello laterale sinistro (UI-04; si apre con swipe dal bordo, dal menu o con Ctrl+M): miniatura del passaggio con le note scritte accanto, numero di pagina; un tocco porta al passaggio | Should |
 | FR-104 | Più linee sullo stesso passaggio contano come un solo segno; un solo tipo di segno, senza livelli né colori | Must |
-| FR-105 | I risultati della ricerca (FR-13) compaiono come tacche sulla barra e sono evidenziati sulla pagina senza coprire i tratti; avanti/indietro tra i risultati | Should |
+| FR-105 | I risultati della ricerca (FR-13) compaiono come tacche sulla barra e sono evidenziati sulla pagina senza coprire i tratti (il risultato corrente in un colore più forte); avanti/indietro tra i risultati con i pulsanti accanto al campo di ricerca, con Invio e Maiusc+Invio nel campo e con F3 e Maiusc+F3 ovunque; dopo l'ultimo riparte dal primo avvisando "Ripartito dall'inizio" (e "Ripartito dalla fine" all'indietro); il primo salto registra la posizione nello storico del tasto Indietro (FR-09). Ctrl+F porta al campo di ricerca, Esc annulla la ricerca. Se il PDF non ha testo lo dice una volta ("Nessun testo ricercabile in questo PDF") | Should |
 
 ### Salvataggio
 

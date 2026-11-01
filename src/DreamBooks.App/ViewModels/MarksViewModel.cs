@@ -23,7 +23,7 @@ namespace DreamBooks.App.ViewModels;
 /// the <see cref="IDelayScheduler"/>, which accepts any thread and runs it on the UI thread (no synchronization context
 /// is needed, so the list cannot silently stop updating). While a scan runs the state is re-read every
 /// <see cref="RefreshInterval"/>, so the end of the scan is seen without the scanner calling back.</para>
-/// <para>Previous/next compare where each mark would be shown (<see cref="DocumentViewportViewModel.TargetPositionFor"/>)
+/// <para>Previous/next compare where each mark would be shown (<see cref="DocumentViewportViewModel.TargetPositionFor(Mark)"/>)
 /// with where the view is now. A mark whose target lies within <see cref="HereBandFraction"/> of the window height of
 /// the current position (at least 1 pt) is "here" and skipped: the mark just shown, after Back, after a resize or a
 /// zoom change, two marks clamped to the same position at an end of the document, and the left and right lines of one

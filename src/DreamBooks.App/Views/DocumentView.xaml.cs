@@ -157,6 +157,9 @@ public partial class DocumentView : UserControl
         set => _editorTimer.Interval = value;
     }
 
+    /// <summary>Gives the keyboard to the document (its scroll viewer), e.g. after Esc in the search field.</summary>
+    internal void FocusDocument() => Viewport.Focus();
+
     /// <summary>The surface showing a page, or null when the page is outside the window.</summary>
     internal InkSurface? SurfaceFor(int pageIndex) => _slots.TryGetValue(pageIndex, out var slot) ? slot.Surface : null;
 
@@ -277,6 +280,7 @@ public partial class DocumentView : UserControl
             old.ZoomVm.PropertyChanged -= OnZoomPropertyChanged;
             old.Viewport.PropertyChanged -= OnViewportPropertyChanged;
             old.PropertyChanged -= OnViewModelPropertyChanged;
+            old.Search.PageHighlightsChanged -= OnSearchHighlightsChanged;
             old.FirstRendersDone = null;
             old.RendersPending = null;
         }
@@ -301,6 +305,7 @@ public partial class DocumentView : UserControl
             viewModel.ZoomVm.PropertyChanged += OnZoomPropertyChanged;
             viewModel.Viewport.PropertyChanged += OnViewportPropertyChanged;
             viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            viewModel.Search.PageHighlightsChanged += OnSearchHighlightsChanged;
 
             // The mark scan waits for the first renders and parks while renders are due (the current coordinator).
             viewModel.FirstRendersDone = () => _bitmaps.FirstRendersDone;
@@ -628,6 +633,7 @@ public partial class DocumentView : UserControl
         surface.PageImage = null;
         surface.PageSizePt = VirtualPagePanel.PageSizePt(layout, pageIndex);
         surface.Scale = Pages.Scale;
+        ShowSearchHighlights(surface, pageIndex); // this page's own results: a recycled surface keeps none of its last page
         VirtualPagePanel.SetPageIndex(surface, pageIndex);
         AutomationProperties.SetName(surface, string.Format(CultureInfo.CurrentCulture, Strings.PageNameFormat, pageIndex + 1));
 
@@ -642,6 +648,33 @@ public partial class DocumentView : UserControl
 
         _bitmaps.ShowCached(pageIndex); // a page seen recently shows its bitmap at once, the others their placeholder
         FadeIn(surface, placeholder: surface.PageImage is null); // only white paper fades in; a bitmap appears at once
+    }
+
+    /// <summary>
+    /// The search results of a page changed (-1: of every page): only the surfaces in the window draw them, each its own
+    /// page's (FR-105). Pages outside the window get theirs when a surface is bound to them.
+    /// </summary>
+    private void OnSearchHighlightsChanged(object? sender, int pageIndex)
+    {
+        foreach (var slot in _slots.Values)
+        {
+            if (pageIndex < 0 || slot.PageIndex == pageIndex)
+            {
+                ShowSearchHighlights(slot.Surface, slot.PageIndex);
+            }
+        }
+    }
+
+    private void ShowSearchHighlights(InkSurface surface, int pageIndex)
+    {
+        if (_viewModel?.Search is { } search)
+        {
+            surface.SetSearchHighlights(search.HitsForPage(pageIndex), search.CurrentRectsForPage(pageIndex));
+        }
+        else
+        {
+            surface.SetSearchHighlights([], []);
+        }
     }
 
     /// <summary>

@@ -8,16 +8,18 @@ using System.Windows.Input.StylusPlugIns;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using DreamBooks.App.ViewModels;
+using DreamBooks.App.Views;
 using DreamBooks.Core.Geometry;
 using DreamBooks.Core.Ink;
 using DreamBooks.Core.Model;
+using DreamBooks.Core.Search;
 using CorePage = DreamBooks.Core.Model.Page;
 
 namespace DreamBooks.App.Ink;
 
 /// <summary>
-/// One page: white paper (the placeholder, never a hole, NFR-03), PDF bitmap, committed ink (outline layer) and the
-/// wet ink of the pen. Its size is the page size × <see cref="Scale"/>; strokes are kept in page points and only
+/// One page: white paper (the placeholder, never a hole, NFR-03), PDF bitmap, search highlights (FR-105, under the
+/// ink, never hit-tested), committed ink (outline layer) and the wet ink of the pen. Its size is the page size × <see cref="Scale"/>; strokes are kept in page points and only
 /// scaled to draw (FR-26). Pen ink is drawn live by a <see cref="DynamicRenderer"/> on the real-time stylus thread
 /// (FR-24, NFR-04); on pen-up one stroke is committed through this surface's own <see cref="Editor"/>, clipped to
 /// its page (FR-27). Without an editor (strokes not loaded yet) the surface shows the page but accepts no ink.
@@ -79,6 +81,7 @@ public sealed class InkSurface : FrameworkElement
         new PropertyMetadata(null, (d, e) => ((InkSurface)d)._image.Source = (ImageSource?)e.NewValue));
 
     private readonly Image _image;
+    private readonly SearchHighlightLayer _highlights;
     private readonly CustomInkLayer _customLayer;
     private readonly InkPresenter _presenter;
     private readonly Canvas _overlay;
@@ -111,6 +114,7 @@ public sealed class InkSurface : FrameworkElement
     {
         _image = new Image { Stretch = Stretch.Fill, IsHitTestVisible = false };
         RenderOptions.SetBitmapScalingMode(_image, BitmapScalingMode.HighQuality);
+        _highlights = new SearchHighlightLayer();
         _customLayer = new CustomInkLayer();
         _presenter = new InkPresenter { IsHitTestVisible = false };
         _eraserCursor = new Ellipse { IsHitTestVisible = false, Visibility = Visibility.Collapsed };
@@ -119,7 +123,7 @@ public sealed class InkSurface : FrameworkElement
         _eraserCursor.SetResourceReference(Shape.StrokeThicknessProperty, "EraserCursorOutlineThickness");
         _overlay = new Canvas { IsHitTestVisible = false };
         _overlay.Children.Add(_eraserCursor);
-        _children = [_image, _customLayer, _presenter, _overlay];
+        _children = [_image, _highlights, _customLayer, _presenter, _overlay]; // search highlights between the bitmap and the ink
         foreach (var child in _children)
         {
             AddVisualChild(child);
@@ -132,6 +136,7 @@ public sealed class InkSurface : FrameworkElement
         Stylus.SetIsTapFeedbackEnabled(this, false);
         Stylus.SetIsTouchFeedbackEnabled(this, false);
 
+        _highlights.Scale = Scale;
         _customLayer.Scale = Scale;
         _customLayer.Curve = Curve;
         _customLayer.Smoothing = Smoothing;
@@ -237,6 +242,16 @@ public sealed class InkSurface : FrameworkElement
     internal CustomDynamicRenderer ActiveRenderer => _renderer;
 
     internal CustomInkLayer CustomLayer => _customLayer;
+
+    /// <summary>The search results of this page, between the bitmap and the ink (FR-105); exposed for tests.</summary>
+    internal SearchHighlightLayer HighlightLayer => _highlights;
+
+    /// <summary>
+    /// Shows the search results of the page this surface is bound to, in displayed page points (scaled by
+    /// <see cref="Scale"/>, FR-26): <paramref name="current"/> with the stronger brush. Empty lists clear them.
+    /// </summary>
+    public void SetSearchHighlights(IReadOnlyList<SearchRect> hits, IReadOnlyList<SearchRect> current) =>
+        _highlights.SetHighlights(hits, current);
 
     /// <summary>The PDF bitmap layer; exposed for tests.</summary>
     internal FrameworkElement BitmapLayer => _image;
@@ -987,6 +1002,7 @@ public sealed class InkSurface : FrameworkElement
     private void OnScaleChanged()
     {
         _customLayer.Scale = Scale;
+        _highlights.Scale = Scale;
         UpdateRendererSettings();
         PlaceEraserCursor();
     }

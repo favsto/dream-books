@@ -9,6 +9,7 @@ using DreamBooks.Core.Documents;
 using DreamBooks.Core.Layout;
 using DreamBooks.Core.Marks;
 using DreamBooks.Core.Model;
+using DreamBooks.Core.Search;
 
 namespace DreamBooks.App.ViewModels;
 
@@ -254,6 +255,26 @@ public sealed class DocumentViewportViewModel : ObservableObject
         return Normalize(new ViewPosition(page, topPt - layout.PageTopPt(page), _position.ColumnXPt, _position.Zoom));
     }
 
+    /// <summary>
+    /// Where <see cref="ScrollToHit"/> would scroll for a search result (FR-13, FR-105): the same rule as for a mark
+    /// (<see cref="TargetPositionFor(Mark)"/>) over the vertical extent of the hit's rectangles. Null without a
+    /// document, for a page outside it or for a hit without rectangles.
+    /// </summary>
+    public ViewPosition? TargetPositionFor(SearchHit hit)
+    {
+        ArgumentNullException.ThrowIfNull(hit);
+        if (_layout is not { } layout || hit.PageIndex < 0 || hit.PageIndex >= layout.PageCount || hit.Rects.Count == 0)
+        {
+            return null;
+        }
+
+        var top = hit.Rects.Min(r => Math.Min(r.TopPt, r.BottomPt));
+        var bottom = hit.Rects.Max(r => Math.Max(r.TopPt, r.BottomPt));
+        var topPt = MarkTarget.TopPt(hit.PageIndex, top, bottom, layout, WindowHeightPt);
+        var page = layout.PageAt(topPt);
+        return Normalize(new ViewPosition(page, topPt - layout.PageTopPt(page), _position.ColumnXPt, _position.Zoom));
+    }
+
     /// <summary>The top edge of a position in points from the top of the document; 0 without a document.</summary>
     public double AbsoluteTopPt(ViewPosition position) =>
         _layout is { } layout && position.PageIndex >= 0 && position.PageIndex < layout.PageCount
@@ -261,7 +282,7 @@ public sealed class DocumentViewportViewModel : ObservableObject
             : 0;
 
     /// <summary>
-    /// Brings a mark into view (FR-102, FR-103) at <see cref="TargetPositionFor"/>. The page under the centre becomes
+    /// Brings a mark into view (FR-102, FR-103) at <see cref="TargetPositionFor(Mark)"/>. The page under the centre becomes
     /// current at once and <see cref="Jumped"/> is raised, like go-to-page; with <paramref name="recordHistory"/> the
     /// previous position is pushed on <see cref="History"/>. When the view is already there (the same scroll offsets,
     /// e.g. two marks clamped to the end of the document, or the mark already shown) nothing happens: no history
@@ -270,6 +291,30 @@ public sealed class DocumentViewportViewModel : ObservableObject
     public bool ScrollToMark(Mark mark, bool recordHistory)
     {
         if (TargetPositionFor(mark) is not { } target || IsSamePlace(target, _position))
+        {
+            return false;
+        }
+
+        if (recordHistory)
+        {
+            History.Push(_position);
+        }
+
+        SetPosition(target);
+        Refresh(CurrentPageReport.Immediate, forceCurrent: null);
+        Jumped?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>
+    /// Brings a search result into view at <see cref="TargetPositionFor(SearchHit)"/>: centred when it fits the window,
+    /// else its top at the window's top. Like <see cref="ScrollToMark"/>: the page under the centre becomes current at
+    /// once, <see cref="Jumped"/> is raised, <paramref name="recordHistory"/> pushes the previous position, and nothing
+    /// happens when the view is already there. Returns whether the view moved.
+    /// </summary>
+    public bool ScrollToHit(SearchHit hit, bool recordHistory)
+    {
+        if (TargetPositionFor(hit) is not { } target || IsSamePlace(target, _position))
         {
             return false;
         }

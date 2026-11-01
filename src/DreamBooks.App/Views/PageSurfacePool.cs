@@ -58,7 +58,7 @@ internal sealed class PageSurfacePool(Func<InkSurface> create, Action<InkSurface
         }
     }
 
-    /// <summary>Unbinds a surface from its page: no gesture, no editor, no page, no bitmap.</summary>
+    /// <summary>Unbinds a surface from its page: no gesture, no editor, no page, no bitmap, no search highlights.</summary>
     public static void Reset(InkSurface surface)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -67,6 +67,7 @@ internal sealed class PageSurfacePool(Func<InkSurface> create, Action<InkSurface
         surface.Editor = null;
         surface.Page = null;
         surface.PageImage = null;
+        surface.SetSearchHighlights([], []);
         VirtualPagePanel.SetPageIndex(surface, -1);
     }
 }

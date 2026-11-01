@@ -218,6 +218,52 @@ internal static class Strings
 
     public static string MarkSideRight => Get(nameof(MarkSideRight));
 
+    /// <summary>Section label of the text search in the navigation panel (FR-13).</summary>
+    public static string Search => Get(nameof(Search));
+
+    /// <summary>Automation name of the search field.</summary>
+    public static string SearchField => Get(nameof(SearchField));
+
+    /// <summary>Tooltip and help text of the search field: the shortcuts.</summary>
+    public static string SearchHint => Get(nameof(SearchHint));
+
+    public static string PreviousResult => Get(nameof(PreviousResult));
+
+    public static string NextResult => Get(nameof(NextResult));
+
+    public static string ClearSearch => Get(nameof(ClearSearch));
+
+    /// <summary>Automation name of the result count.</summary>
+    public static string SearchCountLabel => Get(nameof(SearchCountLabel));
+
+    /// <summary>The count while the scan runs and nothing was found yet.</summary>
+    public static string SearchInProgress => Get(nameof(SearchInProgress));
+
+    public static string SearchNoResults => Get(nameof(SearchNoResults));
+
+    public static string SearchOneResult => Get(nameof(SearchOneResult));
+
+    /// <summary>{0}: the number of results (with "+" when capped).</summary>
+    public static string SearchResultsFormat => Get(nameof(SearchResultsFormat));
+
+    /// <summary>{0}: the current result's place, {1}: the number of results ("3 di 17").</summary>
+    public static string SearchPositionFormat => Get(nameof(SearchPositionFormat));
+
+    /// <summary>{0}: the number of results found before the cap stopped the search ("5000+").</summary>
+    public static string SearchTruncatedFormat => Get(nameof(SearchTruncatedFormat));
+
+    /// <summary>Shown once a search found no page with text (a scanned PDF without a text layer).</summary>
+    public static string SearchNoTextLayer => Get(nameof(SearchNoTextLayer));
+
+    /// <summary>The count when no page could be searched at all (a damaged file).</summary>
+    public static string SearchFailed => Get(nameof(SearchFailed));
+
+    /// <summary>Status after next result wrapped from the last result to the first.</summary>
+    public static string SearchWrappedToStart => Get(nameof(SearchWrappedToStart));
+
+    /// <summary>Status after previous result wrapped from the first result to the last.</summary>
+    public static string SearchWrappedToEnd => Get(nameof(SearchWrappedToEnd));
+
     private static string Get(string name) =>
         Manager.GetString(name, System.Globalization.CultureInfo.CurrentUICulture) ?? name;
 }

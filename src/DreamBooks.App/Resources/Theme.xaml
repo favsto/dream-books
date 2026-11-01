@@ -115,6 +115,17 @@
     <Thickness x:Key="MarkRowLabelMargin">12,0,0,0</Thickness>
     <sys:Double x:Key="GoToPageFieldWidth">80</sys:Double>
 
+    <!-- Search highlights on the page (FR-13, FR-105, phase 3b-2): drawn between the PDF bitmap and the ink, so they never
+         cover the ink. Every result in translucent yellow, the current one in a stronger orange; padded 1.5 pt above and
+         below the text box (PDFium's boxes hug the glyphs). The page is white paper in both themes, so the colours are
+         fixed. They stay translucent with transparency effects off (NFR-32): an opaque highlight would hide the text it
+         marks; this is a highlight colour, not a transparency effect. -->
+    <Color x:Key="SearchHighlightColor">#FFE600</Color>
+    <Color x:Key="SearchCurrentHighlightColor">#FF8C00</Color>
+    <SolidColorBrush x:Key="SearchHighlightBrush" Color="{StaticResource SearchHighlightColor}" Opacity="0.35" />
+    <SolidColorBrush x:Key="SearchCurrentHighlightBrush" Color="{StaticResource SearchCurrentHighlightColor}" Opacity="0.5" />
+    <sys:Double x:Key="SearchHighlightPaddingPt">1.5</sys:Double>
+
     <Style TargetType="Button">
         <Setter Property="MinWidth" Value="{StaticResource TouchTarget}" />
         <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />

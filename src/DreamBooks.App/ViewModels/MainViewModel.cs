@@ -11,6 +11,7 @@ using DreamBooks.Core.Journal;
 using DreamBooks.Core.Layout;
 using DreamBooks.Core.Marks;
 using DreamBooks.Core.Model;
+using DreamBooks.Core.Search;
 using DreamBooks.Core.Undo;
 using DreamBooks.Pdf;
 
@@ -80,6 +81,12 @@ public sealed class MainViewModel : ObservableObject
     private bool _scanPausedForSave;
     private IDisposable? _pendingScanStart;
 
+    // Text search (FR-13, FR-105): a new index per query, filled by a scan over the viewer's current renderer that is
+    // rebuilt on the same index when a save swaps it; paused with the mark scan (the same two pause flags).
+    private SearchIndex? _searchIndex;
+    private SearchScanner? _searchScanner;
+    private string? _searchQuery;
+
     /// <param name="dialogs">The dialogs.</param>
     /// <param name="recovery">
     /// Where journals and document locks live (FR-84); null disables crash recovery and the single-writer lock
@@ -103,9 +110,12 @@ public sealed class MainViewModel : ObservableObject
         Viewport = new DocumentViewportViewModel(ZoomVm, _scheduler) { PageNavigator = NavigateToPageAsync };
         Viewport.PositionChanged += OnViewportPositionChanged;
         Marks = new MarksViewModel(Viewport, _scheduler) { InkSource = LoadMarkInkAsync };
+        Search = new SearchViewModel(Viewport, _scheduler);
+        Search.QueryApplied += OnSearchQueryApplied;
         ZoomVm.PropertyChanged += OnZoomPropertyChanged;
         OpenDocument = OpenedDocument.OpenPdfAsync;
         MarkSourceFactory = static opened => opened.Viewer?.Current is { } renderer ? new MarkPageSource(renderer) : null;
+        SearchSourceFactory = static opened => opened.Viewer?.Current;
         SaveService = new DocumentSaveService(new PdfDocumentSaver(), dialogs);
 
         // Navigation stays available while a save runs (the earlier lock is gone): pages that cannot be loaded
@@ -147,6 +157,9 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>The marks of the open document: list, previous/next mark (FR-101..FR-103).</summary>
     public MarksViewModel Marks { get; }
 
+    /// <summary>The text search of the open document: field, count, next/previous, highlights (FR-13, FR-105).</summary>
+    public SearchViewModel Search { get; }
+
     /// <summary>The open document, or null.</summary>
     public DocumentSession? Session
     {
@@ -185,6 +198,11 @@ public sealed class MainViewModel : ObservableObject
                 if (!value && _markScanner is null)
                 {
                     Marks.SetScanner(null); // the save is over and no renderer came back: nothing is pending any more
+                }
+
+                if (!value && _searchScanner is null)
+                {
+                    Search.SetScanner(null); // likewise for the search
                 }
 
                 OpenPdfCommand.NotifyCanExecuteChanged();
@@ -308,6 +326,18 @@ public sealed class MainViewModel : ObservableObject
     internal TimeSpan? MarkScanIdleGap { get; set; }
 
     /// <summary>
+    /// Test seam: the text search's source for a document's current renderer (the renderer itself), asked for each query
+    /// and after every renderer swap; null (released during a save, or a test source) means no search scan for now.
+    /// </summary>
+    internal Func<OpenedDocument, ISearchPageSource?> SearchSourceFactory { get; set; }
+
+    /// <summary>The search stops (marked as capped) after this many results (Review Focus 1: a 1-letter query).</summary>
+    internal int SearchMaxHits { get; set; } = 5000;
+
+    /// <summary>Test hook: the search scan running over the current renderer, if any.</summary>
+    internal SearchScanner? SearchScannerForTest => _searchScanner;
+
+    /// <summary>
     /// At open, the scan waits for the window's first renders (<see cref="FirstRendersDone"/>), checked every
     /// <see cref="MarkScanStartPoll"/>, at most this long (I2: the first pages render with the PDFium thread to themselves).
     /// </summary>
@@ -360,12 +390,14 @@ public sealed class MainViewModel : ObservableObject
                 RaiseDiscardRequested();
                 await CloseJournalAsync(userDiscarded: true);
                 ReleaseLock();
+                StopSearch();
                 StopMarks();
                 return true;
             case UnsavedChanges.Resolved:
                 await PersistViewAsync();
                 await CloseJournalAsync(userDiscarded: false);
                 ReleaseLock();
+                StopSearch();
                 StopMarks();
                 return true;
             default:
@@ -1080,6 +1112,7 @@ public sealed class MainViewModel : ObservableObject
         CancelErase();
         _pendingSettle?.Dispose();
         _pendingSettle = null;
+        StopSearch(); // the search scan goes before the renderer it reads
         StopMarks(); // before anything of the previous document goes: nothing scans or tracks into the new index
         if (Session is { } previous)
         {
@@ -1125,6 +1158,7 @@ public sealed class MainViewModel : ObservableObject
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
         StartMarks(session);
+        Search.ResetForDocument(); // a new document: no query, no results, no "no text" finding
     }
 
     /// <summary>
@@ -1360,10 +1394,12 @@ public sealed class MainViewModel : ObservableObject
         if (paused)
         {
             _markScanner?.Pause();
+            _searchScanner?.Pause();
         }
         else
         {
             _markScanner?.Resume();
+            _searchScanner?.Resume();
         }
     }
 
@@ -1374,6 +1410,106 @@ public sealed class MainViewModel : ObservableObject
         {
             SetScanPause(ref _scanPausedForInk, ZoomVm.IsLocked);
         }
+    }
+
+    /// <summary>
+    /// A query was applied in the search field (debounced): the old search stops and a new one, with a new index (an
+    /// index never serves two queries), searches from the current page. An empty query only stops the old one.
+    /// </summary>
+    private void OnSearchQueryApplied(object? sender, string query)
+    {
+        StopSearch();
+        if (Session is not { } session || TextFolding.FoldQuery(query).Length == 0)
+        {
+            return;
+        }
+
+        var index = new SearchIndex(session.PageCount);
+        _searchIndex = index;
+        _searchQuery = query;
+        Search.Attach(index);
+        StartSearchScan();
+    }
+
+    /// <summary>
+    /// A search scan over the document's current renderer into the current search index, from the current page (the
+    /// pages already searched, by a scan over a replaced renderer, are skipped). No scan while there is no renderer (a
+    /// plain Save released it): meanwhile the search counts as running when pages are left, and the reopened renderer
+    /// starts the next scan. The scan parks while page renders are due and takes the pauses in effect (stroke, save).
+    /// </summary>
+    private void StartSearchScan()
+    {
+        if (_searchIndex is not { } index || _searchQuery is not { } query || _document is not { } document
+            || Session is not { } session)
+        {
+            return;
+        }
+
+        ISearchPageSource? source;
+        try
+        {
+            source = SearchSourceFactory(document);
+        }
+#pragma warning disable CA1031 // The search is an aid: without a source there is simply no scan.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            source = null;
+        }
+
+        SearchScanner? scanner = null;
+        try
+        {
+            if (source is not null && source.PageCount == session.PageCount)
+            {
+                scanner = new SearchScanner(source, index, SearchMaxHits, IsRenderPending, MarkScanIdleGap);
+                if (_scanPausedForInk)
+                {
+                    scanner.Pause();
+                }
+
+                if (_scanPausedForSave)
+                {
+                    scanner.Pause();
+                }
+
+                scanner.Start(query, Math.Max(session.CurrentPageIndex, 0), index);
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+            // The renderer was closed under us (the document is closing, or a save swapped it): no scan on it. The
+            // swap's reopened renderer starts the next one.
+            scanner?.Dispose();
+            scanner = null;
+        }
+
+        if (scanner is null)
+        {
+            Search.SetScanner(null, pending: IsSaving && index.SearchedCount < index.PageCount);
+            return;
+        }
+
+        _searchScanner = scanner;
+        Search.SetScanner(scanner);
+    }
+
+    /// <summary>The scan stops (before its renderer goes); the index and its hits stay.</summary>
+    private void StopSearchScan()
+    {
+        var scanner = _searchScanner;
+        _searchScanner = null;
+        scanner?.Dispose();
+        Search.SetScanner(null);
+    }
+
+    /// <summary>The search goes (another query, the field emptied, the document closing or replaced).</summary>
+    private void StopSearch()
+    {
+        StopSearchScan();
+        _searchIndex = null;
+        _searchQuery = null;
+        Search.Attach(null);
     }
 
     private static async Task ReleaseQuietlyAsync(
@@ -1727,6 +1863,13 @@ public sealed class MainViewModel : ObservableObject
             // reopened one with the same index, so the pages already scanned stay and are not loaded again).
             StopScan();
             StartScan(deferred: false);
+
+            // The search likewise: a new scan over the same index (the hits found stay, searched pages are skipped).
+            if (_searchIndex is not null)
+            {
+                StopSearchScan();
+                StartSearchScan();
+            }
         }
     }
 
