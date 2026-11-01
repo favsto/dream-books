@@ -44,14 +44,19 @@ implementation, review). Project-specific additions:
   DocumentView (virtualised pages, one recycled InkSurface per retained
   page), VirtualPagePanel, PageSurfacePool, ScrollRail (fading rail, page
   preview, go to page) and PageBitmapCoordinator (bitmaps through the render
-  scheduler); its state is `ViewModels/DocumentViewportViewModel`.
+  scheduler); its state is `ViewModels/DocumentViewportViewModel`. Marks:
+  RailTickLayer (ticks on the rail), EdgePanel (left-edge panel shell),
+  MarksListView with MarkInkThumbnail rows, `ViewModels/MarksViewModel`.
 - `src/DreamBooks.Core/` — domain model, ink math, UndoManager,
-  DocumentSession (lazy pages, dirty tracking), stroke JSON schema, journal
-  (recorder, replayer), `Layout/` (DocumentLayout, ViewPosition,
-  PositionHistory) and `Rendering/` (RenderScheduler: priorities, budgeted
-  bitmap cache). No references to WPF or PDFium.
+  DocumentSession (lazy pages, dirty tracking, PageStrokesChanged), stroke
+  JSON schema, journal (recorder, replayer), `Layout/` (DocumentLayout,
+  ViewPosition, PositionHistory), `Rendering/` (RenderScheduler: priorities,
+  budgeted bitmap cache) and `Marks/` (MarkRecognizer, MarkIndex,
+  MarkScanner, MarkTracker, RailTickLayout, MarkTarget: derived data, never
+  saved). No references to WPF or PDFium.
 - `src/DreamBooks.Pdf/` — PDFium (PdfRenderer on its own thread, stroke
-  annotations, PdfDocumentSaver and FileReplacer: verified full rewrite) and
+  annotations, PdfDocumentSaver and FileReplacer: verified full rewrite,
+  MarkPageSource: the mark scan's uncached stroke reads) and
   the app's files under LocalAppData: RecoveryStore (journals,
   `DreamBooks\recovery`) and ViewPositionStore (last position per document,
   `DreamBooks\positions`, plain file I/O). References Core. PDFsharp is not
