@@ -5,7 +5,8 @@ using System.Windows.Media;
 namespace DreamBooks.App.Views;
 
 /// <summary>
-/// The marks' ticks on the scroll rail's track (FR-101, UI-07): short horizontal bars centred across the track, all in
+/// The ticks of one kind (marks or notes, FR-101, UI-07) on the scroll rail's track: short horizontal bars across the
+/// track (centred, or moved sideways by <see cref="TickOffset"/>), all in
 /// one frozen geometry drawn in one call, however many marks there are. Decorative: it never hit-tests (the pen
 /// reaches the page under it, FR-30), never takes focus and has no automation peer (the marks list is the accessible
 /// way to the marks).
@@ -22,6 +23,10 @@ public sealed class RailTickLayer : FrameworkElement
 
     public static readonly DependencyProperty TickThicknessProperty = DependencyProperty.Register(
         nameof(TickThickness), typeof(double), typeof(RailTickLayer),
+        new FrameworkPropertyMetadata(0.0, OnShapeChanged));
+
+    public static readonly DependencyProperty TickOffsetProperty = DependencyProperty.Register(
+        nameof(TickOffset), typeof(double), typeof(RailTickLayer),
         new FrameworkPropertyMetadata(0.0, OnShapeChanged));
 
     private IReadOnlyList<double> _centres = [];
@@ -53,6 +58,13 @@ public sealed class RailTickLayer : FrameworkElement
     {
         get => (double)GetValue(TickThicknessProperty);
         set => SetValue(TickThicknessProperty, value);
+    }
+
+    /// <summary>How far a tick's centre sits from the layer's centre, in DIPs (negative: to the left).</summary>
+    public double TickOffset
+    {
+        get => (double)GetValue(TickOffsetProperty);
+        set => SetValue(TickOffsetProperty, value);
     }
 
     /// <summary>The ticks' centres, in DIPs from the layer's top, ascending.</summary>
@@ -90,7 +102,7 @@ public sealed class RailTickLayer : FrameworkElement
         {
             var length = Math.Max(0, TickLength);
             var half = Math.Max(0, TickThickness) / 2;
-            var left = (ActualWidth - length) / 2;
+            var left = ((ActualWidth - length) / 2) + TickOffset;
             var geometry = new StreamGeometry();
             using (var context = geometry.Open())
             {

@@ -53,6 +53,7 @@ public sealed class MarksViewModel : ObservableObject
     private MarkScanner? _scanner;
     private bool _scanPending;
     private IReadOnlyList<Mark> _marks = [];
+    private IReadOnlyList<Note> _notes = [];
     private bool _isScanning;
     private string? _statusText;
     private IDisposable? _pendingRefresh;
@@ -121,6 +122,12 @@ public sealed class MarksViewModel : ObservableObject
     /// rail's ticks are drawn from (FR-101).
     /// </summary>
     internal IReadOnlyList<Mark> Marks => _marks;
+
+    /// <summary>
+    /// The handwritten notes (FR-101), read with <see cref="Marks"/> at each refresh, as one list replaced each time: what
+    /// the rail's note ticks are drawn from. Not in <see cref="Items"/> and not reached by previous/next (marks only).
+    /// </summary>
+    internal IReadOnlyList<Note> Notes => _notes;
 
     /// <summary>
     /// Raised on the UI thread after each refresh that re-read the index (at most once per <see cref="RefreshInterval"/>,
@@ -261,6 +268,7 @@ public sealed class MarksViewModel : ObservableObject
     {
         var marks = _index?.AllMarks() ?? [];
         _marks = marks;
+        _notes = _index?.AllNotes() ?? [];
         var countBefore = _items.Count;
         int i = 0, j = 0;
         while (j < marks.Count)

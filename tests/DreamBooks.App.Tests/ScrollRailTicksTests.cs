@@ -108,11 +108,16 @@ public sealed class ScrollRailTicksTests : IDisposable
             rail.ApplyTransparency();
             Assert.Same(Application.Current.FindResource("RailMarkTickBrushOpaque"), rail.Ticks.Fill);
             Assert.Equal(1, ((SolidColorBrush)rail.Ticks.Fill!).Opacity);
+            Assert.Same(Application.Current.FindResource("RailNoteTickBrushOpaque"), rail.NoteTicks.Fill);
+            Assert.Equal(1, ((SolidColorBrush)rail.NoteTicks.Fill!).Opacity);
 
             rail.TransparencyEnabled = () => true;
             rail.ApplyTransparency();
             Assert.Same(Application.Current.FindResource("RailMarkTickBrush"), rail.Ticks.Fill);
             Assert.True(((SolidColorBrush)rail.Ticks.Fill!).Opacity < 1);
+            Assert.Same(Application.Current.FindResource("RailNoteTickBrush"), rail.NoteTicks.Fill);
+            Assert.True(((SolidColorBrush)rail.NoteTicks.Fill!).Opacity < 1);
+            Assert.NotEqual(((SolidColorBrush)rail.Ticks.Fill!).Color, ((SolidColorBrush)rail.NoteTicks.Fill!).Color);
 
             Assert.IsType<double>(Application.Current.FindResource("RailMarkTickLength"));
             Assert.IsType<double>(Application.Current.FindResource("RailMarkTickThickness"));
@@ -160,6 +165,65 @@ public sealed class ScrollRailTicksTests : IDisposable
             Assert.Empty(rail.Ticks.Centres);
         });
     }
+
+    [Fact]
+    public async Task Notes_get_their_own_ticks_in_another_colour_beside_the_marks_and_both_stay_visible_when_they_coincide()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            var rail = view.Rail;
+            var index = vm.MarkIndexForTest!;
+            index.SetPage(10, [M(10, 100, 200)], [N(10, 100, 200), N(10, 600, 640)]); // the first note coincides with the mark
+            index.SetPage(20, [], [N(20, 300, 320), N(20, 300.2, 320.2)]); // a fraction of a DIP apart: one tick
+            Refresh(view);
+
+            var notes = ExpectedNotes(vm, rail);
+            Assert.Equal(3, notes.Count);
+            Assert.Equal(notes.Count, rail.NoteTicks.Centres.Count);
+            for (var i = 0; i < notes.Count; i++)
+            {
+                Assert.Equal(notes[i], rail.NoteTicks.Centres[i], 6);
+            }
+
+            Assert.Equal(notes.Count, rail.NoteTicks.TickGeometry!.GetFlattenedPathGeometry().Figures.Count);
+            AssertTicks(rail, Expected(vm, rail)); // the marks' ticks are unchanged
+            Assert.Equal(rail.Ticks.Centres[0], rail.NoteTicks.Centres[0], 6); // coinciding positions
+
+            // Both visible: side by side, never overlapping, the marks drawn above the notes, both under the knob.
+            var mark = rail.Ticks.TickGeometry!.Bounds;
+            var note = rail.NoteTicks.TickGeometry!.Bounds;
+            Assert.True(note.Right <= mark.Left || note.Left >= mark.Right, $"note ticks {note} overlap mark ticks {mark}");
+            Assert.True(note.Left >= 0 && note.Right <= rail.NoteTicks.ActualWidth, "the note ticks stay on the rail");
+            var layers = (System.Windows.Controls.Panel)VisualTreeHelper.GetParent(rail.Ticks);
+            Assert.True(layers.Children.IndexOf(rail.NoteTicks) < layers.Children.IndexOf(rail.Ticks));
+            Assert.True(layers.Children.IndexOf(rail.Ticks) < layers.Children.IndexOf(rail.Knob));
+
+            // Another colour; decorative like the marks' ticks.
+            var markColour = ((SolidColorBrush)rail.Ticks.Fill!).Color;
+            var noteColour = ((SolidColorBrush)rail.NoteTicks.Fill!).Color;
+            Assert.NotEqual(markColour, noteColour);
+            Assert.False(rail.NoteTicks.IsHitTestVisible);
+            Assert.False(rail.NoteTicks.Focusable);
+            Assert.Null(UIElementAutomationPeer.CreatePeerForElement(rail.NoteTicks));
+
+            // Erased: its ticks go; the marks' stay.
+            index.SetPage(10, [M(10, 100, 200)]);
+            index.SetPage(20, []);
+            Refresh(view);
+            Assert.Empty(rail.NoteTicks.Centres);
+            Assert.Null(rail.NoteTicks.TickGeometry);
+            Assert.Single(rail.Ticks.Centres);
+            Assert.Empty(vm.Marks.Notes);
+            Assert.Single(vm.Marks.Items); // the list shows marks only
+        });
+    }
+
+    private static Note N(int page, double top, double bottom) => new(page, top, bottom, [Guid.NewGuid()]);
+
+    private static IReadOnlyList<double> ExpectedNotes(MainViewModel vm, ScrollRail rail) =>
+        RailTickLayout.NotePositions(vm.Marks.Notes, vm.Viewport.Layout!, vm.Viewport.WindowHeightPt, rail.TrackLength)
+            .Select(p => p + (rail.KnobHeight / 2))
+            .ToArray();
 
     private static Mark M(int page, double top, double bottom) => new(page, MarkSide.Left, top, bottom, [Guid.NewGuid()]);
 

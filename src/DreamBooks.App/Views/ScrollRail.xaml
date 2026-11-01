@@ -36,7 +36,12 @@
                 <Grid x:Name="Track" Margin="{StaticResource RailTrackMargin}">
                     <Border x:Name="TrackBar" Width="{StaticResource RailBarWidth}" HorizontalAlignment="Center"
                             CornerRadius="{StaticResource RailBarCornerRadius}" Background="{StaticResource RailTrackBrush}" />
-                    <!-- The marks' ticks (FR-101): over the bar, under the knob; decorative, never hit-tested. -->
+                    <!-- The notes' ticks (FR-101), beside the marks' in another colour, then the marks' ticks on top: over
+                         the bar, under the knob; decorative, never hit-tested. -->
+                    <local:RailTickLayer x:Name="NoteTicks" Fill="{StaticResource RailNoteTickBrush}"
+                                         TickLength="{StaticResource RailNoteTickLength}"
+                                         TickThickness="{StaticResource RailNoteTickThickness}"
+                                         TickOffset="{StaticResource RailNoteTickOffset}" />
                     <local:RailTickLayer x:Name="Ticks" Fill="{StaticResource RailMarkTickBrush}"
                                          TickLength="{StaticResource RailMarkTickLength}"
                                          TickThickness="{StaticResource RailMarkTickThickness}" />

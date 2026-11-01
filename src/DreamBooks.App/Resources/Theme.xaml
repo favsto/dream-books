@@ -51,6 +51,16 @@
     <sys:Double x:Key="RailMarkTickThickness">2</sys:Double>
     <SolidColorBrush x:Key="RailMarkTickBrush" Color="{DynamicResource {x:Static SystemColors.ControlTextColorKey}}" Opacity="0.75" />
     <SolidColorBrush x:Key="RailMarkTickBrushOpaque" Color="{DynamicResource {x:Static SystemColors.ControlTextColorKey}}" />
+    <!-- Note ticks (FR-101): the handwritten notes, in red (the 3a mockup's colour for notes), short bars just left of
+         the mark ticks, so a note and a mark at the same place both show; marks are drawn on top. The offset is the
+         distance from the track's centre to the bar's centre: the bar spans 6 to 12 DIP left of the centre, the mark
+         ticks 7 DIP on either side. Opaque with transparency effects off (NFR-32). -->
+    <sys:Double x:Key="RailNoteTickLength">6</sys:Double>
+    <sys:Double x:Key="RailNoteTickThickness">2</sys:Double>
+    <sys:Double x:Key="RailNoteTickOffset">-11</sys:Double>
+    <Color x:Key="RailNoteTickColor">#E0393E</Color>
+    <SolidColorBrush x:Key="RailNoteTickBrush" Color="{StaticResource RailNoteTickColor}" Opacity="0.85" />
+    <SolidColorBrush x:Key="RailNoteTickBrushOpaque" Color="{StaticResource RailNoteTickColor}" />
     <Thickness x:Key="RailIndicatorMargin">0,0,44,12</Thickness>
 
     <!-- Finger fling (FR-05, NFR-03), read by FlingSettings: a pan released faster than FlingMinSpeed glides on, its

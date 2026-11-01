@@ -420,6 +420,7 @@ public partial class ScrollRail : UserControl
         var suffix = transparent ? string.Empty : "Opaque";
         TrackBar.SetResourceReference(Border.BackgroundProperty, "RailTrackBrush" + suffix);
         Ticks.SetResourceReference(RailTickLayer.FillProperty, "RailMarkTickBrush" + suffix);
+        NoteTicks.SetResourceReference(RailTickLayer.FillProperty, "RailNoteTickBrush" + suffix);
         PreviewBubble.SetResourceReference(Border.BackgroundProperty, "RailPreviewBackgroundBrush" + suffix);
         if (transparent)
         {
@@ -539,30 +540,38 @@ public partial class ScrollRail : UserControl
         }
 
         var marks = _marks?.Marks ?? [];
+        var notes = _marks?.Notes ?? [];
         var layout = _model?.Layout;
         var window = layout is not null ? _model!.WindowHeightPt : 0;
-        var inputs = new TickInputs(marks, layout, window, TrackLength, KnobHeight);
+        var inputs = new TickInputs(marks, notes, layout, window, TrackLength, KnobHeight);
         if (inputs == _tickInputs)
         {
             return;
         }
 
         _tickInputs = inputs;
-        if (layout is null || marks.Count == 0)
+        if (layout is null)
         {
             Ticks.SetCentres([]);
+            NoteTicks.SetCentres([]);
             return;
         }
 
+        Ticks.SetCentres(marks.Count == 0 ? [] : Centres(RailTickLayout.Positions(marks, layout, window, inputs.TrackLength)));
+        NoteTicks.SetCentres(notes.Count == 0 ? [] : Centres(RailTickLayout.NotePositions(notes, layout, window, inputs.TrackLength)));
+    }
+
+    /// <summary>Knob tops on the track to tick centres: the knob covers a tick when the view shows its mark or note.</summary>
+    private double[] Centres(IReadOnlyList<double> positions)
+    {
         var half = KnobHeight / 2;
-        var positions = RailTickLayout.Positions(marks, layout, window, inputs.TrackLength);
         var centres = new double[positions.Count];
         for (var i = 0; i < centres.Length; i++)
         {
             centres[i] = positions[i] + half;
         }
 
-        Ticks.SetCentres(centres);
+        return centres;
     }
 
     /// <summary>The knob at the position's fraction of the track (not while dragging: then it follows the pointer).</summary>
@@ -728,7 +737,12 @@ public partial class ScrollRail : UserControl
 
     /// <summary>What the ticks were last drawn from; the lists compare by reference (each refresh makes a new one).</summary>
     private readonly record struct TickInputs(
-        IReadOnlyList<Mark>? Marks, DocumentLayout? Layout, double WindowHeightPt, double TrackLength, double KnobHeight);
+        IReadOnlyList<Mark>? Marks,
+        IReadOnlyList<Note>? Notes,
+        DocumentLayout? Layout,
+        double WindowHeightPt,
+        double TrackLength,
+        double KnobHeight);
 
     private void OnGoToPageKeyDown(object sender, KeyEventArgs e)
     {

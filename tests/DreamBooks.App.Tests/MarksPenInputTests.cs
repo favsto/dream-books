@@ -139,8 +139,11 @@ public sealed class MarksPenInputTests : IDisposable
                 Settle(view);
                 LoadEditors(view);
                 DrawByHand(view.SurfaceFor(3)!, xPt: 575, topPt: 300, heightPt: 120, samples: 350, seed: 5);
+                WriteWord(view.SurfaceFor(3)!, xPt: 200, topPt: 310); // handwriting beside it: a note, not a mark
+                WriteWord(view.SurfaceFor(3)!, xPt: 260, topPt: 330);
                 PumpAtMost(() => vm.Marks.Count == 2, 2000);
                 Assert.Equal([0, 3], vm.MarkIndexForTest!.AllMarks().Select(m => m.PageIndex).ToArray());
+                Assert.Equal(2, Assert.Single(vm.MarkIndexForTest!.AllNotes()).StrokeIds.Count); // live: the two words, one note
                 Wait(vm.SaveCommand.ExecuteAsync(null));
                 Assert.Null(vm.ErrorMessage);
                 Assert.False(vm.IsDirty);
@@ -170,12 +173,27 @@ public sealed class MarksPenInputTests : IDisposable
                 view.Rail.NotifyActivity();
                 Settle(view);
                 Assert.Equal(2, view.Rail.Ticks.Centres.Count);
+                var note = Assert.Single(vm.MarkIndexForTest!.AllNotes()); // found by the scan on the unloaded page
+                Assert.Equal(3, note.PageIndex);
+                Assert.Equal(2, note.StrokeIds.Count);
+                Assert.Single(view.Rail.NoteTicks.Centres);
             }
             finally
             {
                 Close(vm, view);
             }
         });
+    }
+
+    /// <summary>A handwritten word: a quick zig-zag 30 pt wide and 10 pt tall, through the pen seams.</summary>
+    private static void WriteWord(InkSurface surface, double xPt, double topPt)
+    {
+        var scale = surface.Scale;
+        surface.BeginPenStroke(stylusId: 1, hasPressure: true);
+        surface.AppendPenPoints(
+            Enumerable.Range(0, 40).Select(i => new StylusPoint((xPt + (i * 0.75)) * scale, (topPt + (i % 8 < 4 ? i % 4 : 4 - (i % 4)) * 2.5) * scale, 0.6f)).ToArray(),
+            timestamp: 10);
+        surface.FinishPenStroke();
     }
 
     private static void Close(MainViewModel vm, DocumentView view)
