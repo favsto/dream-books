@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DreamBooks.Core.Documents;
 using DreamBooks.Core.Layout;
+using DreamBooks.Core.Model;
 
 namespace DreamBooks.App.ViewModels;
 
@@ -16,13 +17,16 @@ namespace DreamBooks.App.ViewModels;
 /// one reopened), so a thousand pages never raise a thousand collection events.</para>
 /// <para>Back history (FR-09): the panel stays open after a jump, so the reader may look at several pages in one visit
 /// of the list. Only the first jump of a visit (<see cref="BeginBrowsing"/>) records the position, so Back returns to
-/// where he was before opening the list.</para>
+/// where he was before opening the list. A tap on the current page never records (see <see cref="AtTopToleranceDip"/>).</para>
 /// <para><see cref="DocumentChanged"/> tells the view that every thumbnail is stale (another layout, or another mark
 /// index: a reopen without saving keeps the layout but not the ink); <see cref="InkChanged"/> passes on the strokes
 /// of a page changing (any thread).</para>
 /// </remarks>
 public sealed class PagesViewModel : ObservableObject
 {
+    /// <summary>A view whose top is this close to a page's top is at that page's top (a tap there does nothing).</summary>
+    public const double AtTopToleranceDip = 0.5;
+
     private readonly DocumentViewportViewModel _viewport;
     private readonly MarksViewModel _marks;
     private IReadOnlyList<PageItem> _pages = [];
@@ -74,6 +78,21 @@ public sealed class PagesViewModel : ObservableObject
     {
         if (item is null || _viewport.Layout is not { } layout || item.PageIndex >= layout.PageCount)
         {
+            return;
+        }
+
+        if (item.PageIndex == _viewport.CurrentPage)
+        {
+            // The page he is on: back to its top if he is further down, never a Back entry (it would spend the visit's
+            // one entry on a page he never left); nothing at all when he is at its top already.
+            var position = _viewport.Position;
+            var atTop = position.PageIndex == item.PageIndex
+                && Math.Abs(position.YPt * position.Zoom * Units.DipPerPt) <= AtTopToleranceDip;
+            if (!atTop)
+            {
+                _viewport.ScrollToPage(item.PageIndex, recordHistory: false);
+            }
+
             return;
         }
 

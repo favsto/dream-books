@@ -4,6 +4,7 @@ using DreamBooks.App.ViewModels;
 using DreamBooks.Core.Documents;
 using DreamBooks.Core.Layout;
 using DreamBooks.Core.Marks;
+using DreamBooks.Core.Model;
 
 namespace DreamBooks.App.Tests;
 
@@ -85,6 +86,34 @@ public sealed class PagesViewModelTests
         pages.GoToPageCommand.Execute(pages.Pages[9]);
         Assert.True(viewport.BackCommand.CanExecute(null));
         Assert.False(pages.GoToPageCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void A_tap_on_the_current_page_never_spends_the_visits_Back_entry()
+    {
+        var (viewport, _, pages, _) = Standalone(Enumerable.Repeat(new PageDimensions(612, 792), 10).ToArray());
+        viewport.ScrollToPage(3, recordHistory: false);
+        var jumps = 0;
+        viewport.Jumped += (_, _) => jumps++;
+
+        // Already at the top of the current page: nothing at all (no jump, no entry).
+        pages.BeginBrowsing();
+        pages.GoToPageCommand.Execute(pages.Pages[3]);
+        Assert.Equal(0, jumps);
+        Assert.False(viewport.BackCommand.CanExecute(null));
+
+        // Further down the current page: back to its top, still no entry; the visit's entry stays for a real jump.
+        viewport.SetScroll(0, (viewport.Layout!.PageTopPt(3) + 300) * Units.DipPerPt);
+        Assert.Equal(3, viewport.CurrentPage);
+        pages.GoToPageCommand.Execute(pages.Pages[3]);
+        Assert.Equal(1, jumps);
+        Assert.Equal((3, 0.0), (viewport.Position.PageIndex, viewport.Position.YPt));
+        Assert.False(viewport.BackCommand.CanExecute(null));
+
+        pages.GoToPageCommand.Execute(pages.Pages[8]);
+        Assert.Equal(8, viewport.Position.PageIndex);
+        viewport.BackCommand.Execute(null);
+        Assert.Equal(3, viewport.Position.PageIndex);
     }
 
     [Fact]
