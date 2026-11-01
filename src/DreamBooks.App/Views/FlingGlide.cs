@@ -3,9 +3,11 @@ using System.Windows;
 namespace DreamBooks.App.Views;
 
 /// <summary>
-/// A fling gliding on after the finger lifted: a velocity (DIP/ms, the direction the content moves) that slows at a
-/// constant deceleration, integrated once per rendered frame (<see cref="Step"/>), so the motion follows the screen's
-/// frames exactly. The integration is exact for constant deceleration (the last step ends where the speed reaches 0).
+/// A fling gliding on after the finger lifted: a velocity (DIP/ms, the direction the content moves) whose speed decays
+/// exponentially, <c>v(t) = v0·e^(−t/τ)</c>, until it falls below a minimum, integrated once per rendered frame
+/// (<see cref="Step"/>) so the motion follows the screen's frames. The integration is exact for any frame length
+/// (<c>τ·v·(1 − e^(−dt/τ))</c> per step; the last step ends where the speed reaches the minimum), so the distance and
+/// duration do not depend on the frame rate.
 /// </summary>
 internal sealed class FlingGlide
 {
@@ -17,7 +19,8 @@ internal sealed class FlingGlide
 
     private Vector _direction;
     private double _speed;
-    private double _deceleration;
+    private double _timeConstantMs;
+    private double _minSpeed;
     private TimeSpan? _last;
 
     public bool IsActive => _speed > 0;
@@ -25,10 +28,12 @@ internal sealed class FlingGlide
     /// <summary>The current velocity in DIP/ms; zero when stopped.</summary>
     public Vector Velocity => _direction * _speed;
 
-    public void Start(Vector velocity, double deceleration)
+    /// <summary>Starts from <paramref name="velocity"/>; nothing when it is not faster than <paramref name="minSpeed"/>.</summary>
+    public void Start(Vector velocity, double timeConstantMs, double minSpeed)
     {
         var speed = velocity.Length;
-        if (!double.IsFinite(speed) || speed <= 0 || !double.IsFinite(deceleration) || deceleration <= 0)
+        if (!double.IsFinite(speed) || !double.IsFinite(timeConstantMs) || timeConstantMs <= 0
+            || !double.IsFinite(minSpeed) || minSpeed <= 0 || speed <= minSpeed)
         {
             Stop();
             return;
@@ -36,7 +41,8 @@ internal sealed class FlingGlide
 
         _direction = velocity / speed;
         _speed = speed;
-        _deceleration = deceleration;
+        _timeConstantMs = timeConstantMs;
+        _minSpeed = minSpeed;
         _last = null;
     }
 
@@ -66,18 +72,18 @@ internal sealed class FlingGlide
 
         _last = now;
         var dt = Math.Min(elapsed.TotalMilliseconds, MaxStep.TotalMilliseconds);
-        var stopIn = _speed / _deceleration;
-        double distance;
+        var tau = _timeConstantMs;
+        var stopIn = tau * Math.Log(_speed / _minSpeed);
         if (dt >= stopIn)
         {
-            distance = _speed * stopIn / 2;
             var direction = _direction;
+            var rest = tau * (_speed - _minSpeed);
             Stop();
-            return direction * distance;
+            return direction * rest;
         }
 
-        var next = _speed - (_deceleration * dt);
-        distance = (_speed + next) / 2 * dt;
+        var next = _speed * Math.Exp(-dt / tau);
+        var distance = tau * (_speed - next);
         _speed = next;
         return _direction * distance;
     }

@@ -566,7 +566,7 @@ public sealed class MultiPageIntegrationTests : IDisposable
                 ScrollTo(view, view.Pages.PageRect(3).Top);
                 var before = vm.Viewport.Position;
 
-                Assert.True(view.StartGlide(new System.Windows.Vector(0, -4)));
+                Assert.True(view.StartGlide(new System.Windows.Vector(0, -8)));
                 var now = TimeSpan.FromSeconds(5);
                 for (var i = 0; view.IsGliding; i++)
                 {
@@ -576,7 +576,7 @@ public sealed class MultiPageIntegrationTests : IDisposable
                 }
 
                 var landed = vm.Viewport.Position;
-                Assert.True(landed.PageIndex > before.PageIndex + 2, $"{before} -> {landed}");
+                Assert.True(landed.PageIndex > before.PageIndex, $"{before} -> {landed}");
                 Assert.False(vm.Viewport.History.CanGoBack); // not a jump
 
                 scheduler.Advance(MainViewModel.ViewSettleDelay - TimeSpan.FromMilliseconds(1));

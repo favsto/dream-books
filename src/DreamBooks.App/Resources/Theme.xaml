@@ -53,17 +53,15 @@
     <SolidColorBrush x:Key="RailMarkTickBrushOpaque" Color="{DynamicResource {x:Static SystemColors.ControlTextColorKey}}" />
     <Thickness x:Key="RailIndicatorMargin">0,0,44,12</Thickness>
 
-    <!-- Finger fling (FR-05, NFR-03), read by FlingSettings: a pan released faster than FlingMinSpeed glides on and
-         slows at the constant FlingDeceleration until it stops, reaches the top or bottom, or anything touches.
-         Speeds in DIP/ms, deceleration in DIP/ms². Above FlingGainThreshold the launch speed is the release speed times
-         1 + FlingGainPerSpeed × (speed − threshold), capped at FlingMaxSpeed, so hard flicks go proportionally further:
-         a release at 1 DIP/ms glides 250 DIP (0.5 s), at 3 DIP/ms 3,240 DIP (1.8 s, about 2-3 pages at fit width),
-         at 8 DIP/ms 46,240 DIP (6.8 s, about 25-37 pages); the cap allows at most 64,000 DIP (8 s). -->
-    <sys:Double x:Key="FlingDeceleration">0.002</sys:Double>
-    <sys:Double x:Key="FlingMinSpeed">0.2</sys:Double>
-    <sys:Double x:Key="FlingGainThreshold">1</sys:Double>
-    <sys:Double x:Key="FlingGainPerSpeed">0.1</sys:Double>
-    <sys:Double x:Key="FlingMaxSpeed">16</sys:Double>
+    <!-- Finger fling (FR-05, NFR-03), read by FlingSettings: a pan released faster than FlingMinSpeed glides on, its
+         speed decaying like a phone's, v(t) = v0·e^(−t/τ) with τ = FlingDecayTimeConstant (ms), until it falls below
+         FlingMinSpeed, reaches the top or bottom, or anything touches. Speeds in DIP/ms; the launch speed is the release
+         speed (no gain), capped at FlingMaxSpeed. Distance τ·(v0 − vmin), duration τ·ln(v0/vmin): a release at
+         1 DIP/ms glides 309 DIP (0.97 s), 3 DIP/ms 959 DIP (1.33 s), 8 DIP/ms 2,584 DIP (1.65 s); the cap allows at
+         most 3,234 DIP (1.72 s, about 2-2.5 pages at fit width). -->
+    <sys:Double x:Key="FlingDecayTimeConstant">325</sys:Double>
+    <sys:Double x:Key="FlingMinSpeed">0.05</sys:Double>
+    <sys:Double x:Key="FlingMaxSpeed">10</sys:Double>
 
     <!-- Left-edge panel (UI-04, phase 3b; hosts the marks list, later the Pages tab): 320 DIP wide, slides in from the
          left in 180 ms ease-out and out in 120 ms ease-in (the panel timings of section 4), instant when Windows

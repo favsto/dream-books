@@ -974,7 +974,7 @@ public sealed class DocumentViewTests : IDisposable
             Assert.True(view.StartGlide(new Vector(0, -0.3)));
             var now = TimeSpan.FromSeconds(10);
             view.AdvanceGlide(now); // the first frame
-            for (var i = 0; i < 400 && view.IsGliding; i++)
+            for (var i = 0; i < 2000 && view.IsGliding; i++)
             {
                 now += TimeSpan.FromMilliseconds(1); // every step well under half a DIP
                 view.AdvanceGlide(now);
@@ -992,7 +992,8 @@ public sealed class DocumentViewTests : IDisposable
         {
             ScrollTo(view, 5000);
             Assert.False(view.StartGlide(new Vector(0, -3), afterPinch: true)); // no zoom inertia, no pan after a pinch
-            Assert.False(view.StartGlide(new Vector(0, -0.1)));
+            Assert.False(view.StartGlide(new Vector(0, -0.04)));
+            Assert.False(view.StartGlide(new Vector(0, -3), restedFor: TimeSpan.FromMilliseconds(150))); // the finger rested before the lift
             vm.ZoomVm.IsLocked = true;
             Assert.False(view.StartGlide(new Vector(0, -3)));
             vm.ZoomVm.IsLocked = false;
@@ -1100,7 +1101,7 @@ public sealed class DocumentViewTests : IDisposable
         await WithViewAsync((vm, view) =>
         {
             Assert.Equal(FlingSettings.From(key => Application.Current.TryFindResource(key)), view.Fling);
-            Assert.Equal(new FlingSettings(0.002, 0.2, 1, 0.1, 16), view.Fling);
+            Assert.Equal(new FlingSettings(325, 0.05, 10), view.Fling);
         });
     }
 

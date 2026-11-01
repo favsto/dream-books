@@ -65,6 +65,12 @@ public partial class DocumentView : UserControl
     /// <summary>How close to an end of the document (DIPs) a glide counts as having reached it.</summary>
     private const double _glideEdgeDip = 1e-3;
 
+    /// <summary>A manipulation step shorter than this (DIPs) is a resting finger's jitter, not a move.</summary>
+    private const double _restMoveDip = 0.5;
+
+    /// <summary>WPF's own inertia gets zero velocity; it still wants a deceleration (any, it never moves anything).</summary>
+    private const double _wpfInertiaDeceleration = 1;
+
     private readonly Dictionary<int, PageSlot> _slots = [];
     private readonly HashSet<int> _touches = [];
     private readonly DispatcherTimer _editorTimer;
@@ -87,6 +93,7 @@ public partial class DocumentView : UserControl
     private FlingSettings? _fling;
     private bool _framesHooked;
     private bool _gestureZoomed;
+    private int? _lastMoveTimestamp;
 
     public DocumentView()
     {
@@ -702,6 +709,7 @@ public partial class DocumentView : UserControl
     {
         StopGlide(); // a finger came down: like on every phone, the glide stops under it
         _gestureZoomed = false;
+        _lastMoveTimestamp = null;
         e.ManipulationContainer = Viewport;
         e.Mode = ManipulationModes.Translate | ManipulationModes.Scale;
         e.Handled = true;
@@ -719,25 +727,34 @@ public partial class DocumentView : UserControl
         var delta = e.DeltaManipulation;
         var scale = (delta.Scale.X + delta.Scale.Y) / 2;
         _gestureZoomed |= Math.Abs(scale - 1) > _minScaleDelta;
+        if (delta.Translation.Length >= _restMoveDip)
+        {
+            _lastMoveTimestamp = e.Timestamp; // jitter of a resting finger does not count as moving
+        }
+
         ApplyManipulation(delta.Translation, scale, e.ManipulationOrigin);
     }
 
     /// <summary>
-    /// The fingers lifted: the pan glides on from the release velocity (<see cref="StartGlide"/>); a pinch ends where
-    /// it is (no zoom inertia, no pan glide). WPF's own inertia is given nothing to do: it advances on a dispatcher
-    /// timer out of step with the screen's frames (judder at reading speeds), so the glide is integrated once per
-    /// rendered frame instead, with the same constant-deceleration physics.
+    /// The fingers lifted: the pan glides on from the release velocity (<see cref="StartGlide"/>), unless the finger
+    /// rested before lifting (the time since its last real move, from the input timestamps); a pinch ends where it is
+    /// (no zoom inertia, no pan glide). WPF's own inertia is given nothing to do: it advances on a dispatcher timer out
+    /// of step with the screen's frames (judder at reading speeds), so the glide is integrated once per rendered frame.
     /// </summary>
     private void OnManipulationInertiaStarting(object? sender, ManipulationInertiaStartingEventArgs e)
     {
         e.Handled = true;
         var release = e.InitialVelocities.LinearVelocity;
-        var deceleration = Fling.Deceleration;
         e.TranslationBehavior.InitialVelocity = default;
-        e.TranslationBehavior.DesiredDeceleration = deceleration;
+        e.TranslationBehavior.DesiredDeceleration = _wpfInertiaDeceleration;
         e.ExpansionBehavior.InitialVelocity = default;
-        e.ExpansionBehavior.DesiredDeceleration = deceleration;
-        StartGlide(release, afterPinch: _gestureZoomed);
+        e.ExpansionBehavior.DesiredDeceleration = _wpfInertiaDeceleration;
+
+        // Never moved: a tap, no fling. A clock that looks wrong (negative) is ignored: the release velocity is used.
+        var rested = _lastMoveTimestamp is { } moved
+            ? TimeSpan.FromMilliseconds(Math.Max(0, unchecked(e.Timestamp - moved)))
+            : TimeSpan.MaxValue;
+        StartGlide(release, afterPinch: _gestureZoomed, restedFor: rested);
     }
 
     /// <summary>The fling settings from the theme dictionary (<see cref="FlingSettings.From"/>).</summary>
@@ -748,11 +765,12 @@ public partial class DocumentView : UserControl
 
     /// <summary>
     /// Starts a fling from the finger's velocity at the lift (DIP/ms, the direction the content moves) at the
-    /// <see cref="Fling"/> launch speed. Nothing after a pinch, for a lift slower than the minimum, without a document,
-    /// while the zoom is locked or a page is inking. Rendered frames advance it (<see cref="AdvanceGlide"/>) while the
-    /// view is on screen. True when a glide started.
+    /// <see cref="Fling"/> launch speed (capped). Nothing after a pinch, for a lift slower than the minimum, after the
+    /// finger rested longer than <see cref="FlingSettings.StaleRelease"/> (<paramref name="restedFor"/>), without a
+    /// document, while the zoom is locked or a page is inking. Rendered frames advance it (<see cref="AdvanceGlide"/>)
+    /// while the view is on screen. True when a glide started.
     /// </summary>
-    internal bool StartGlide(Vector releaseVelocity, bool afterPinch = false)
+    internal bool StartGlide(Vector releaseVelocity, bool afterPinch = false, TimeSpan restedFor = default)
     {
         StopGlide();
         if (afterPinch || _viewModel is not { Viewport.Layout: not null } vm || vm.ZoomVm.IsLocked || AnyInking())
@@ -760,13 +778,13 @@ public partial class DocumentView : UserControl
             return false;
         }
 
-        var launch = Fling.LaunchVelocity(releaseVelocity);
+        var launch = Fling.LaunchVelocity(releaseVelocity, restedFor);
         if (launch == default)
         {
             return false;
         }
 
-        _glide.Start(launch, Fling.Deceleration);
+        _glide.Start(launch, Fling.DecayTimeConstantMs, Fling.MinSpeed);
         HookFrames(true);
         return true;
     }
