@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace DreamBooks.Core.Marks;
 
 /// <summary>
@@ -6,8 +8,9 @@ namespace DreamBooks.Core.Marks;
 /// the centre page first, then alternating outward (the following page before the preceding one).
 /// </summary>
 /// <remarks>
-/// <para>The scan runs on a pool thread and never has more than one load in flight. Between pages it yields
-/// (<c>idleGap</c>, default 5 ms) and it parks while <see cref="Pause"/> is in effect or <c>isBusy</c> returns
+/// <para>The scan runs on a pool thread and never has more than one load in flight. Between pages it yields;
+/// after each slice of work (<c>workSlice</c>, default 10 ms) it rests (<c>idleGap</c>, default 5 ms, in practice
+/// at least one timer tick), so cheap pages are not each charged a whole timer tick; and it parks while <see cref="Pause"/> is in effect or <c>isBusy</c> returns
 /// true (polled every 20 ms while parked), so that inking, scrolling, rendering and saving are not delayed.
 /// A load already in flight when the scan is paused or disposed is finished (paused) or abandoned (disposed),
 /// never cut short: the source's own work is awaited so that nothing it does goes unobserved.</para>
@@ -24,6 +27,7 @@ namespace DreamBooks.Core.Marks;
 public sealed class MarkScanner : IDisposable
 {
     private static readonly TimeSpan _defaultIdleGap = TimeSpan.FromMilliseconds(5);
+    private static readonly TimeSpan _defaultWorkSlice = TimeSpan.FromMilliseconds(10);
     private static readonly TimeSpan _busyPollInterval = TimeSpan.FromMilliseconds(20);
 
     private readonly IMarkPageSource _source;
@@ -31,6 +35,7 @@ public sealed class MarkScanner : IDisposable
     private readonly MarkIndex _index;
     private readonly Func<bool>? _isBusy;
     private readonly TimeSpan _idleGap;
+    private readonly TimeSpan _workSlice;
     private readonly CancellationTokenSource _cts = new();
     private readonly object _gate = new();
 
@@ -51,7 +56,8 @@ public sealed class MarkScanner : IDisposable
         MarkRecognizer recognizer,
         MarkIndex index,
         Func<bool>? isBusy = null,
-        TimeSpan? idleGap = null)
+        TimeSpan? idleGap = null,
+        TimeSpan? workSlice = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(recognizer);
@@ -61,11 +67,17 @@ public sealed class MarkScanner : IDisposable
             throw new ArgumentOutOfRangeException(nameof(idleGap), "The idle gap cannot be negative.");
         }
 
+        if (workSlice is { } slice && slice < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(workSlice), "The work slice cannot be negative.");
+        }
+
         _source = source;
         _recognizer = recognizer;
         _index = index;
         _isBusy = isBusy;
         _idleGap = idleGap ?? _defaultIdleGap;
+        _workSlice = workSlice ?? _defaultWorkSlice;
     }
 
     /// <summary>Raised on the scan's thread after each page, including skipped and failed ones.</summary>
@@ -206,11 +218,13 @@ public sealed class MarkScanner : IDisposable
     {
         try
         {
+            var sliceStart = Stopwatch.GetTimestamp();
             while (true)
             {
                 ct.ThrowIfCancellationRequested();
                 if (await ParkIfNeededAsync(ct))
                 {
+                    sliceStart = Stopwatch.GetTimestamp(); // parked: that was a rest
                     continue; // look again: paused or busy may have changed, or the scan was disposed
                 }
 
@@ -230,9 +244,13 @@ public sealed class MarkScanner : IDisposable
                 await ScanPageAsync(page, ct);
                 Interlocked.Increment(ref _processed);
                 RaiseProgress();
-                if (_idleGap > TimeSpan.Zero)
+
+                // The rest comes after a slice of work, not after every page: a short Task.Delay lasts a whole timer
+                // tick (~15.6 ms on Windows), many times the cost of a page without annotations.
+                if (_idleGap > TimeSpan.Zero && Stopwatch.GetElapsedTime(sliceStart) >= _workSlice)
                 {
                     await Task.Delay(_idleGap, ct);
+                    sliceStart = Stopwatch.GetTimestamp();
                 }
                 else
                 {

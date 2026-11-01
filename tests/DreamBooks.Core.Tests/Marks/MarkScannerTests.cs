@@ -308,6 +308,46 @@ public class MarkScannerTests
     }
 
     [Fact]
+    public async Task Cheap_pages_are_scanned_back_to_back_and_the_idle_gap_comes_once_per_slice_of_work()
+    {
+        // Regression (Task 8, real book): a gap after every page made a 1,076-page scan take ~17 s for ~0.6 s of
+        // work, because a short Task.Delay lasts a whole timer tick (~15.6 ms on Windows) whatever it asks for.
+        var source = new FakeMarkPageSource(200);
+        var index = new MarkIndex(200);
+        using var scanner = new MarkScanner(source, new MarkRecognizer(), index, idleGap: TimeSpan.FromMilliseconds(50));
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        scanner.Start(0);
+        await WaitUntilAsync(() => scanner.IsCompleted);
+        watch.Stop();
+
+        Assert.Equal(200, index.ScannedCount);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(3), $"200 instant pages took {watch.ElapsedMilliseconds} ms (one rest per slice expected)");
+    }
+
+    [Fact]
+    public async Task Pages_whose_work_fills_a_slice_still_get_the_idle_gap_after_them()
+    {
+        var source = new FakeMarkPageSource(8) { Gate = _ => Task.Delay(20) };
+        var index = new MarkIndex(8);
+        using var scanner = new MarkScanner(
+            source, new MarkRecognizer(), index, idleGap: TimeSpan.FromMilliseconds(60), workSlice: TimeSpan.FromMilliseconds(10));
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        scanner.Start(0);
+        await WaitUntilAsync(() => scanner.IsCompleted);
+        watch.Stop();
+
+        Assert.Equal(8, index.ScannedCount);
+        Assert.True(watch.Elapsed >= TimeSpan.FromMilliseconds(7 * 60), $"8 slow pages took only {watch.ElapsedMilliseconds} ms");
+    }
+
+    [Fact]
+    public void A_negative_work_slice_is_rejected() =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => new MarkScanner(
+            new FakeMarkPageSource(1), new MarkRecognizer(), new MarkIndex(1), workSlice: TimeSpan.FromMilliseconds(-1)));
+
+    [Fact]
     public async Task No_unobserved_task_exceptions()
     {
         var unobserved = 0;
