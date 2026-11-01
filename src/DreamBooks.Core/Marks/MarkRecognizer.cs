@@ -2,26 +2,52 @@ using DreamBooks.Core.Model;
 
 namespace DreamBooks.Core.Marks;
 
-/// <summary>Turns the ink strokes of one page into marks (margin lines, FR-100, FR-104).</summary>
+/// <summary>
+/// Turns the ink strokes of one page into marks (margin lines, FR-100, FR-104) and notes (every other stroke, grouped,
+/// FR-101).
+/// </summary>
 public sealed class MarkRecognizer(IPageLineMetrics? metrics = null)
 {
     private readonly IPageLineMetrics _metrics = metrics ?? new FixedLineMetrics();
 
+    /// <summary>The page's marks, ordered by top (then side).</summary>
     public IReadOnlyList<Mark> Recognize(int pageIndex, double pageWidthPt, IReadOnlyList<InkStroke> strokes)
+        => RecognizePage(pageIndex, pageWidthPt, strokes).Marks;
+
+    /// <summary>
+    /// The page's marks and notes in one pass over its strokes (the scan and the live tracker read a page once for
+    /// both). Every stroke that is not a margin line, pen or highlighter, belongs to a note: they are taken from the top
+    /// and a gap of more than <see cref="MarkRules.NoteGapLines"/> lines starts a new note; a note smaller than
+    /// <see cref="MarkRules.NoteMinSizeLines"/> in both directions (a dot, a tap) is dropped. Notes are ordered by top,
+    /// their stroke ids by top (then by z-order). An invalid page width or line height throws
+    /// <see cref="ArgumentOutOfRangeException"/>.
+    /// </summary>
+    public (IReadOnlyList<Mark> Marks, IReadOnlyList<Note> Notes) RecognizePage(
+        int pageIndex, double pageWidthPt, IReadOnlyList<InkStroke> strokes)
     {
         ArgumentNullException.ThrowIfNull(strokes);
         ValidateWidth(pageWidthPt);
         var line = ValidLineHeight(pageIndex);
 
         var lines = new List<(MarkSide Side, double Top, double Bottom, Guid Id)>();
+        var others = new List<InkStroke>();
         foreach (var s in strokes)
         {
             if (TryMarginLine(s, pageWidthPt, line, out var side, out var top, out var bottom))
             {
                 lines.Add((side, top, bottom, s.Id));
             }
+            else
+            {
+                others.Add(s);
+            }
         }
 
+        return (MergeLines(pageIndex, line, lines), GroupNotes(pageIndex, line, others));
+    }
+
+    private static List<Mark> MergeLines(int pageIndex, double line, List<(MarkSide Side, double Top, double Bottom, Guid Id)> lines)
+    {
         var marks = new List<Mark>();
         foreach (var group in lines.GroupBy(l => l.Side))
         {
@@ -50,6 +76,69 @@ public sealed class MarkRecognizer(IPageLineMetrics? metrics = null)
         }
 
         return marks.OrderBy(m => m.TopPt).ThenBy(m => m.Side).ToList();
+    }
+
+    private static List<Note> GroupNotes(int pageIndex, double line, List<InkStroke> strokes)
+    {
+        var boxes = strokes
+            .Select((s, z) => (Stroke: s, Z: z, Box: Bounds(s)))
+            .OrderBy(b => b.Box.MinY)
+            .ThenBy(b => b.Z)
+            .ToList();
+        var notes = new List<Note>();
+        var ids = new List<Guid>();
+        double minX = 0, maxX = 0, top = 0, bottom = 0;
+        foreach (var (stroke, _, box) in boxes)
+        {
+            if (ids.Count > 0 && box.MinY - bottom > MarkRules.NoteGapLines * line)
+            {
+                AddNote();
+                ids = [];
+            }
+
+            if (ids.Count == 0)
+            {
+                (minX, maxX, top, bottom) = (box.MinX, box.MaxX, box.MinY, box.MaxY);
+            }
+            else
+            {
+                minX = Math.Min(minX, box.MinX);
+                maxX = Math.Max(maxX, box.MaxX);
+                bottom = Math.Max(bottom, box.MaxY);
+            }
+
+            ids.Add(stroke.Id);
+        }
+
+        if (ids.Count > 0)
+        {
+            AddNote();
+        }
+
+        return notes;
+
+        void AddNote()
+        {
+            var min = MarkRules.NoteMinSizeLines * line;
+            if (maxX - minX >= min || bottom - top >= min)
+            {
+                notes.Add(new Note(pageIndex, top, bottom, ids));
+            }
+        }
+    }
+
+    private static (double MinX, double MaxX, double MinY, double MaxY) Bounds(InkStroke s)
+    {
+        double minX = double.MaxValue, maxX = double.MinValue, minY = double.MaxValue, maxY = double.MinValue;
+        foreach (var p in s.Points)
+        {
+            minX = Math.Min(minX, p.X);
+            maxX = Math.Max(maxX, p.X);
+            minY = Math.Min(minY, p.Y);
+            maxY = Math.Max(maxY, p.Y);
+        }
+
+        return (minX, maxX, minY, maxY);
     }
 
     /// <summary>

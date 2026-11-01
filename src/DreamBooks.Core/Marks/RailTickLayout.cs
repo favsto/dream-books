@@ -26,13 +26,27 @@ public static class RailTickLayout
         IReadOnlyList<Mark> marks, DocumentLayout layout, double windowHeightPt, double trackLengthDip, double mergeDip = 1)
     {
         ArgumentNullException.ThrowIfNull(marks);
+        return Positions(marks.Select(m => (m.PageIndex, m.TopPt, m.BottomPt)).ToArray(), layout, windowHeightPt, trackLengthDip, mergeDip);
+    }
+
+    /// <summary>The notes' ticks (FR-101): the same mapping and merging as the marks', on their own.</summary>
+    public static IReadOnlyList<double> NotePositions(
+        IReadOnlyList<Note> notes, DocumentLayout layout, double windowHeightPt, double trackLengthDip, double mergeDip = 1)
+    {
+        ArgumentNullException.ThrowIfNull(notes);
+        return Positions(notes.Select(n => (n.PageIndex, n.TopPt, n.BottomPt)).ToArray(), layout, windowHeightPt, trackLengthDip, mergeDip);
+    }
+
+    private static IReadOnlyList<double> Positions(
+        (int PageIndex, double TopPt, double BottomPt)[] marks, DocumentLayout layout, double windowHeightPt, double trackLengthDip, double mergeDip)
+    {
         ArgumentNullException.ThrowIfNull(layout);
         if (!double.IsFinite(mergeDip) || mergeDip <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(mergeDip), mergeDip, "The merge distance must be positive.");
         }
 
-        if (marks.Count == 0 || !double.IsFinite(trackLengthDip))
+        if (marks.Length == 0 || !double.IsFinite(trackLengthDip))
         {
             return [];
         }
@@ -40,7 +54,7 @@ public static class RailTickLayout
         var track = Math.Max(0, trackLengthDip);
         var window = double.IsFinite(windowHeightPt) ? Math.Max(0, windowHeightPt) : 0;
         var scrollablePt = layout.TotalHeightPt - window;
-        var raw = new List<double>(marks.Count);
+        var raw = new List<double>(marks.Length);
         foreach (var mark in marks)
         {
             if (mark.PageIndex < 0 || mark.PageIndex >= layout.PageCount)
@@ -48,7 +62,7 @@ public static class RailTickLayout
                 continue;
             }
 
-            var fraction = scrollablePt > 0 ? Math.Clamp(MarkTarget.TopPt(mark, layout, window) / scrollablePt, 0, 1) : 0;
+            var fraction = scrollablePt > 0 ? Math.Clamp(MarkTarget.TopPt(mark.PageIndex, mark.TopPt, mark.BottomPt, layout, window) / scrollablePt, 0, 1) : 0;
             raw.Add(fraction * track);
         }
 

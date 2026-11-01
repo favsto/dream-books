@@ -151,4 +151,21 @@ public class RailTickLayoutTests
         Assert.Equal(0, MarkTarget.TopPt(M(0, 10, 20), layout, 500), 9); // clamped to the document
         Assert.Equal(layout.PageTopPt(2) + 100, MarkTarget.TopPt(M(2, 100, 200), layout, 0), 9); // no window yet
     }
+
+    [Fact]
+    public void Notes_get_the_same_target_and_position_as_a_mark_of_the_same_extent_and_merge_among_themselves()
+    {
+        var layout = Layout(10);
+        var mark = M(4, 300, 380);
+        var note = new Note(4, 300, 380, [Guid.NewGuid()]);
+        Assert.Equal(MarkTarget.TopPt(mark, layout, _windowPt), MarkTarget.TopPt(note, layout, _windowPt));
+
+        var notes = new[] { note, new Note(4, 300.1, 380.1, [Guid.NewGuid()]), new Note(8, 50, 60, [Guid.NewGuid()]) };
+        var positions = RailTickLayout.NotePositions(notes, layout, _windowPt, _track);
+        Assert.Equal(2, positions.Count); // the first two are a fraction of a DIP apart: one tick
+        Assert.Equal(RailTickLayout.Positions([mark], layout, _windowPt, _track)[0], positions[0], 9);
+        Assert.Equal(KnobTop(layout, mark), positions[0], 6);
+        Assert.Empty(RailTickLayout.NotePositions(Array.Empty<Note>(), layout, _windowPt, _track));
+        Assert.Empty(RailTickLayout.NotePositions([new Note(10, 0, 10, [])], layout, _windowPt, _track)); // outside the layout
+    }
 }

@@ -401,4 +401,28 @@ public class MarkScannerTests
             TaskScheduler.UnobservedTaskException -= OnUnobserved;
         }
     }
+
+    [Fact]
+    public async Task One_read_per_page_gives_both_its_marks_and_its_notes()
+    {
+        var word = new InkStroke(
+            Guid.NewGuid(),
+            InkTool.Pen,
+            InkColor.FromRgb(0, 0, 0),
+            1.5,
+            Enumerable.Range(0, 12).Select(i => new InkPoint(200 + (i * 2.5), i % 2 == 0 ? 400 : 412, 0.5f, null, null, null, i)).ToArray());
+        var line = MarginLine();
+        var source = new FakeMarkPageSource(4) { Strokes = p => p == 2 ? new PageStrokes([line, word], 0) : null };
+        var index = new MarkIndex(4);
+        using var scanner = Create(source, index);
+
+        scanner.Start(0);
+        await scanner.WhenIdleAsync().WaitAsync(_timeout);
+
+        Assert.Equal(4, source.Loads.Count); // each page read once
+        Assert.Equal([line.Id], Assert.Single(index.MarksOnPage(2)).StrokeIds);
+        Assert.Equal([word.Id], Assert.Single(index.NotesOnPage(2)).StrokeIds);
+        Assert.Equal(1, index.TotalNoteCount);
+        Assert.Equal(4, index.ScannedCount);
+    }
 }

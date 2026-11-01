@@ -3,7 +3,7 @@ using DreamBooks.Core.Documents;
 namespace DreamBooks.Core.Marks;
 
 /// <summary>
-/// Keeps the <see cref="MarkIndex"/> in step with the pages loaded in a <see cref="DocumentSession"/>: every
+/// Keeps the <see cref="MarkIndex"/> (marks and notes) in step with the pages loaded in a <see cref="DocumentSession"/>: every
 /// stroke change on a loaded page (draw, erase, undo, redo) and every page that finishes loading re-recognises
 /// that page from its in-memory strokes and replaces its marks (FR-100, FR-101, FR-104). Pages loaded before
 /// the tracker was created are recognised by the constructor. Nothing is loaded from the PDF.
@@ -123,7 +123,7 @@ public sealed class MarkTracker : IDisposable
         }
 
         var page = ensure.Result;
-        var marks = _recognizer.Recognize(pageIndex, page.WidthPt, page.Strokes);
-        _index.SetPage(pageIndex, marks);
+        var (marks, notes) = _recognizer.RecognizePage(pageIndex, page.WidthPt, page.Strokes);
+        _index.SetPage(pageIndex, marks, notes);
     }
 }

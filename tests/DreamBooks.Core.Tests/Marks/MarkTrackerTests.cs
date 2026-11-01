@@ -141,4 +141,44 @@ public class MarkTrackerTests
         Assert.Empty(index.MarksOnPage(0));
         Assert.False(index.IsScanned(1));
     }
+
+    private static void DrawWord(PageEditor editor, double x, double y)
+        => Assert.True(editor.CommitStroke(
+            Enumerable.Range(0, 12).Select(i => new InkPoint(x + (i * 2.5), i % 2 == 0 ? y : y + 12, 0.5f, null, null, null, i)).ToArray(),
+            InkTool.Pen,
+            _black,
+            1.5));
+
+    [Fact]
+    public async Task Handwriting_drawn_erased_undone_and_redone_keeps_the_notes_in_step_and_the_marks_apart()
+    {
+        using var session = Open(new FakePageSource(2));
+        var index = new MarkIndex(2);
+        using var tracker = new MarkTracker(session, new MarkRecognizer(), index);
+        var editor = await session.EnsureEditorAsync(1);
+        Assert.True(index.IsScanned(1));
+        Assert.Empty(index.NotesOnPage(1));
+
+        DrawLine(editor, 30, 100, 260);
+        DrawWord(editor, 200, 400);
+        var note = Assert.Single(index.NotesOnPage(1));
+        Assert.Equal([editor.Page.Strokes[1].Id], note.StrokeIds);
+        Assert.Equal(400, note.TopPt);
+        Assert.Single(index.MarksOnPage(1)); // the margin line stays a mark, not a note
+
+        DrawWord(editor, 260, 430); // close below: the same note grows
+        Assert.Equal(442, Assert.Single(index.NotesOnPage(1)).BottomPt);
+
+        var eraser = editor.BeginErase(EraserMode.WholeStroke);
+        Assert.True(eraser.MoveTo(new PointD(205, 406), 4));
+        Assert.True(eraser.MoveTo(new PointD(265, 436), 4));
+        Assert.True(eraser.Complete());
+        Assert.Empty(index.NotesOnPage(1));
+        Assert.Single(index.MarksOnPage(1));
+
+        Assert.True(await session.UndoAsync());
+        Assert.Equal(442, Assert.Single(index.NotesOnPage(1)).BottomPt);
+        Assert.True(await session.RedoAsync());
+        Assert.Empty(index.NotesOnPage(1));
+    }
 }

@@ -41,4 +41,13 @@ public static class MarkRules
 
     /// <summary>How far beyond the margin zone a margin note may reach, as a fraction of the page width.</summary>
     public const double NoteReachFraction = 0.25;
+
+    /// <summary>
+    /// Notes on the rail (FR-101): the largest vertical gap between strokes that are not margin lines that still keeps
+    /// them in one note, in text lines (horizontal position does not matter).
+    /// </summary>
+    public const double NoteGapLines = 4;
+
+    /// <summary>A note smaller than this in both directions (a dot, a tap of the pen) is ignored, in text lines.</summary>
+    public const double NoteMinSizeLines = 0.5;
 }

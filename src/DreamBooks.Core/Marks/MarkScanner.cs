@@ -332,13 +332,13 @@ public sealed class MarkScanner : IDisposable
         {
             var strokes = await _source.TryLoadStrokesForScanAsync(page, ct);
             ct.ThrowIfCancellationRequested();
-            IReadOnlyList<Mark> marks = strokes is null
-                ? []
-                : _recognizer.Recognize(page, _source.GetPageDimensions(page).WidthPt, strokes.Strokes);
+            var (marks, notes) = strokes is null
+                ? ([], [])
+                : _recognizer.RecognizePage(page, _source.GetPageDimensions(page).WidthPt, strokes.Strokes);
             ct.ThrowIfCancellationRequested();
 
             // Throws ArgumentOutOfRangeException for a page past the end of a smaller index: counted as failed.
-            _index.TrySetPageIfUnscanned(page, marks);
+            _index.TrySetPageIfUnscanned(page, marks, notes);
         }
         catch (Exception) when (!ct.IsCancellationRequested)
         {
