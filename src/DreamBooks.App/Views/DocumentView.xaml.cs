@@ -301,6 +301,7 @@ public partial class DocumentView : UserControl
         _viewModel = viewModel;
         Rail.Model = viewModel?.Viewport;
         Rail.Marks = viewModel?.Marks;
+        Rail.Search = viewModel?.Search;
         _pool = NewPool(viewModel);
         _pendingOffsets = null;
         _requestedFrom = viewModel?.Renderer;

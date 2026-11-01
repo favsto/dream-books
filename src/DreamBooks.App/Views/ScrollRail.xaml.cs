@@ -13,6 +13,7 @@ using DreamBooks.App.Services;
 using DreamBooks.App.ViewModels;
 using DreamBooks.Core.Layout;
 using DreamBooks.Core.Marks;
+using DreamBooks.Core.Search;
 using DreamBooks.Pdf;
 using Microsoft.Win32;
 
@@ -48,6 +49,8 @@ public partial class ScrollRail : UserControl
     private readonly DispatcherTimer _idleTimer;
     private DocumentViewportViewModel? _model;
     private MarksViewModel? _marks;
+    private SearchViewModel? _search;
+    private IReadOnlyList<SearchHit> _searchHits = [];
     private TickInputs _tickInputs;
     private RailTimings? _timings;
     private bool _rendering;
@@ -162,6 +165,36 @@ public partial class ScrollRail : UserControl
             }
 
             UpdateTicks();
+        }
+    }
+
+    /// <summary>
+    /// The search whose results are drawn as ticks on the track (FR-105); set by <see cref="DocumentView"/>. The ticks
+    /// follow its throttled <c>Refreshed</c> (raised on the UI thread), which also comes when the index is replaced (a
+    /// new query) or cleared (no search, another document).
+    /// </summary>
+    internal SearchViewModel? Search
+    {
+        get => _search;
+        set
+        {
+            if (ReferenceEquals(value, _search))
+            {
+                return;
+            }
+
+            if (_search is { } old)
+            {
+                old.Refreshed -= OnSearchRefreshed;
+            }
+
+            _search = value;
+            if (value is not null)
+            {
+                value.Refreshed += OnSearchRefreshed;
+            }
+
+            OnSearchRefreshed(this, EventArgs.Empty);
         }
     }
 
@@ -450,6 +483,7 @@ public partial class ScrollRail : UserControl
         TrackBar.SetResourceReference(Border.BackgroundProperty, "RailTrackBrush" + suffix);
         Ticks.SetResourceReference(RailTickLayer.FillProperty, "RailMarkTickBrush" + suffix);
         NoteTicks.SetResourceReference(RailTickLayer.FillProperty, "RailNoteTickBrush" + suffix);
+        SearchTicks.SetResourceReference(RailTickLayer.FillProperty, "RailSearchTickBrush" + suffix);
         PreviewBubble.SetResourceReference(Border.BackgroundProperty, "RailPreviewBackgroundBrush" + suffix);
         if (transparent)
         {
@@ -609,6 +643,16 @@ public partial class ScrollRail : UserControl
     private void OnMarksRefreshed(object? sender, EventArgs e) => UpdateTicks();
 
     /// <summary>
+    /// The search's results were re-read (throttled), or its index replaced or cleared: a new snapshot of its hits (a
+    /// truncated search keeps what it found), drawn now if the rail is shown, else when it shows.
+    /// </summary>
+    private void OnSearchRefreshed(object? sender, EventArgs e)
+    {
+        _searchHits = _search?.Index?.AllHits() ?? [];
+        UpdateTicks();
+    }
+
+    /// <summary>
     /// The ticks at the marks' positions on the track (FR-101), with the knob's own mapping
     /// (<see cref="RailTickLayout"/>): each tick is centred where the knob's centre is when the view shows its mark, so
     /// the knob covers it there. Only while the rail is shown (hidden, nothing is recomputed; it catches up as it
@@ -626,7 +670,8 @@ public partial class ScrollRail : UserControl
         var notes = _marks?.Notes ?? [];
         var layout = _model?.Layout;
         var window = layout is not null ? _model!.WindowHeightPt : 0;
-        var inputs = new TickInputs(marks, notes, layout, window, TrackLength, KnobHeight);
+        var hits = _searchHits;
+        var inputs = new TickInputs(marks, notes, hits, layout, window, TrackLength, KnobHeight);
         if (inputs == _tickInputs)
         {
             return;
@@ -637,11 +682,13 @@ public partial class ScrollRail : UserControl
         {
             Ticks.SetCentres([]);
             NoteTicks.SetCentres([]);
+            SearchTicks.SetCentres([]);
             return;
         }
 
         Ticks.SetCentres(marks.Count == 0 ? [] : Centres(RailTickLayout.Positions(marks, layout, window, inputs.TrackLength)));
         NoteTicks.SetCentres(notes.Count == 0 ? [] : Centres(RailTickLayout.NotePositions(notes, layout, window, inputs.TrackLength)));
+        SearchTicks.SetCentres(hits.Count == 0 ? [] : Centres(RailTickLayout.SearchPositions(hits, layout, window, inputs.TrackLength)));
     }
 
     /// <summary>Knob tops on the track to tick centres: the knob covers a tick when the view shows its mark or note.</summary>
@@ -956,6 +1003,7 @@ public partial class ScrollRail : UserControl
     private readonly record struct TickInputs(
         IReadOnlyList<Mark>? Marks,
         IReadOnlyList<Note>? Notes,
+        IReadOnlyList<SearchHit> SearchHits,
         DocumentLayout? Layout,
         double WindowHeightPt,
         double TrackLength,

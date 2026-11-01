@@ -50,6 +50,11 @@
                                          TickLength="{StaticResource RailNoteTickLength}"
                                          TickThickness="{StaticResource RailNoteTickThickness}"
                                          TickOffset="{StaticResource RailNoteTickOffset}" />
+                    <!-- The search results' ticks (FR-105), on the right of the marks', in their own colour. -->
+                    <local:RailTickLayer x:Name="SearchTicks" Fill="{StaticResource RailSearchTickBrush}"
+                                         TickLength="{StaticResource RailSearchTickLength}"
+                                         TickThickness="{StaticResource RailSearchTickThickness}"
+                                         TickOffset="{StaticResource RailSearchTickOffset}" />
                     <local:RailTickLayer x:Name="Ticks" Fill="{StaticResource RailMarkTickBrush}"
                                          TickLength="{StaticResource RailMarkTickLength}"
                                          TickThickness="{StaticResource RailMarkTickThickness}" />

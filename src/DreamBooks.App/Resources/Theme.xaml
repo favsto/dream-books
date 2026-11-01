@@ -75,6 +75,16 @@
     <Color x:Key="RailNoteTickColor">#E0393E</Color>
     <SolidColorBrush x:Key="RailNoteTickBrush" Color="{StaticResource RailNoteTickColor}" Opacity="0.85" />
     <SolidColorBrush x:Key="RailNoteTickBrushOpaque" Color="{StaticResource RailNoteTickColor}" />
+    <!-- Search result ticks (FR-105, phase 3b-2): blue, clearly apart from the red notes and the dark marks; short bars
+         just right of the mark ticks (8 to 14 DIP right of the centre, mirroring the notes on the left), so a result, a
+         note and a mark at the same place all show; marks are drawn on top. Opaque with transparency effects off
+         (NFR-32). -->
+    <sys:Double x:Key="RailSearchTickLength">6</sys:Double>
+    <sys:Double x:Key="RailSearchTickThickness">2</sys:Double>
+    <sys:Double x:Key="RailSearchTickOffset">11</sys:Double>
+    <Color x:Key="RailSearchTickColor">#1E88E5</Color>
+    <SolidColorBrush x:Key="RailSearchTickBrush" Color="{StaticResource RailSearchTickColor}" Opacity="0.9" />
+    <SolidColorBrush x:Key="RailSearchTickBrushOpaque" Color="{StaticResource RailSearchTickColor}" />
     <Thickness x:Key="RailIndicatorMargin">0,0,44,12</Thickness>
 
     <!-- Finger fling (FR-05, NFR-03), read by FlingSettings: a pan released faster than FlingMinSpeed glides on, its
