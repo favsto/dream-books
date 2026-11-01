@@ -83,8 +83,9 @@ Il documento è sempre protagonista: nessuna barra fissa, nessuna cornice, nessu
 
 | Evento | Animazione | Durata |
 | --- | --- | --- |
-| Comparsa pannello | Dissolvenza + scala da 0,95 a 1 | 180 ms, ease-out |
-| Scomparsa pannello | Dissolvenza + scala a 0,97 | 120 ms, ease-in |
+| Comparsa pannello flottante | Dissolvenza + scala da 0,95 a 1 | 180 ms, ease-out |
+| Scomparsa pannello flottante | Dissolvenza + scala a 0,97 | 120 ms, ease-in |
+| Comparsa e scomparsa pannello laterale (ancorato al bordo dello schermo, es. UI-04) | Scorrimento dal bordo e ritorno al bordo | 180 ms ease-out in entrata, 120 ms ease-in in uscita |
 | Ritiro toolbar durante la scrittura | Dissolvenza a 0% | 200 ms dopo 300 ms di scrittura |
 | Cambio strumento | Indicatore che scorre sotto l'icona attiva | 150 ms |
 | Undo / redo | Breve evidenziazione dell'area modificata | 250 ms |
@@ -100,7 +101,7 @@ L'interfaccia ha un solo livello di base, il canvas del documento, e quattro ele
 | UI-01 | Canvas documento | Tutta la finestra | Pagine in scorrimento verticale continuo, centrate |
 | UI-02 | Toolbar strumenti | Bordo inferiore, centrata | Pillola Acrylic; trascinabile su qualunque bordo; si ritira durante la scrittura |
 | UI-03 | Menu principale | Pulsante tondo in alto a sinistra | Si espande in un pannello con Apri, Salva, Salva con nome, File recenti, Esporta, Impostazioni |
-| UI-04 | Pannello segnalibri e miniature | Bordo sinistro, a scomparsa | Si apre con swipe dal bordo o dal menu; due schede: Segnalibri e Pagine (nel blocco 3b c'è solo la scheda Pagine, con le miniature che includono i propri tratti; la scheda Segnalibri arriva con i segnalibri) |
+| UI-04 | Pannello segnalibri e miniature | Bordo sinistro, a scomparsa | Si apre con swipe dal bordo o dal menu; due schede: Segnalibri e Pagine (nel blocco 3b: in 3b-1 il pannello laterale ospita l'elenco dei segni (FR-103), con Ctrl+M per aprirlo e chiuderlo; la scheda Pagine, con le miniature che includono i propri tratti, arriva in 3b-2; la scheda Segnalibri arriva con i segnalibri. La penna non usa mai il pannello: sul bordo scrive, sul pannello aperto lo chiude senza scrivere) |
 | UI-05 | Indicatore pagina e zoom | In basso a destra | Mostra "12 / 48 · 125%"; compare durante scroll e zoom, sparisce dopo 1,5 s |
 | UI-06 | Barra del titolo | In alto, trasparente | Solo i pulsanti finestra e il nome file in piccolo; si nasconde a schermo intero |
 | UI-07 | Barra di scorrimento con anteprima | Bordo destro, sottile, a scomparsa | Compare mentre si scorre e mostra la posizione; toccandola o trascinandola compare l'anteprima grande della pagina corrispondente; svanisce da sola dopo circa 1,5 s con dissolvenza morbida (istantanea se le animazioni di Windows sono disattivate). Sulla barra compaiono piccole tacche per i segni (FR-101) e per i risultati della ricerca (FR-105), con colori diversi (blocco 3b) |

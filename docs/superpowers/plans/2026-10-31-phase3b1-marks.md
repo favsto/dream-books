@@ -26,6 +26,7 @@
 - The `IMarkSource` seam for the highlighter (spec section 4) is **not built** in 3b-1 (YAGNI): `MarkIndex.SetPage` already accepts marks from any producer, so 3c adds its recogniser without touching consumers.
 - Tick snapping of the rail knob to the nearest mark (spec 6, "optional") is **not built**.
 - The marks list shows page number, the vector ink of the margin region and the margin note ink; a crop of the page bitmap behind it arrives with the 3b-2 thumbnail pipeline.
+- Left-edge panel and the pen (Task 7, controller ruling): closed, the panel is collapsed and the pen at the edge inks; with the panel open, a pen press on the sheet closes the panel and is taken (no click, no ink under a sheet that hid the page); a pen press outside it closes it and inks. The edge panel slides (180/120 ms) rather than fade + scale (requirements section 4 updated); Ctrl+M opens and closes the marks list.
 - The persisted mark-index cache is a **conditional** Task 9, built only if the real-book scan (Task 8) exceeds ~5 s.
 
 ## Review Focus
