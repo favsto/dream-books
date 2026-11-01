@@ -8,6 +8,7 @@
   <ItemGroup>
     <PackageReference Include="bblanchon.PDFium.Win32" />
     <InternalsVisibleTo Include="DreamBooks.Pdf.Tests" />
+    <InternalsVisibleTo Include="DreamBooks.App.Tests" />
   </ItemGroup>
 
   <ItemGroup>
