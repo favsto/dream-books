@@ -40,6 +40,14 @@ public sealed class DispatcherDelayScheduler : IDelayScheduler
             timer.Tick += (_, _) =>
             {
                 timer.Stop();
+                lock (_gate)
+                {
+                    if (_cancelled)
+                    {
+                        return; // disposed from another thread while its Stop was still on the way
+                    }
+                }
+
                 action();
             };
             lock (_gate)
