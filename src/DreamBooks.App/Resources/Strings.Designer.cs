@@ -264,6 +264,12 @@ internal static class Strings
     /// <summary>Status after previous result wrapped from the first result to the last.</summary>
     public static string SearchWrappedToEnd => Get(nameof(SearchWrappedToEnd));
 
+    /// <summary>Note beside the count after a search in which some pages could not be read: {0} the number of pages.</summary>
+    public static string SearchFailedPagesFormat => Get(nameof(SearchFailedPagesFormat));
+
+    /// <summary>The same note for a single page.</summary>
+    public static string SearchFailedPageOne => Get(nameof(SearchFailedPageOne));
+
     private static string Get(string name) =>
         Manager.GetString(name, System.Globalization.CultureInfo.CurrentUICulture) ?? name;
 }

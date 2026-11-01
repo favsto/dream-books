@@ -17,7 +17,9 @@ namespace DreamBooks.App.ViewModels;
 /// and a scan, which it hands back through <see cref="Attach"/> and <see cref="SetScanner"/>. Once a scan completed
 /// without any page having text, the document has no text layer: <see cref="NoTextLayerMessage"/> says so and later
 /// queries search nothing, until another document is opened. A scan in which every page failed says the search failed
-/// instead (<see cref="CountText"/>).</para>
+/// instead (<see cref="CountText"/>); one in which only some pages failed notes them (<see cref="FailedPagesText"/>).
+/// A changed query drops the previous results at once (the count shows the search coming, the highlights go); typing
+/// that folds to the same query keeps the search.</para>
 /// <para><b>Refresh.</b> Index changes and scan progress arrive on the scan's thread: they mark the pages that changed
 /// and schedule one refresh through the <see cref="IDelayScheduler"/> (any thread; it runs on the UI thread) at most
 /// once per <see cref="RefreshInterval"/>; the refresh updates the count and raises
@@ -31,9 +33,12 @@ namespace DreamBooks.App.ViewModels;
 /// a mark in view is already shown): Next takes the first result whose target is not above the band, Previous the
 /// last one not below it. Past the last result they wrap to the first (and back), saying so for
 /// <see cref="StatusDuration"/>. While the scan is still running, a step that would cross pages not searched yet
-/// waits (does nothing): a result may still appear there. Only a jump that starts from the view records Back history,
-/// so Back after stepping through results returns to where the reader was. The commands do not depend on a save
-/// running.</para>
+/// waits: a result may still appear there.
+/// The press is kept (one at a time, a new press replaces it) and carried out by the refresh that makes it decidable;
+/// a new query, Clear, another document or a move of the view by the reader drops it. Next/previous first apply a
+/// query still in its debounce, so they never step through the previous query's results.
+/// Only a jump that starts from the view records Back history, so Back after stepping through results returns to where
+/// the reader was. The commands do not depend on a save running.</para>
 /// <para>Nothing here logs or exposes the query or the matched text.</para>
 /// </remarks>
 public sealed class SearchViewModel : ObservableObject
@@ -72,6 +77,10 @@ public sealed class SearchViewModel : ObservableObject
     private IDisposable? _pendingQuery;
     private IDisposable? _pendingRefresh;
     private IDisposable? _pendingStatusClear;
+    private string? _appliedQuery;
+    private string? _failedPagesText;
+    private PendingStep? _pendingStep;
+    private bool _jumping;
 
     /// <param name="viewport">The view the commands move.</param>
     /// <param name="scheduler">The debounce, the refresh throttle and the status timer (see <see cref="IDelayScheduler"/>).</param>
@@ -84,6 +93,7 @@ public sealed class SearchViewModel : ObservableObject
         NextCommand = new RelayCommand(() => Step(forward: true), CanStep);
         PreviousCommand = new RelayCommand(() => Step(forward: false), CanStep);
         ClearCommand = new RelayCommand(Clear);
+        _viewport.PositionChanged += OnViewportMoved;
     }
 
     /// <summary>
@@ -118,21 +128,35 @@ public sealed class SearchViewModel : ObservableObject
 
             _pendingQuery?.Dispose();
             _pendingQuery = null;
-            if (TextFolding.FoldQuery(text).Length == 0)
+            var folded = TextFolding.FoldQuery(text);
+            if (folded.Length == 0)
             {
                 QueryApplied?.Invoke(this, string.Empty); // nothing to search: the results go at once
+                AfterQueryChange();
                 return;
             }
 
-            _pendingQuery = _scheduler.Schedule(QueryDelay, () =>
+            if (_index is not null && string.Equals(folded, _appliedQuery, StringComparison.Ordinal))
             {
-                _pendingQuery = null;
-                if (!_documentHasNoText)
-                {
-                    QueryApplied?.Invoke(this, _queryText);
-                }
-            });
+                AfterQueryChange(); // the same search (e.g. a space added): it stays
+                return;
+            }
+
+            if (_index is not null)
+            {
+                QueryApplied?.Invoke(this, string.Empty); // the old results go at once, never shown next to the new text
+            }
+
+            _pendingQuery = _scheduler.Schedule(QueryDelay, ApplyPendingQuery);
+            AfterQueryChange();
         }
+    }
+
+    /// <summary>"N pagine non lette" after a scan in which some (not all) pages could not be searched; null otherwise.</summary>
+    public string? FailedPagesText
+    {
+        get => _failedPagesText;
+        private set => SetProperty(ref _failedPagesText, value);
     }
 
     /// <summary>"3 di 17", "17 risultati", "17+" when capped, "Nessun risultato", "Ricerca in corso…"; empty without a search.</summary>
@@ -278,6 +302,11 @@ public sealed class SearchViewModel : ObservableObject
         }
 
         _current = null;
+        _pendingStep = null; // a waiting step belonged to the previous search
+        _appliedQuery = null;
+        _pendingStatusClear?.Dispose();
+        _pendingStatusClear = null;
+        StatusText = null;
         OnPropertyChanged(nameof(Current));
         UpdateState();
         PageHighlightsChanged?.Invoke(this, -1);
@@ -323,11 +352,12 @@ public sealed class SearchViewModel : ObservableObject
         }
 
         Attach(null);
+        AfterQueryChange();
     }
 
     private bool ScanRunsOrPending => _index is not null && (_scanPending || _scanner is { IsCompleted: false });
 
-    private bool CanStep() => HasResults || IsSearching;
+    private bool CanStep() => HasResults || IsSearching || _pendingQuery is not null;
 
     private void NotifyCommands()
     {
@@ -377,6 +407,7 @@ public sealed class SearchViewModel : ObservableObject
         }
 
         UpdateState();
+        RetryPendingStep();
         foreach (var page in pages)
         {
             PageHighlightsChanged?.Invoke(this, page);
@@ -405,6 +436,11 @@ public sealed class SearchViewModel : ObservableObject
             NoTextLayerMessage = Strings.SearchNoTextLayer;
         }
 
+        FailedPagesText = index is not null && scanner is { IsCompleted: true, FailedCount: > 0 } failed
+            && !AllPagesFailed(index, failed)
+            ? string.Format(CultureInfo.CurrentCulture, failed.FailedCount == 1 ? Strings.SearchFailedPageOne : Strings.SearchFailedPagesFormat, failed.FailedCount)
+            : null;
+
         UpdateCount();
     }
 
@@ -416,7 +452,8 @@ public sealed class SearchViewModel : ObservableObject
     {
         if (_index is not { } index)
         {
-            CountText = string.Empty;
+            // A query waiting for its debounce shows that it is coming; nothing for a document without text.
+            CountText = _pendingQuery is not null && !_documentHasNoText ? Strings.SearchInProgress : string.Empty;
             return;
         }
 
@@ -472,19 +509,64 @@ public sealed class SearchViewModel : ObservableObject
         return before + at + 1;
     }
 
+    /// <summary>
+    /// Next/previous: a query still in its debounce is applied first (never a step through the previous query's
+    /// results); a step that must wait for the scan is kept (one at a time) and carried out by a later refresh.
+    /// </summary>
     private void Step(bool forward)
     {
-        if (_index is not { } index || _viewport.Layout is not { } layout || layout.PageCount != index.PageCount)
+        ApplyPendingQueryNow();
+        _pendingStep = null; // a new press replaces a waiting one
+        var fromView = StartsFromView();
+        if (TryStep(forward, fromView) == StepOutcome.Wait)
         {
-            return;
+            _pendingStep = new PendingStep(forward, fromView);
+        }
+    }
+
+    /// <summary>Whether a step starts from the view (no current result, or the reader moved away from it).</summary>
+    private bool StartsFromView()
+    {
+        if (_current is not { } current)
+        {
+            return true;
+        }
+
+        var currentTop = _viewport.AbsoluteTopPt(_viewport.Position);
+        var band = Math.Max(_minimumBandInPoints, Math.Max(0, _viewport.WindowHeightPt) * HereBandFraction);
+        return !(Math.Abs(Delta(current, currentTop)) <= band);
+    }
+
+    /// <summary>A waiting step, tried again at each refresh: done (or dropped) once the scan lets it be decided.</summary>
+    private void RetryPendingStep()
+    {
+        if (_pendingStep is { } step && TryStep(step.Forward, step.FromView) != StepOutcome.Wait)
+        {
+            _pendingStep = null;
+        }
+    }
+
+    /// <summary>The reader scrolled or jumped by himself: a waiting step no longer applies to where he is.</summary>
+    private void OnViewportMoved(object? sender, EventArgs e)
+    {
+        if (!_jumping)
+        {
+            _pendingStep = null;
+        }
+    }
+
+    private StepOutcome TryStep(bool forward, bool fromView)
+    {
+        if (_index is not { } index || _viewport.Layout is not { } layout || layout.PageCount != index.PageCount
+            || (!fromView && _current is null))
+        {
+            return StepOutcome.Nothing;
         }
 
         var scanning = ScanRunsOrPending;
         var currentTop = _viewport.AbsoluteTopPt(_viewport.Position);
         var windowPt = Math.Max(0, _viewport.WindowHeightPt);
         var band = Math.Max(_minimumBandInPoints, windowPt * HereBandFraction);
-
-        var fromView = _current is not { } current || !(Math.Abs(Delta(current, currentTop)) <= band);
         Found found;
         if (!fromView)
         {
@@ -501,26 +583,42 @@ public sealed class SearchViewModel : ObservableObject
 
         if (found.Wait)
         {
-            return; // the scan has not been there yet: a result may still appear
+            return StepOutcome.Wait; // the scan has not been there yet: a result may still appear
         }
 
         if (found.Hit is null)
         {
             found = forward ? First(index, scanning) : Last(index, scanning);
-            if (found.Wait || found.Hit is null)
+            if (found.Wait)
             {
-                return;
+                return StepOutcome.Wait;
+            }
+
+            if (found.Hit is null)
+            {
+                return StepOutcome.Nothing; // no result at all: the count says so
             }
 
             found = found with { Wrapped = true };
         }
 
         Current = found.Hit;
-        _viewport.ScrollToHit(found.Hit!, recordHistory: fromView);
+        _jumping = true;
+        try
+        {
+            _viewport.ScrollToHit(found.Hit!, recordHistory: fromView);
+        }
+        finally
+        {
+            _jumping = false;
+        }
+
         if (found.Wrapped)
         {
             ShowStatus(forward ? Strings.SearchWrappedToStart : Strings.SearchWrappedToEnd);
         }
+
+        return StepOutcome.Done;
     }
 
     /// <summary>How far the view would move for the hit, in points (positive = down); NaN when it cannot go there.</summary>
@@ -635,6 +733,35 @@ public sealed class SearchViewModel : ObservableObject
         return false;
     }
 
+    /// <summary>The debounce ran out: the query is applied (a new index and scan), unless the document has no text.</summary>
+    private void ApplyPendingQuery()
+    {
+        _pendingQuery?.Dispose();
+        _pendingQuery = null;
+        if (!_documentHasNoText && TextFolding.FoldQuery(_queryText) is { Length: > 0 } folded)
+        {
+            QueryApplied?.Invoke(this, _queryText);
+            _appliedQuery = _index is not null ? folded : null;
+        }
+
+        AfterQueryChange();
+    }
+
+    /// <summary>Next/previous within the debounce: the typed query is applied now.</summary>
+    private void ApplyPendingQueryNow()
+    {
+        if (_pendingQuery is not null)
+        {
+            ApplyPendingQuery();
+        }
+    }
+
+    private void AfterQueryChange()
+    {
+        UpdateCount();
+        NotifyCommands();
+    }
+
     private void ShowStatus(string text)
     {
         _pendingStatusClear?.Dispose();
@@ -645,6 +772,21 @@ public sealed class SearchViewModel : ObservableObject
             StatusText = null;
         });
     }
+
+    private enum StepOutcome
+    {
+        /// <summary>Jumped (or the view was already there).</summary>
+        Done,
+
+        /// <summary>Nothing to go to (no search, no result).</summary>
+        Nothing,
+
+        /// <summary>The pages on the way are not searched yet: try again when the scan has been there.</summary>
+        Wait,
+    }
+
+    /// <summary>A step that waits for the scan: its direction and whether it starts from the view (decided at the press).</summary>
+    private readonly record struct PendingStep(bool Forward, bool FromView);
 
     /// <summary>A step's outcome: a hit (or none), or "wait" (pages on the way not searched yet), and whether it wrapped.</summary>
     private readonly record struct Found(SearchHit? Hit, bool Wait = false, bool Wrapped = false)

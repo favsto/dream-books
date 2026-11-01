@@ -54,7 +54,7 @@ public sealed class SearchViewModelTests : IDisposable
         _scheduler.Advance(SearchViewModel.QueryDelay - TimeSpan.FromMilliseconds(1));
         Assert.Null(vm.SearchScannerForTest);
         Assert.Null(vm.Search.Index);
-        Assert.Equal(string.Empty, vm.Search.CountText);
+        Assert.Equal(Strings.SearchInProgress, vm.Search.CountText); // the query is coming
 
         _scheduler.Advance(1);
         var scanner = vm.SearchScannerForTest;
@@ -200,7 +200,7 @@ public sealed class SearchViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task Next_waits_for_pages_not_searched_yet_instead_of_wrapping()
+    public async Task Next_while_the_needed_pages_are_unsearched_jumps_as_soon_as_they_are()
     {
         var source = new FakeSearchPageSource(10);
         source.Hits[1] = [Hit(1, 100)];
@@ -214,28 +214,205 @@ public sealed class SearchViewModelTests : IDisposable
         await source.Started(5).WaitAsync(_timeout);
         _scheduler.Advance(SearchViewModel.RefreshInterval);
 
-        // Page 5 is still being searched: nothing to go to yet (the result there may exist), and no wrap claimed.
+        // Page 5 is still being searched: nothing to go to yet (a result may be there), no wrap claimed...
         Assert.True(vm.Search.NextCommand.CanExecute(null));
         vm.Search.NextCommand.Execute(null);
         Assert.Null(vm.Search.Current);
         Assert.Null(vm.Search.StatusText);
 
+        // ...but the press is kept: once page 5 is searched, the jump happens by itself, with Back recorded.
         gate5.SetResult();
         await source.Started(1).WaitAsync(_timeout);
         _scheduler.Advance(SearchViewModel.RefreshInterval);
-        vm.Search.NextCommand.Execute(null);
         Assert.Equal(Hit(5, 100), vm.Search.Current);
+        Assert.Equal(vm.Viewport.TargetPositionFor(Hit(5, 100)), vm.Viewport.Position);
+        Assert.True(vm.Viewport.History.CanGoBack);
 
-        // Wrapping needs pages 0 and 1, and page 1 is being searched: Next waits rather than jump to a later result.
+        // Wrapping needs pages 0 and 1, and page 1 is being searched: the press waits, then wraps.
         vm.Search.NextCommand.Execute(null);
         Assert.Equal(Hit(5, 100), vm.Search.Current);
         Assert.Null(vm.Search.StatusText);
-
         gate1.SetResult();
         await CompleteAsync(scanner);
-        vm.Search.NextCommand.Execute(null);
         Assert.Equal(Hit(1, 100), vm.Search.Current);
         Assert.Equal(Strings.SearchWrappedToStart, vm.Search.StatusText);
+    }
+
+    [Fact]
+    public async Task A_second_press_replaces_the_waiting_one_and_a_paused_scan_keeps_it()
+    {
+        var source = new FakeSearchPageSource(10);
+        source.Hits[1] = [Hit(1, 100)];
+        source.Hits[6] = [Hit(6, 100)];
+        var vm = await OpenAsync(source);
+        vm.Viewport.ScrollToPage(3, recordHistory: false);
+        _scheduler.Advance(DocumentViewportViewModel.CurrentPageDelay);
+
+        // A stroke is live: the scan is parked before it searched anything.
+        vm.ZoomVm.IsLocked = true;
+        var scanner = Search(vm, "x");
+        await scanner.WhenIdleAsync().WaitAsync(_timeout);
+        Assert.Equal(0, scanner.ProcessedCount);
+        vm.Search.NextCommand.Execute(null);
+        vm.Search.PreviousCommand.Execute(null); // replaces the Next
+        Assert.Null(vm.Search.Current);
+
+        vm.ZoomVm.IsLocked = false;
+        await CompleteAsync(scanner);
+        Assert.Equal(Hit(1, 100), vm.Search.Current); // the previous result above the view, not the next one
+        Assert.Null(vm.Search.StatusText);
+    }
+
+    [Fact]
+    public async Task A_waiting_step_is_dropped_on_a_new_query_clear_a_new_document_or_a_move_of_the_reader()
+    {
+        foreach (var cancel in new[] { "query", "clear", "document", "scroll" })
+        {
+            var source = new FakeSearchPageSource(10);
+            source.HitsByQuery["x"] = new() { [5] = [Hit(5, 100)] };
+            var gate = source.Hold(5);
+            var vm = await OpenAsync(source);
+            var scanner = Search(vm, "x");
+            await source.Started(5).WaitAsync(_timeout);
+            vm.Search.NextCommand.Execute(null); // waits for page 5
+            var position = vm.Viewport.Position;
+
+            switch (cancel)
+            {
+                case "query":
+                    vm.Search.QueryText = "y";
+                    _scheduler.Advance(SearchViewModel.QueryDelay);
+                    break;
+                case "clear":
+                    vm.Search.ClearCommand.Execute(null);
+                    break;
+                case "document":
+                    await OpenFileAsync(vm, "b.pdf");
+                    break;
+                default:
+                    vm.Viewport.ScrollToPage(1, recordHistory: false);
+                    position = vm.Viewport.Position;
+                    break;
+            }
+
+            gate.SetResult();
+            await scanner.WhenIdleAsync().WaitAsync(_timeout);
+            if (vm.SearchScannerForTest is { } next)
+            {
+                await next.WhenIdleAsync().WaitAsync(_timeout);
+            }
+
+            _scheduler.Advance(SearchViewModel.RefreshInterval);
+            Assert.Null(vm.Search.Current);
+            if (cancel != "document")
+            {
+                Assert.Equal(position, vm.Viewport.Position); // no late jump
+            }
+
+            // Positive control for the scroll: the scan did find the result; only the waiting step was dropped.
+            if (cancel == "scroll")
+            {
+                Assert.True(vm.Search.HasResults);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Enter_within_the_debounce_applies_the_new_query_and_jumps_to_its_first_result()
+    {
+        var source = new FakeSearchPageSource(10);
+        source.HitsByQuery["casa"] = new() { [2] = [Hit(2, 100)] };
+        source.HitsByQuery["casale"] = new() { [6] = [Hit(6, 300)] };
+        var vm = await OpenAsync(source);
+        var start = vm.Viewport.Position;
+
+        // Typed and Enter at once: the query is applied now, and the jump goes to its first result when found.
+        vm.Search.QueryText = "casa";
+        vm.Search.NextCommand.Execute(null);
+        var first = vm.SearchScannerForTest;
+        Assert.NotNull(first);
+        await CompleteAsync(first);
+        Assert.Equal(Hit(2, 100), vm.Search.Current);
+        Assert.Equal(Hit(2, 100).Rects, vm.Search.CurrentRectsForPage(2));
+        _scheduler.Advance(SearchViewModel.QueryDelay); // the debounce already ran: nothing applied twice
+        Assert.Same(first, vm.SearchScannerForTest);
+        Assert.Equal(Hit(2, 100), vm.Search.Current);
+
+        // Typing on: the old results go at once (count and highlights), and Enter never steps through them.
+        vm.Search.QueryText = "casale";
+        Assert.Null(vm.Search.Index);
+        Assert.Null(vm.Search.Current);
+        Assert.Equal(Strings.SearchInProgress, vm.Search.CountText);
+        Assert.Empty(vm.Search.CurrentRectsForPage(2));
+        Assert.True(vm.Search.NextCommand.CanExecute(null));
+        vm.Search.NextCommand.Execute(null);
+        Assert.NotEqual(Hit(2, 100), vm.Search.Current);
+        var second = vm.SearchScannerForTest;
+        Assert.NotNull(second);
+        Assert.NotSame(first, second);
+        await CompleteAsync(second);
+        Assert.Equal(Hit(6, 300), vm.Search.Current);
+        Assert.Equal(Hit(6, 300).Rects, vm.Search.CurrentRectsForPage(6)); // highlights kept after the jump
+
+        // Back: the reader's place before the first search, once per search jump (no entry for an old result).
+        vm.Viewport.BackCommand.Execute(null);
+        Assert.Equal(vm.Viewport.TargetPositionFor(Hit(2, 100)), vm.Viewport.Position);
+        vm.Viewport.BackCommand.Execute(null);
+        Assert.Equal(start, vm.Viewport.Position);
+        Assert.False(vm.Viewport.History.CanGoBack);
+    }
+
+    [Fact]
+    public async Task The_wrap_status_goes_on_clear_a_new_query_and_a_new_document()
+    {
+        foreach (var cancel in new[] { "clear", "query", "document" })
+        {
+            var source = new FakeSearchPageSource(10);
+            source.Hits[4] = [Hit(4, 100)];
+            var vm = await OpenAsync(source);
+            await CompleteAsync(Search(vm, "x"));
+            vm.Search.NextCommand.Execute(null);
+            vm.Search.NextCommand.Execute(null); // a single result wraps onto itself
+            Assert.Equal(Strings.SearchWrappedToStart, vm.Search.StatusText);
+
+            switch (cancel)
+            {
+                case "clear":
+                    vm.Search.ClearCommand.Execute(null);
+                    break;
+                case "query":
+                    vm.Search.QueryText = "y";
+                    break;
+                default:
+                    await OpenFileAsync(vm, "b.pdf");
+                    break;
+            }
+
+            Assert.Null(vm.Search.StatusText);
+        }
+    }
+
+    [Fact]
+    public async Task Pages_that_could_not_be_searched_are_noted_beside_the_count()
+    {
+        var source = new FakeSearchPageSource(10);
+        source.Hits[0] = [Hit(0, 100)];
+        source.FailingPages.UnionWith([3, 7]);
+        var vm = await OpenAsync(source);
+        var scanner = Search(vm, "x");
+        Assert.Null(vm.Search.FailedPagesText);
+        await CompleteAsync(scanner);
+        Assert.Equal(2, scanner.FailedCount);
+        Assert.Equal("2 pagine non lette", vm.Search.FailedPagesText);
+        Assert.Equal(Strings.SearchOneResult, vm.Search.CountText);
+
+        source.FailingPages.Remove(7);
+        await CompleteAsync(Search(vm, "y"));
+        Assert.Equal(Strings.SearchFailedPageOne, vm.Search.FailedPagesText);
+
+        source.FailingPages.Clear();
+        await CompleteAsync(Search(vm, "z"));
+        Assert.Null(vm.Search.FailedPagesText);
     }
 
     [Fact]
@@ -311,9 +488,13 @@ public sealed class SearchViewModelTests : IDisposable
 
         // The document has no text: another query searches nothing again, the message stays.
         var searched = source.Searched.Count;
+        Assert.Equal(10, searched); // positive control: the first query did search
         vm.Search.QueryText = "altra";
+        Assert.Equal(string.Empty, vm.Search.CountText); // never "Nessun risultato" for a query that will not run
         _scheduler.Advance(SearchViewModel.QueryDelay);
-        await Task.Delay(30);
+        Assert.Null(vm.SearchScannerForTest); // no scan was even created
+        Assert.Null(vm.Search.Index);
+        Assert.Equal(string.Empty, vm.Search.CountText);
         Assert.Equal(searched, source.Searched.Count);
         Assert.Equal(Strings.SearchNoTextLayer, vm.Search.NoTextLayerMessage);
 
@@ -348,9 +529,9 @@ public sealed class SearchViewModelTests : IDisposable
         // A stroke is live (the zoom is locked): the scan waits.
         vm.ZoomVm.IsLocked = true;
         var scanner = Search(vm, "x");
-        await scanner.WhenIdleAsync().WaitAsync(_timeout);
-        await Task.Delay(40);
+        await scanner.WhenIdleAsync().WaitAsync(_timeout); // the run has started and parked
         Assert.Empty(source.Searched);
+        Assert.Equal(0, scanner.ProcessedCount);
         Assert.True(vm.Search.IsSearching);
         vm.ZoomVm.IsLocked = false;
         await CompleteAsync(scanner);
@@ -370,15 +551,16 @@ public sealed class SearchViewModelTests : IDisposable
         await writer.Started.Task.WaitAsync(_timeout);
         Assert.True(saving.IsSaving);
         var during = Search(saving, "x");
-        await during.WhenIdleAsync().WaitAsync(_timeout);
-        await Task.Delay(40);
+        await during.WhenIdleAsync().WaitAsync(_timeout); // started and parked by the save
         Assert.Empty(saveSource.Searched);
+        Assert.Equal(0, during.ProcessedCount);
 
         writer.Gate.SetResult();
         await save.WaitAsync(_timeout);
         Assert.False(saving.IsSaving);
         await CompleteAsync(saving.SearchScannerForTest!);
-        Assert.True(saving.Search.HasResults);
+        Assert.True(saving.Search.HasResults); // positive control: the same scan does search once resumed
+        Assert.Contains(2, saveSource.Searched);
     }
 
     [Fact]
@@ -551,6 +733,15 @@ public sealed class SearchViewModelTests : IDisposable
                 Assert.Equal(Hit(3, 100), search.Current);
                 Assert.True(window.RouteKey(Key.F3, ModifierKeys.Shift, null));
                 Assert.Equal(Hit(1, 100), search.Current);
+
+                // The key may come from a part inside the field (its template): still the field's Enter.
+                window.SearchField.ApplyTemplate();
+                var inner = Assert.IsAssignableFrom<DependencyObject>(
+                    window.SearchField.Template.FindName("PART_ContentHost", window.SearchField));
+                Assert.True(window.RouteKey(Key.Enter, ModifierKeys.None, inner));
+                Assert.Equal(Hit(3, 100), search.Current);
+                Assert.True(window.RouteKey(Key.Enter, ModifierKeys.Shift, inner));
+                Assert.Equal(Hit(1, 100), search.Current);
                 Assert.False(window.RouteKey(Key.Enter, ModifierKeys.None, window.BackButton)); // Enter elsewhere is not ours
 
                 // The existing bindings stay: no search key clashes with them.
@@ -582,13 +773,9 @@ public sealed class SearchViewModelTests : IDisposable
 
     private async Task CompleteAsync(SearchScanner scanner)
     {
-        var deadline = DateTime.UtcNow + _timeout;
-        while (!scanner.IsCompleted)
-        {
-            Assert.True(DateTime.UtcNow < deadline, "The search did not complete.");
-            await Task.Delay(5);
-        }
-
+        // Nothing pauses the scan here (no view, no stroke, no save), so idle means ended.
+        await scanner.WhenIdleAsync().WaitAsync(_timeout);
+        Assert.True(scanner.IsCompleted, "The search did not complete.");
         _scheduler.Advance(SearchViewModel.RefreshInterval);
     }
 

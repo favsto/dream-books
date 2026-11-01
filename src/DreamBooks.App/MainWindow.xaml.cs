@@ -215,7 +215,7 @@ public partial class MainWindow : Window
     private bool RouteSearchKey(Key key, ModifierKeys modifiers, object? source, bool panelOpen)
     {
         var search = _viewModel.Search;
-        var inField = ReferenceEquals(source, SearchField);
+        var inField = source is DependencyObject element && IsWithin(element, SearchField); // also a part of its template
         switch (key)
         {
             case Key.F when modifiers == ModifierKeys.Control:

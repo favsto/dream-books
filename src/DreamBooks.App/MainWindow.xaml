@@ -166,6 +166,18 @@
                                    Margin="4,0" AutomationProperties.Name="{x:Static res:Strings.SearchCountLabel}"
                                    AutomationProperties.LiveSetting="Polite" />
                     </StackPanel>
+                    <TextBlock x:Name="SearchFailedPagesText" Text="{Binding Search.FailedPagesText}" TextWrapping="Wrap"
+                               Margin="{StaticResource Gap}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Search.FailedPagesText}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                     <TextBlock x:Name="SearchNoTextText" Text="{Binding Search.NoTextLayerMessage}" TextWrapping="Wrap"
                                Margin="{StaticResource Gap}" AutomationProperties.LiveSetting="Polite">
                         <TextBlock.Style>

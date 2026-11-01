@@ -141,4 +141,6 @@
   <data name="SearchFailed" xml:space="preserve"><value>Non è stato possibile cercare nel documento</value></data>
   <data name="SearchWrappedToStart" xml:space="preserve"><value>Ripartito dall'inizio</value></data>
   <data name="SearchWrappedToEnd" xml:space="preserve"><value>Ripartito dalla fine</value></data>
+  <data name="SearchFailedPagesFormat" xml:space="preserve"><value>{0} pagine non lette</value></data>
+  <data name="SearchFailedPageOne" xml:space="preserve"><value>1 pagina non letta</value></data>
 </root>

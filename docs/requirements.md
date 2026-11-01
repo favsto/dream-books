@@ -254,7 +254,7 @@ Il salvataggio è il requisito più delicato: il file prodotto deve essere un PD
 | FR-102 | Salto al segno precedente/successivo (pulsanti nel menu, scorciatoie Alt+Su e Alt+Giù), che registra la posizione nello storico del tasto Indietro (FR-09); agli estremi non salta e avvisa "Nessun altro segno" | Must |
 | FR-103 | Elenco dei segni nel pannello laterale sinistro (UI-04; si apre con swipe dal bordo, dal menu o con Ctrl+M): miniatura del passaggio con le note scritte accanto, numero di pagina; un tocco porta al passaggio | Should |
 | FR-104 | Più linee sullo stesso passaggio contano come un solo segno; un solo tipo di segno, senza livelli né colori | Must |
-| FR-105 | I risultati della ricerca (FR-13) compaiono come tacche sulla barra e sono evidenziati sulla pagina senza coprire i tratti (il risultato corrente in un colore più forte); avanti/indietro tra i risultati con i pulsanti accanto al campo di ricerca, con Invio e Maiusc+Invio nel campo e con F3 e Maiusc+F3 ovunque; dopo l'ultimo riparte dal primo avvisando "Ripartito dall'inizio" (e "Ripartito dalla fine" all'indietro); il primo salto registra la posizione nello storico del tasto Indietro (FR-09). Ctrl+F porta al campo di ricerca, Esc annulla la ricerca. Se il PDF non ha testo lo dice una volta ("Nessun testo ricercabile in questo PDF") | Should |
+| FR-105 | I risultati della ricerca (FR-13) compaiono come tacche sulla barra e sono evidenziati sulla pagina senza coprire i tratti (il risultato corrente in un colore più forte); avanti/indietro tra i risultati con i pulsanti accanto al campo di ricerca, con Invio e Maiusc+Invio nel campo e con F3 e Maiusc+F3 ovunque; dopo l'ultimo riparte dal primo avvisando "Ripartito dall'inizio" (e "Ripartito dalla fine" all'indietro); il primo salto registra la posizione nello storico del tasto Indietro (FR-09). Ctrl+F porta al campo di ricerca, Esc annulla la ricerca. Se il PDF non ha testo lo dice una volta ("Nessun testo ricercabile in questo PDF"). Avanti/indietro premuti mentre la ricerca è ancora in corso non vanno persi: il salto avviene da solo appena il risultato è trovato. Se alcune pagine non si sono potute leggere, accanto al conteggio compare una nota ("N pagine non lette") | Should |
 
 ### Salvataggio
 
@@ -304,7 +304,7 @@ I valori sono misurati su una Surface Pro di fascia media (Intel Core i5 o Snapd
 | NFR-23 | Compatibilità | Funziona anche senza penna, con mouse e tastiera | Should |
 | NFR-30 | Accessibilità | Contrasto testi e icone conforme a WCAG AA in entrambi i temi | Should |
 | NFR-31 | Accessibilità | Tutti i comandi hanno etichetta per gli screen reader e sono raggiungibili da tastiera | Should |
-| NFR-32 | Accessibilità | Rispetto dell'impostazione di sistema che riduce animazioni e trasparenze | Must |
+| NFR-32 | Accessibilità | Rispetto dell'impostazione di sistema che riduce animazioni e trasparenze. Eccezione voluta: le evidenziazioni della ricerca (FR-105) restano semitrasparenti anche con gli effetti di trasparenza disattivati, perché un colore pieno coprirebbe il testo evidenziato (sono un colore di evidenziazione, non un effetto di trasparenza) | Must |
 | NFR-40 | Privacy | Nessuna connessione di rete; nessun dato inviato all'esterno | Must |
 | NFR-50 | Manutenibilità | Codice, commenti e nomi in inglese; test automatici per modello dati, undo/redo e salvataggio/riapertura | Must |
 

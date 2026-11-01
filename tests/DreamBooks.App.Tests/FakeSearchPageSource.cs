@@ -25,6 +25,9 @@ internal sealed class FakeSearchPageSource(int pageCount) : ISearchPageSource
     /// <summary>Every page reports no text layer.</summary>
     public bool NoText { get; set; }
 
+    /// <summary>Pages whose search throws.</summary>
+    public HashSet<int> FailingPages { get; } = [];
+
     /// <summary>Every page's search throws.</summary>
     public bool FailAll { get; set; }
 
@@ -82,7 +85,7 @@ internal sealed class FakeSearchPageSource(int pageCount) : ISearchPageSource
             await gate.Task;
         }
 
-        if (FailAll)
+        if (FailAll || FailingPages.Contains(pageIndex))
         {
             throw new InvalidOperationException("The page cannot be searched.");
         }
