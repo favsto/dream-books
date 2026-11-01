@@ -39,7 +39,7 @@ Fausto reads long books (1,000+ pages) and annotates them. He has a poor memory 
 - The stroke model and its JSON are unchanged (schema v1). No new annotation types. If a mark cache file is added (section 5) it lives outside the PDF, like the position file, is versioned, keyed by the document key and invalidated by the document fingerprint.
 - Text from PDFium's text API (`FPDFText_*`, `FPDF_FindText*` family, own P/Invoke over the bblanchon.PDFium.Win32 binary); no new NuGet package.
 - Italian text only from `Strings.resx` (Designer in sync); values/durations/colours from `Theme.xaml`; NFR-32 (reduced animation and transparency); 40 px touch targets; AutomationProperties.Name on every command; keyboard reachable.
-- Fingers never draw; the pen draws; the new panels and ticks must not take the pen (same rule as the 3a rail: pen never hits them, finger and mouse do).
+- Fingers never draw; the pen draws; the new panels and ticks must not take the pen (same rule as the 3a rail: pen never hits them, finger and mouse do; on the rail itself the pen only grabs the knob, elsewhere on the rail it writes).
 - Never log document content (including search terms and text); no network.
 
 ## 4. Mark recognition (FR-100, FR-104)
