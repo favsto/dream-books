@@ -406,6 +406,11 @@ public sealed class DocumentViewportViewModel : ObservableObject
         _railDrag = false;
         _session = session;
         _layout = layout;
+
+        // The cached ranges belong to the previous layout: LayoutChanged listeners must never see page indexes that do
+        // not exist in this one (a shorter document crashed the view). Refresh below computes the new ones.
+        _retainedRange = (0, -1);
+        _visiblePages = [];
         History.Clear();
         if (layout is null)
         {

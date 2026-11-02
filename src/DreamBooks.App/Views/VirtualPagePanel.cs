@@ -109,10 +109,18 @@ public sealed class VirtualPagePanel : Panel
             Snap(exact.Height));
     }
 
-    /// <summary>A page's size in points, from the layout (the column width minus twice its centring margin).</summary>
+    /// <summary>
+    /// A page's size in points, from the layout (the column width minus twice its centring margin); empty for an index
+    /// outside the layout.
+    /// </summary>
     public static Size PageSizePt(DocumentLayout layout, int pageIndex)
     {
         ArgumentNullException.ThrowIfNull(layout);
+        if (pageIndex < 0 || pageIndex >= layout.PageCount)
+        {
+            return new Size(0, 0);
+        }
+
         var width = layout.ColumnWidthPt - (2 * layout.PageLeftPt(pageIndex));
         var bottom = pageIndex + 1 < layout.PageCount ? layout.PageTopPt(pageIndex + 1) : layout.TotalHeightPt;
         var height = bottom - layout.PageTopPt(pageIndex) - LayoutConstants.PageGapPt;

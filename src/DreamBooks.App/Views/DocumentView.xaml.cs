@@ -597,7 +597,11 @@ public partial class DocumentView : UserControl
         _updatingSurfaces = true;
         try
         {
-            var (first, last) = _viewModel?.Viewport is { Layout: not null } viewport ? viewport.RetainedRange : (0, -1);
+            // Only pages of the current layout: without one (or with none) nothing is bound, and the range is clamped so a
+            // stale index can never reach Bind.
+            var (first, last) = _viewModel?.Viewport is { Layout: { PageCount: > 0 } layout } viewport
+                ? (Math.Max(0, viewport.RetainedRange.First), Math.Min(layout.PageCount - 1, viewport.RetainedRange.Last))
+                : (0, -1);
             var free = new Stack<InkSurface>();
             foreach (var slot in _slots.Values.Where(s => s.PageIndex < first || s.PageIndex > last).ToArray())
             {
@@ -624,7 +628,10 @@ public partial class DocumentView : UserControl
                     Pages.Children.Add(surface);
                 }
 
-                Bind(surface, index);
+                if (!Bind(surface, index))
+                {
+                    free.Push(surface); // not a page of this document: back to the pool below
+                }
             }
 
             while (free.TryPop(out var unused))
@@ -654,10 +661,16 @@ public partial class DocumentView : UserControl
         _editorTimer.Stop();
     }
 
-    private void Bind(InkSurface surface, int pageIndex)
+    private bool Bind(InkSurface surface, int pageIndex)
     {
         var viewport = _viewModel!.Viewport;
         var layout = viewport.Layout!;
+        if (pageIndex < 0 || pageIndex >= layout.PageCount)
+        {
+            // Not a page of this document (UpdateSurfaces clamps, so this is a last guard): the caller pools the surface.
+            return false;
+        }
+
         var slot = new PageSlot(surface, pageIndex);
         _slots[pageIndex] = slot;
 
@@ -681,6 +694,7 @@ public partial class DocumentView : UserControl
 
         _bitmaps.ShowCached(pageIndex); // a page seen recently shows its bitmap at once, the others their placeholder
         FadeIn(surface, placeholder: surface.PageImage is null); // only white paper fades in; a bitmap appears at once
+        return true;
     }
 
     /// <summary>
