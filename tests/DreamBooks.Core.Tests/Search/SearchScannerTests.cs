@@ -398,6 +398,54 @@ public class SearchScannerTests
     }
 
     [Fact]
+    public async Task A_scanner_that_replaces_a_disposed_one_waits_for_its_search_in_flight()
+    {
+        // A new query gets a new scanner (the owner disposes the old one): the old scanner's search in flight, which
+        // ignores its token here, returns before the new scanner searches anything, so the PDFium thread never holds
+        // two search jobs (Task 6 integration finding).
+        var source = new FakeSearchPageSource(50);
+        var gate = NewGate();
+        source.Gate = page => page == 10 ? gate.Task : null;
+        var old = Create(source, new SearchIndex(50));
+        old.Start("a", 10);
+        Assert.Equal(10, await source.NextStartedAsync());
+        old.Dispose();
+        var stopped = old.WhenStoppedAsync();
+        Assert.False(stopped.IsCompleted);
+
+        var index = new SearchIndex(50);
+        using var next = new SearchScanner(source, index, idleGap: TimeSpan.Zero, after: stopped);
+        next.Start("b", 0, index);
+        await Task.Delay(50);
+        Assert.Single(source.Loads); // nothing yet: the old search is still in flight
+
+        gate.SetResult();
+        await stopped.WaitAsync(_timeout);
+        await WaitUntilAsync(() => next.IsCompleted);
+        Assert.Equal(1, source.MaxInFlight);
+        Assert.Equal(50, index.SearchedCount);
+    }
+
+    [Fact]
+    public async Task A_faulted_or_cancelled_predecessor_task_does_not_stop_the_scan()
+    {
+        var source = new FakeSearchPageSource(5);
+        var index = new SearchIndex(5);
+        using var faulted = new SearchScanner(source, index, idleGap: TimeSpan.Zero, after: Task.FromException(new InvalidOperationException()));
+        faulted.Start("x", 0);
+        await WaitUntilAsync(() => faulted.IsCompleted);
+        Assert.Equal(5, index.SearchedCount);
+
+        var other = new SearchIndex(5);
+        using var cancelled = new SearchScanner(source, other, idleGap: TimeSpan.Zero, after: Task.FromCanceled(new CancellationToken(true)));
+        cancelled.Start("x", 0);
+        await WaitUntilAsync(() => cancelled.IsCompleted);
+        Assert.Equal(5, other.SearchedCount);
+        using var idle = new SearchScanner(source, new SearchIndex(5));
+        Assert.True(idle.WhenStoppedAsync().IsCompleted); // never started
+    }
+
+    [Fact]
     public async Task Cheap_pages_are_searched_back_to_back_and_the_idle_gap_comes_once_per_slice_of_work()
     {
         // As for the mark scan: a gap after every page would cost a whole timer tick (~15.6 ms) per page.

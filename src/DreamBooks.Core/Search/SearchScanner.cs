@@ -14,7 +14,10 @@ namespace DreamBooks.Core.Search;
 /// current run object, under the lock) right before it, so a superseded or disposed run publishes nothing; its own
 /// search in flight is cancelled, and the new run waits for it to return before it searches, so that at most one
 /// search is ever in flight. Starting again with the same query and index re-centres: pages already searched are
-/// not searched again. The same holds for a new scanner over a partly searched index (renderer swap after Save).</para>
+/// not searched again. The same holds for a new scanner over a partly searched index (renderer swap after Save).
+/// A scanner that replaces a disposed one (a new query, a swapped renderer) is given the old one's
+/// <see cref="WhenStoppedAsync"/> as <c>after</c>: its first search waits for the old search in flight, so the rule
+/// holds across scanners too.</para>
 /// <para><b>Hit cap.</b> Each page is given the budget left (<c>maxTotalHits</c> minus the hits in the index) as its
 /// hit limit; a page cut short by it, or a page left to search once the budget is spent, marks the index
 /// <see cref="SearchIndex.Truncated"/> and ends the run (<see cref="SearchState.Truncated"/>). A single-character
@@ -44,6 +47,7 @@ public sealed class SearchScanner : IDisposable
     private readonly TimeSpan _idleGap;
     private readonly TimeSpan _workSlice;
     private readonly object _gate = new();
+    private readonly Task _after;
 
     private SearchIndex _index;
     private Run? _run;
@@ -58,7 +62,8 @@ public sealed class SearchScanner : IDisposable
         int maxTotalHits = 5000,
         Func<bool>? isBusy = null,
         TimeSpan? idleGap = null,
-        TimeSpan? workSlice = null)
+        TimeSpan? workSlice = null,
+        Task? after = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(index);
@@ -79,6 +84,7 @@ public sealed class SearchScanner : IDisposable
         _isBusy = isBusy;
         _idleGap = idleGap ?? _defaultIdleGap;
         _workSlice = workSlice ?? _defaultWorkSlice;
+        _after = after is null ? Task.CompletedTask : IgnoreFailureAsync(after);
     }
 
     /// <summary>Raised on the scan's thread after each page (skipped and failed ones included) and when a run ends.</summary>
@@ -173,7 +179,7 @@ public sealed class SearchScanner : IDisposable
                 _pageCount = _source.PageCount; // read once: a later Start never calls into the source
             }
 
-            run = new Run(index, query, previous?.Finished.Task ?? Task.CompletedTask);
+            run = new Run(index, query, previous?.Finished.Task ?? _after);
             if (query.Length > 0)
             {
                 run.Queue.AddRange(SearchOrder(centrePage, _pageCount).Where(p => !index.IsSearched(p)).Reverse());
@@ -234,6 +240,19 @@ public sealed class SearchScanner : IDisposable
         }
     }
 
+    /// <summary>
+    /// Completes when the current run has ended and its search in flight, if any, has returned (after
+    /// <see cref="Dispose"/> too); completed when nothing was started. Never faults. A scanner that replaces this one
+    /// is given it as <c>after</c>, so the two never search at the same time.
+    /// </summary>
+    public Task WhenStoppedAsync()
+    {
+        lock (_gate)
+        {
+            return _run?.Finished.Task ?? Task.CompletedTask;
+        }
+    }
+
     /// <summary>Cancels the search; nothing more is searched or published. Idempotent, never blocks.</summary>
     public void Dispose()
     {
@@ -261,6 +280,18 @@ public sealed class SearchScanner : IDisposable
     {
         var centre = Math.Clamp(centrePage, 0, Math.Max(pageCount - 1, 0));
         return Enumerable.Range(centre, pageCount - centre).Concat(Enumerable.Range(0, Math.Min(centre, pageCount)));
+    }
+
+    // The predecessor's end, however it ended: a faulted or cancelled task only means there is nothing to wait for.
+    private static async Task IgnoreFailureAsync(Task task)
+    {
+        try
+        {
+            await task.ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+        }
     }
 
     private static TaskCompletionSource CompletedSignal()

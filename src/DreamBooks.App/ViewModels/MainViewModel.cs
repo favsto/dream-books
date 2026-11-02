@@ -85,6 +85,10 @@ public sealed class MainViewModel : ObservableObject
     // rebuilt on the same index when a save swaps it; paused with the mark scan (the same two pause flags).
     private SearchIndex? _searchIndex;
     private SearchScanner? _searchScanner;
+
+    // The end of the last stopped search scan: the next scanner's first search waits for its search in flight (NFR-04:
+    // never two search jobs on the PDFium thread, also across a new query or a renderer swap).
+    private Task _searchStopped = Task.CompletedTask;
     private string? _searchQuery;
 
     /// <param name="dialogs">The dialogs.</param>
@@ -349,6 +353,12 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>How often the deferred scan start checks <see cref="FirstRendersDone"/>.</summary>
     public static readonly TimeSpan MarkScanStartPoll = TimeSpan.FromMilliseconds(50);
+
+    /// <summary>
+    /// At most this long a new search scan waits for the stopped one's search in flight (a cancelled PDFium job returns
+    /// within milliseconds; the bound only keeps a source that never returns from stopping every later search).
+    /// </summary>
+    public static readonly TimeSpan SearchPredecessorWait = TimeSpan.FromSeconds(1);
 
     /// <summary>
     /// Set by the view: true once the window's first visible pages show their bitmaps and no render is running. While
@@ -1488,7 +1498,8 @@ public sealed class MainViewModel : ObservableObject
         {
             if (source is not null && source.PageCount == session.PageCount)
             {
-                scanner = new SearchScanner(source, index, SearchMaxHits, IsRenderPending, MarkScanIdleGap);
+                scanner = new SearchScanner(
+                    source, index, SearchMaxHits, IsRenderPending, MarkScanIdleGap, after: _searchStopped);
                 if (_scanPausedForInk)
                 {
                     scanner.Pause();
@@ -1525,8 +1536,26 @@ public sealed class MainViewModel : ObservableObject
     {
         var scanner = _searchScanner;
         _searchScanner = null;
-        scanner?.Dispose();
+        if (scanner is not null)
+        {
+            scanner.Dispose();
+            _searchStopped = WhenSearchStoppedAsync(scanner);
+        }
+
         Search.SetScanner(null);
+    }
+
+    /// <summary>A stopped scan's end, waited for at most <see cref="SearchPredecessorWait"/>; never faults.</summary>
+    private static async Task WhenSearchStoppedAsync(SearchScanner scanner)
+    {
+        try
+        {
+            await scanner.WhenStoppedAsync().WaitAsync(SearchPredecessorWait).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            // A source that does not return: the next scan goes on without it.
+        }
     }
 
     /// <summary>The search goes (another query, the field emptied, the document closing or replaced).</summary>

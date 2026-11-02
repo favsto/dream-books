@@ -507,6 +507,28 @@ public sealed class SearchViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task A_new_query_waits_for_the_old_querys_search_in_flight_before_searching()
+    {
+        // Regression (Task 6): the new query's scanner searched while the old scanner's page search was still running,
+        // two search jobs at once. The fake ignores the token, as a PDFium job that has already started does.
+        var source = new FakeSearchPageSource(8);
+        var held = source.Hold(0);
+        var vm = await OpenAsync(source);
+        var old = Search(vm, "prima");
+        await source.Started(0).WaitAsync(_timeout);
+
+        var next = Search(vm, "seconda");
+        Assert.NotSame(old, next);
+        await Task.Delay(80);
+        Assert.Equal([0], source.Searched); // the new scan waits
+
+        held.SetResult();
+        await old.WhenStoppedAsync().WaitAsync(_timeout);
+        await CompleteAsync(next);
+        Assert.Equal(9, source.Searched.Count); // the old page once, then the eight of the new query
+    }
+
+    [Fact]
     public async Task When_every_page_fails_the_search_says_it_failed_not_that_there_is_no_text()
     {
         var source = new FakeSearchPageSource(4) { FailAll = true };
