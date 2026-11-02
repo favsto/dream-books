@@ -9,7 +9,8 @@ namespace DreamBooks.Pdf;
 /// (form XObjects included recursively); the outline entry count and the metadata fields; and
 /// a low-resolution render of the first, middle and last page. Reports only counts and
 /// difference categories, never document text or metadata values (NFR-12).
-/// Must run inside <see cref="PdfiumThread.RunAsync{T}"/>.
+/// <see cref="Compare"/> must run inside <see cref="PdfiumThread.RunAsync{T}"/>; <see cref="CompareAsync"/> runs the
+/// same check as a series of short jobs on that thread.
 /// </summary>
 internal static class PdfFidelity
 {
@@ -18,6 +19,12 @@ internal static class PdfFidelity
 
     /// <summary>Largest accepted mean absolute difference per channel, in 1/255 units.</summary>
     internal const double MaxMeanPixelDifference = 2.0;
+
+    /// <summary>
+    /// How long one job of <see cref="CompareAsync"/> compares pages before it gives the PDFium thread back: work
+    /// queued meanwhile (a page render, a stroke load) waits at most about this long (NFR-03, NFR-04).
+    /// </summary>
+    internal static readonly TimeSpan DefaultSlice = TimeSpan.FromMilliseconds(15);
 
     private const double _pageSizeTolerance = 0.01;
 
@@ -30,74 +37,169 @@ internal static class PdfFidelity
             throw new InvalidOperationException("PdfFidelity must run on the PDFium thread.");
         }
 
-        using PdfiumDocument original = PdfiumDocument.Open(originalPath);
-        using PdfiumDocument rewritten = PdfiumDocument.Open(rewrittenPath);
-
-        var differences = new List<string>();
-        var summary = new List<string>();
-
-        summary.Add(Inv($"pages {original.PageCount} vs {rewritten.PageCount}"));
-        if (original.PageCount != rewritten.PageCount)
+        using Comparison comparison = Comparison.Open(originalPath, rewrittenPath);
+        while (!comparison.Step(Timeout.InfiniteTimeSpan))
         {
-            differences.Add(Inv($"page-count {original.PageCount} vs {rewritten.PageCount}"));
         }
 
-        int pages = Math.Min(original.PageCount, rewritten.PageCount);
-        var renderedPages = new SortedSet<int>();
-        if (pages > 0)
-        {
-            renderedPages.Add(0);
-            renderedPages.Add(pages / 2);
-            renderedPages.Add(pages - 1);
-        }
+        return comparison.Finish();
+    }
 
-        long textA = 0, textB = 0;
-        var annotsA = new SortedDictionary<int, int>();
-        var annotsB = new SortedDictionary<int, int>();
-        var objectsA = new SortedDictionary<int, int>();
-        var objectsB = new SortedDictionary<int, int>();
-        for (int i = 0; i < pages; i++)
+    /// <summary>
+    /// <see cref="Compare"/> in short jobs on the PDFium thread: one opens both documents, each next one compares pages
+    /// for about <paramref name="slice"/> (at least one page; <see cref="TimeSpan.Zero"/>: one page per job), the last
+    /// one reads the outline and metadata. The next job is queued only when the previous one is done, so other work
+    /// queued meanwhile runs between them. Both documents are closed whatever happens. <paramref name="afterSlice"/>
+    /// (tests) runs on the PDFium thread after each page slice.
+    /// </summary>
+    internal static async Task<FidelityReport> CompareAsync(
+        string originalPath, string rewrittenPath, TimeSpan slice, Action? afterSlice, CancellationToken ct)
+    {
+        Comparison comparison = await PdfiumThread.RunAsync(() => Comparison.Open(originalPath, rewrittenPath), ct)
+            .ConfigureAwait(false);
+        try
         {
-            ComparePage(original, rewritten, i, renderedPages.Contains(i), differences, summary,
-                ref textA, ref textB, annotsA, annotsB, objectsA, objectsB);
-        }
-
-        summary.Add(Inv($"text characters {textA} vs {textB}"));
-        summary.Add($"annotations by subtype {Format(annotsA, SubtypeName)} vs {Format(annotsB, SubtypeName)}");
-        summary.Add($"page objects by type {Format(objectsA, ObjectTypeName)} vs {Format(objectsB, ObjectTypeName)}");
-
-        int outlineA = CountOutlineEntries(original.Handle);
-        int outlineB = CountOutlineEntries(rewritten.Handle);
-        summary.Add(Inv($"outline entries {outlineA} vs {outlineB}"));
-        if (outlineA != outlineB)
-        {
-            differences.Add(Inv($"outline-entries {outlineA} vs {outlineB}"));
-        }
-
-        var presentTags = new List<string>();
-        foreach (string tag in _metadataTags)
-        {
-            string a = ReadMetaText(original.Handle, tag);
-            string b = ReadMetaText(rewritten.Handle, tag);
-            if (a.Length > 0)
+            while (!await PdfiumThread.RunAsync(
+                () =>
+                {
+                    bool done = comparison.Step(slice);
+                    afterSlice?.Invoke();
+                    return done;
+                },
+                ct).ConfigureAwait(false))
             {
-                presentTags.Add(tag);
             }
 
-            if (!string.Equals(a, b, StringComparison.Ordinal))
+            return await PdfiumThread.RunAsync(comparison.Finish, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            await PdfiumThread.RunAsync(comparison.Dispose, CancellationToken.None).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// One comparison in progress: both documents open, the totals so far and the next page. Every member runs on the
+    /// PDFium thread; the comparison owns both documents until <see cref="Dispose"/>.
+    /// </summary>
+    private sealed class Comparison : IDisposable
+    {
+        private readonly PdfiumDocument _original;
+        private readonly PdfiumDocument _rewritten;
+        private readonly List<string> _differences = [];
+        private readonly List<string> _summary = [];
+        private readonly SortedSet<int> _renderedPages = [];
+        private readonly SortedDictionary<int, int> _annotsA = [];
+        private readonly SortedDictionary<int, int> _annotsB = [];
+        private readonly SortedDictionary<int, int> _objectsA = [];
+        private readonly SortedDictionary<int, int> _objectsB = [];
+        private readonly int _pages;
+        private long _textA;
+        private long _textB;
+        private int _next;
+
+        private Comparison(PdfiumDocument original, PdfiumDocument rewritten)
+        {
+            _original = original;
+            _rewritten = rewritten;
+            _summary.Add(Inv($"pages {original.PageCount} vs {rewritten.PageCount}"));
+            if (original.PageCount != rewritten.PageCount)
             {
-                differences.Add(Inv($"metadata {tag} differs (length {a.Length} vs {b.Length})"));
+                _differences.Add(Inv($"page-count {original.PageCount} vs {rewritten.PageCount}"));
+            }
+
+            _pages = Math.Min(original.PageCount, rewritten.PageCount);
+            if (_pages > 0)
+            {
+                _renderedPages.Add(0);
+                _renderedPages.Add(_pages / 2);
+                _renderedPages.Add(_pages - 1);
             }
         }
 
-        summary.Add($"metadata fields present: {(presentTags.Count == 0 ? "none" : string.Join(", ", presentTags))}");
-        return new FidelityReport(differences) { Summary = summary };
+        public static Comparison Open(string originalPath, string rewrittenPath)
+        {
+            if (!PdfiumThread.IsPdfiumThread)
+            {
+                throw new InvalidOperationException("PdfFidelity must run on the PDFium thread.");
+            }
+
+            PdfiumDocument original = PdfiumDocument.Open(originalPath);
+            try
+            {
+                return new Comparison(original, PdfiumDocument.Open(rewrittenPath));
+            }
+            catch
+            {
+                original.Dispose();
+                throw;
+            }
+        }
+
+        /// <summary>Compares pages for about <paramref name="slice"/> (at least one); true when every page is done.</summary>
+        public bool Step(TimeSpan slice)
+        {
+            long start = System.Diagnostics.Stopwatch.GetTimestamp();
+            while (_next < _pages)
+            {
+                ComparePage(_original, _rewritten, _next, _renderedPages.Contains(_next), _differences, _summary,
+                    ref _textA, ref _textB, _annotsA, _annotsB, _objectsA, _objectsB);
+                _next++;
+                if (slice != Timeout.InfiniteTimeSpan && System.Diagnostics.Stopwatch.GetElapsedTime(start) >= slice)
+                {
+                    break;
+                }
+            }
+
+            return _next >= _pages;
+        }
+
+        /// <summary>The totals, outline and metadata: the report. Call once every page is done.</summary>
+        public FidelityReport Finish()
+        {
+            _summary.Add(Inv($"text characters {_textA} vs {_textB}"));
+            _summary.Add($"annotations by subtype {Format(_annotsA, SubtypeName)} vs {Format(_annotsB, SubtypeName)}");
+            _summary.Add($"page objects by type {Format(_objectsA, ObjectTypeName)} vs {Format(_objectsB, ObjectTypeName)}");
+
+            int outlineA = CountOutlineEntries(_original.Handle);
+            int outlineB = CountOutlineEntries(_rewritten.Handle);
+            _summary.Add(Inv($"outline entries {outlineA} vs {outlineB}"));
+            if (outlineA != outlineB)
+            {
+                _differences.Add(Inv($"outline-entries {outlineA} vs {outlineB}"));
+            }
+
+            var presentTags = new List<string>();
+            foreach (string tag in _metadataTags)
+            {
+                string a = ReadMetaText(_original.Handle, tag);
+                string b = ReadMetaText(_rewritten.Handle, tag);
+                if (a.Length > 0)
+                {
+                    presentTags.Add(tag);
+                }
+
+                if (!string.Equals(a, b, StringComparison.Ordinal))
+                {
+                    _differences.Add(Inv($"metadata {tag} differs (length {a.Length} vs {b.Length})"));
+                }
+            }
+
+            _summary.Add($"metadata fields present: {(presentTags.Count == 0 ? "none" : string.Join(", ", presentTags))}");
+            return new FidelityReport(_differences) { Summary = _summary };
+        }
+
+        public void Dispose()
+        {
+            _rewritten.Dispose();
+            _original.Dispose();
+        }
     }
 
     /// <summary>Extracted text of a loaded page. PDFium thread only.</summary>
     internal static unsafe string ReadPageText(nint page)
     {
-        nint textPage = PdfiumNative.FPDFText_LoadPage(page);
+        nint textPage = PdfiumText.FPDFText_LoadPage(page);
         if (textPage == 0)
         {
             throw new InvalidOperationException("PDFium could not load the page text.");
@@ -105,7 +207,7 @@ internal static class PdfFidelity
 
         try
         {
-            int count = PdfiumNative.FPDFText_CountChars(textPage);
+            int count = PdfiumText.FPDFText_CountChars(textPage);
             if (count <= 0)
             {
                 return string.Empty;
@@ -115,14 +217,14 @@ internal static class PdfFidelity
             int written;
             fixed (char* p = buffer)
             {
-                written = PdfiumNative.FPDFText_GetText(textPage, 0, count, p);
+                written = PdfiumText.FPDFText_GetText(textPage, 0, count, p);
             }
 
             return new string(buffer, 0, Math.Clamp(written - 1, 0, count));
         }
         finally
         {
-            PdfiumNative.FPDFText_ClosePage(textPage);
+            PdfiumText.FPDFText_ClosePage(textPage);
         }
     }
 

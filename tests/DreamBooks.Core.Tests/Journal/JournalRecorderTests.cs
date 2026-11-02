@@ -169,6 +169,18 @@ public class JournalRecorderTests
     }
 
     [Fact]
+    public void RecordView_carries_the_fit_width_flag()
+    {
+        using var session = Open(new FakePageSource(3));
+        var sink = new ListSink();
+        using var recorder = new JournalRecorder(session, sink);
+
+        recorder.RecordView(2, 1.5, 10, 20.25, fitWidth: true);
+
+        Assert.Equal(new ViewEntry(2, 1.5, 10, 20.25, true), Assert.Single(Entries(sink)));
+    }
+
+    [Fact]
     public async Task Recorder_stops_after_Dispose()
     {
         using var session = Open(new FakePageSource(1));

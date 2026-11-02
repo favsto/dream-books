@@ -83,11 +83,13 @@ Il documento è sempre protagonista: nessuna barra fissa, nessuna cornice, nessu
 
 | Evento | Animazione | Durata |
 | --- | --- | --- |
-| Comparsa pannello | Dissolvenza + scala da 0,95 a 1 | 180 ms, ease-out |
-| Scomparsa pannello | Dissolvenza + scala a 0,97 | 120 ms, ease-in |
+| Comparsa pannello flottante | Dissolvenza + scala da 0,95 a 1 | 180 ms, ease-out |
+| Scomparsa pannello flottante | Dissolvenza + scala a 0,97 | 120 ms, ease-in |
+| Comparsa e scomparsa pannello laterale (ancorato al bordo dello schermo, es. UI-04) | Scorrimento dal bordo e ritorno al bordo | 180 ms ease-out in entrata, 120 ms ease-in in uscita |
 | Ritiro toolbar durante la scrittura | Dissolvenza a 0% | 200 ms dopo 300 ms di scrittura |
 | Cambio strumento | Indicatore che scorre sotto l'icona attiva | 150 ms |
 | Undo / redo | Breve evidenziazione dell'area modificata | 250 ms |
+| Anteprima della barra di scorrimento (UI-07) | Dissolvenza in entrata e in uscita; ogni nuova pagina sfuma sopra la precedente | 150 ms in entrata, 120 ms in uscita, 140 ms di dissolvenza incrociata, tutte ease-out |
 
 Tutte le animazioni si disattivano se l'utente ha attivato "Effetti di animazione: off" in Windows.
 
@@ -100,9 +102,10 @@ L'interfaccia ha un solo livello di base, il canvas del documento, e quattro ele
 | UI-01 | Canvas documento | Tutta la finestra | Pagine in scorrimento verticale continuo, centrate |
 | UI-02 | Toolbar strumenti | Bordo inferiore, centrata | Pillola Acrylic; trascinabile su qualunque bordo; si ritira durante la scrittura |
 | UI-03 | Menu principale | Pulsante tondo in alto a sinistra | Si espande in un pannello con Apri, Salva, Salva con nome, File recenti, Esporta, Impostazioni |
-| UI-04 | Pannello segnalibri e miniature | Bordo sinistro, a scomparsa | Si apre con swipe dal bordo o dal menu; due schede: Segnalibri e Pagine |
+| UI-04 | Pannello segnalibri e miniature | Bordo sinistro, a scomparsa | Si apre con swipe dal bordo (sull'ultima scheda mostrata) o dal menu; schede in alto al posto del titolo (nel blocco 3b: "Segni", l'elenco dei segni (FR-103), con Ctrl+M; "Pagine", con Ctrl+Maiusc+P (Ctrl+P resta libero per la stampa): miniature verticali di circa 140 px con il numero sotto, che includono i propri tratti disegnati sopra l'immagine della pagina, la pagina corrente cerchiata, una tacca dei colori della barra di scorrimento per le pagine con segni o note; un tocco porta alla pagina e il pannello resta aperto, Indietro torna dove si era prima di aprirlo; le miniature si caricano solo quando la scheda è visibile e mai prima delle pagine che si stanno leggendo; la scheda Segnalibri arriva con i segnalibri. La penna non usa mai il pannello: sul bordo scrive, sul pannello aperto lo chiude senza scrivere) |
 | UI-05 | Indicatore pagina e zoom | In basso a destra | Mostra "12 / 48 · 125%"; compare durante scroll e zoom, sparisce dopo 1,5 s |
 | UI-06 | Barra del titolo | In alto, trasparente | Solo i pulsanti finestra e il nome file in piccolo; si nasconde a schermo intero |
+| UI-07 | Barra di scorrimento con anteprima | Bordo destro, sottile, a scomparsa | Compare mentre si scorre e mostra la posizione; toccandola o trascinandola compare l'anteprima grande della pagina corrispondente, con sopra l'inchiostro del lettore (tratti e segni); l'anteprima compare e scompare con una breve dissolvenza morbida e ogni nuova pagina sfuma sopra la precedente, senza lampi bianchi (istantaneo se le animazioni di Windows sono disattivate); svanisce da sola dopo circa 1,5 s con dissolvenza morbida (istantanea se le animazioni di Windows sono disattivate). Mentre la barra è visibile, il cursore (il rettangolo della pagina corrente) si afferra e si trascina col dito, col mouse e anche con la penna; col dito e col mouse si afferra anche toccando un po' accanto (zona invisibile di almeno 56 × 56 DIP). La penna afferra solo il cursore: altrove sulla barra (tacche, indicatore) scrive, e a barra nascosta scrive ovunque. Sulla barra compaiono piccole tacche per i segni e, in rosso, per le note scritte a mano (FR-101), e per i risultati della ricerca (FR-105), con colori diversi (blocco 3b) |
 
 ### Toolbar strumenti (UI-02)
 
@@ -136,8 +139,8 @@ L'utente deve poter aprire qualsiasi PDF standard e muoversi nel documento con d
 | FR-01 | Apertura PDF da menu, trascinamento sulla finestra, "Apri con" da Esplora file e associazione al tipo .pdf | Must |
 | FR-02 | Apertura di PDF protetti da password, con richiesta della password | Should |
 | FR-03 | Elenco degli ultimi 8 file aperti, con miniatura della prima pagina | Should |
-| FR-04 | Riapertura del documento alla pagina e allo zoom dell'ultima sessione | Should |
-| FR-05 | Scorrimento verticale continuo con un dito, rotellina o barra di scorrimento sottile a scomparsa | Must |
+| FR-04 | Riapertura del documento alla pagina, allo zoom e alla posizione dell'ultima sessione, anche per i documenti senza modifiche non salvate; la posizione si conserva fuori dal PDF, in un piccolo file locale per documento (il PDF non viene toccato) | Should |
+| FR-05 | Scorrimento verticale continuo con un dito, rotellina o barra di scorrimento sottile a scomparsa. Lo scorrimento col dito ha inerzia: lanciata, la pagina prosegue e rallenta progressivamente, tanto più lontano quanto più veloce è il lancio; si ferma subito a inizio e fine documento (senza rimbalzo), a un nuovo tocco, quando la penna si avvicina o scrive, con tastiera, rotellina, barra, salti e zoom. Il pinch non ha inerzia | Must |
 | FR-06 | Zoom con pinch a due dita, Ctrl + rotellina, Ctrl + / Ctrl −; range 25%–800% | Must |
 | FR-07 | Doppio tocco con un dito: alterna "adatta larghezza" e zoom 200% sul punto toccato | Should |
 | FR-08 | Modalità di visualizzazione: pagina singola continua (predefinita), due pagine affiancate | Could |
@@ -145,7 +148,7 @@ L'utente deve poter aprire qualsiasi PDF standard e muoversi nel documento con d
 | FR-10 | Navigazione da tastiera: PagSu, PagGiù, Home, Fine | Should |
 | FR-11 | Schermo intero con F11 o dal menu | Should |
 | FR-12 | Rotazione della vista di una pagina di 90° (solo visualizzazione, non modifica il file) | Could |
-| FR-13 | Ricerca di testo nel PDF con evidenziazione dei risultati | Could |
+| FR-13 | Ricerca di testo nel PDF con evidenziazione dei risultati (solo dove il PDF ha un livello di testo) | Should |
 
 **Separazione dita / penna.** Il dito non disegna mai: serve solo a scorrere, zoomare e toccare i comandi. La penna scrive sempre con lo strumento attivo. Il mouse si comporta come la penna se lo strumento attivo è di disegno, altrimenti scorre. Questo comportamento si può cambiare nelle impostazioni ("Disegna anche con il dito").
 
@@ -241,6 +244,19 @@ Il salvataggio è il requisito più delicato: il file prodotto deve essere un PD
 | FR-75 | Segnalibri annidati (sottovoci) | Could |
 | FR-76 | Indicatore discreto sul bordo della pagina che ha un segnalibro | Should |
 
+**Rinviati (decisione del 31/10/2026).** FR-70–FR-76 non fanno parte del blocco 3b: Fausto preferisce segni solo visivi, riconosciuti dai suoi tratti (FR-100–FR-104), e non vuole dipendere dai segnalibri nativi del PDF. La scrittura dell'indice (FR-74) resta un requisito Must della v1 ma non è pianificata; è una decisione aperta (PDFium non sa scrivere i segnalibri).
+
+### Segni e ricerca (blocco 3b)
+
+| ID | Requisito | Priorità |
+| --- | --- | --- |
+| FR-100 | Una linea laterale tracciata a penna (quasi verticale, anche leggermente inclinata, curva, ripassata più volte o tracciata in più tratti (un tratto corto e quasi verticale lungo la linea fa parte del segno e non diventa una nota), lunga almeno 2 righe di testo, nel margine esterno della pagina; tracciata a mano libera: il tremolio della penna non conta. Finché non si legge il testo della pagina (3b-2) una riga vale 15 pt, quindi almeno 30 pt, circa 1 cm) è riconosciuta come segno; anche un passaggio evidenziato diventa un segno quando esiste l'evidenziatore (3c). I segni sono ricavati dai tratti a ogni apertura e modifica: non si scrive nulla di nuovo nel PDF | Must |
+| FR-101 | I segni compaiono come tacche sulla barra di scorrimento (UI-07); in un altro colore (rosso) compaiono anche le note scritte a mano: ogni gruppo di tratti che non sono linee laterali (scritte, disegni, sottolineature, note nel margine), dove i tratti distano meno di 4 righe in verticale. Punti e tocchi isolati non contano. Per ora elenco dei segni e Alt+Su/Giù restano solo per i segni | Must |
+| FR-102 | Salto al segno precedente/successivo (pulsanti nel menu, scorciatoie Alt+Su e Alt+Giù), che registra la posizione nello storico del tasto Indietro (FR-09); agli estremi non salta e avvisa "Nessun altro segno" | Must |
+| FR-103 | Elenco dei segni nel pannello laterale sinistro (UI-04; si apre con swipe dal bordo, dal menu o con Ctrl+M): miniatura del passaggio con le note scritte accanto, numero di pagina; un tocco porta al passaggio | Should |
+| FR-104 | Più linee sullo stesso passaggio contano come un solo segno; un solo tipo di segno, senza livelli né colori | Must |
+| FR-105 | I risultati della ricerca (FR-13) compaiono come tacche sulla barra e sono evidenziati sulla pagina senza coprire i tratti (il risultato corrente in un colore più forte); avanti/indietro tra i risultati con i pulsanti accanto al campo di ricerca, con Invio e Maiusc+Invio nel campo e con F3 e Maiusc+F3 ovunque; dopo l'ultimo riparte dal primo avvisando "Ripartito dall'inizio" (e "Ripartito dalla fine" all'indietro); il primo salto registra la posizione nello storico del tasto Indietro (FR-09). Ctrl+F porta al campo di ricerca, Esc annulla la ricerca. Se il PDF non ha testo lo dice una volta ("Nessun testo ricercabile in questo PDF"). Avanti/indietro premuti mentre la ricerca è ancora in corso non vanno persi: il salto avviene da solo appena il risultato è trovato. Se alcune pagine non si sono potute leggere, accanto al conteggio compare una nota ("N pagine non lette") | Should |
+
 ### Salvataggio
 
 | ID | Requisito | Priorità |
@@ -289,7 +305,7 @@ I valori sono misurati su una Surface Pro di fascia media (Intel Core i5 o Snapd
 | NFR-23 | Compatibilità | Funziona anche senza penna, con mouse e tastiera | Should |
 | NFR-30 | Accessibilità | Contrasto testi e icone conforme a WCAG AA in entrambi i temi | Should |
 | NFR-31 | Accessibilità | Tutti i comandi hanno etichetta per gli screen reader e sono raggiungibili da tastiera | Should |
-| NFR-32 | Accessibilità | Rispetto dell'impostazione di sistema che riduce animazioni e trasparenze | Must |
+| NFR-32 | Accessibilità | Rispetto dell'impostazione di sistema che riduce animazioni e trasparenze. Eccezione voluta: le evidenziazioni della ricerca (FR-105) restano semitrasparenti anche con gli effetti di trasparenza disattivati, perché un colore pieno coprirebbe il testo evidenziato (sono un colore di evidenziazione, non un effetto di trasparenza) | Must |
 | NFR-40 | Privacy | Nessuna connessione di rete; nessun dato inviato all'esterno | Must |
 | NFR-50 | Manutenibilità | Codice, commenti e nomi in inglese; test automatici per modello dati, undo/redo e salvataggio/riapertura | Must |
 
@@ -326,7 +342,7 @@ Lo sviluppo procede in cinque fasi; ognuna termina con una build installabile da
 
 1. **Prototipo inchiostro.** Una pagina PDF renderizzata, penna con pressione, gomma col dorso, undo/redo in memoria, zoom minimo (parte di FR-06) per verificare FR-26. Serve a validare la sensazione di scrittura.
 2. **Salvataggio e riapertura.** Salvataggio nel PDF con le due forme (visibile e modificabile), riapertura, diario delle modifiche non salvate e recupero dopo crash; i tratti di tutte le pagine restano quando si cambia pagina.
-3. **Documento completo.** Multipagina con rendering virtualizzato, zoom, navigazione, evidenziatori, segnalibri.
+3. **Documento completo**, in tre blocchi da provare uno alla volta: **3a** documento a più pagine (scorrimento continuo con rendering virtualizzato, zoom, vai a pagina, torna indietro, ripresa dall'ultima posizione, barra di scorrimento con anteprima); **3b** aiuti per ritrovare le cose, in due passi (3b-1: riconoscimento dei segni dalla linea laterale, tacche sulla barra, salto tra segni, elenco dei segni; 3b-2: pannello di miniature con i propri tratti, ricerca di testo); i segnalibri e la scrittura dell'indice del PDF sono rinviati; **3c** evidenziatori (tondo e a scalpello, salvati trasparenti nel PDF).
 4. **Interfaccia finale.** Toolbar flottante, pannelli a scomparsa, Mica/Acrylic, animazioni, temi, schermata iniziale, impostazioni.
 5. **Rifinitura.** Selezione con lazo, prestazioni su PDF grandi, accessibilità, pacchetto MSIX.
 

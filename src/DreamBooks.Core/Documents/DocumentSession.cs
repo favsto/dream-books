@@ -11,9 +11,12 @@ namespace DreamBooks.Core.Documents;
 /// (FR-62, FR-83, NFR-02).
 /// </summary>
 /// <remarks>
-/// Mutation and events belong to one thread (the UI thread). <see cref="EnsurePageAsync"/> may be awaited
-/// concurrently: callers share one load per page, which runs without the callers' tokens so that one
-/// caller cancelling does not cancel the load for the others; a failed load is not cached.
+/// Mutation and events belong to one thread (the UI thread), except <see cref="PageStrokesChanged"/>, which
+/// documents its own threading. <see cref="EnsurePageAsync"/> and
+/// <see cref="EnsureEditorAsync"/> may be awaited concurrently: callers share one load per page, which runs
+/// without the callers' tokens so that one caller cancelling does not cancel the load for the others; a failed
+/// load is not cached. Every loaded page can have an editor, so several visible pages can be edited at once;
+/// all editors share <see cref="Undo"/> (FR-26, FR-62).
 /// </remarks>
 public sealed class DocumentSession : IDisposable
 {
@@ -39,9 +42,33 @@ public sealed class DocumentSession : IDisposable
         Undo.CommandApplied += OnCommandApplied;
     }
 
+    /// <summary>
+    /// Raised when <see cref="CurrentPageIndex"/> changes, or when <see cref="GoToPageAsync"/> gives the current
+    /// page its editor.
+    /// </summary>
     public event EventHandler? CurrentPageChanged;
 
+    /// <summary>
+    /// Raised after an undo or redo changed a page: the view brings that page into sight if it is not visible.
+    /// Undo and redo never change <see cref="CurrentPageIndex"/> themselves.
+    /// </summary>
+    public event EventHandler<RevealRequestedEventArgs>? RevealRequested;
+
     public event EventHandler? DirtyChanged;
+
+    /// <summary>
+    /// Raised when a loaded page's strokes change (stroke added, erased, undone, redone) and once when a page
+    /// finishes loading. Unlike the other events it may be raised off the UI thread: an edit raises it on the
+    /// thread that changed the page (synchronously, inside the command); a load raises it on the context of the
+    /// call that started the load (the UI thread for the app's loads, a pool thread otherwise), never while the
+    /// session's lock is held. Handlers must be thread-safe and cheap. An exception from a handler is swallowed
+    /// (on both paths) and the remaining handlers still run, so a faulty subscriber can never break the edit,
+    /// its undo step or dirty tracking. Unloaded pages are not listened to. Nothing is raised once
+    /// <see cref="Dispose"/> has returned, with one threading limit: the disposed check and the invocation are
+    /// not atomic, so a notification raised on another thread (a load completing on a pool thread) that passed
+    /// the check just before <see cref="Dispose"/> ran may still reach its handlers after it returned.
+    /// </summary>
+    public event EventHandler<PageStrokesChangedEventArgs>? PageStrokesChanged;
 
     public string Path { get; private set; }
 
@@ -53,10 +80,14 @@ public sealed class DocumentSession : IDisposable
     /// <summary>The document's own undo history (capacity 500), created and owned by the session.</summary>
     public UndoManager Undo { get; }
 
-    /// <summary>Index of the page shown, or -1 before the first <see cref="GoToPageAsync"/>.</summary>
+    /// <summary>
+    /// Index of the page the view considers current, or -1 before the first <see cref="GoToPageAsync"/> or
+    /// <see cref="SetCurrentPageFromView"/>.
+    /// </summary>
     public int CurrentPageIndex { get; private set; } = -1;
 
-    public PageEditor? CurrentEditor { get; private set; }
+    /// <summary>The editor of the current page, or null while that page has no editor yet.</summary>
+    public PageEditor? CurrentEditor => TryGetEditor(CurrentPageIndex, out var editor) ? editor : null;
 
     /// <summary>True when some loaded page's stroke Id sequence differs from its loaded or last saved one.</summary>
     public bool IsDirty => _isDirty;
@@ -93,6 +124,7 @@ public sealed class DocumentSession : IDisposable
         ValidatePageIndex(pageIndex);
 
         Task<LoadedPage> load;
+        var started = false;
         lock (_gate)
         {
             if (_pages.TryGetValue(pageIndex, out var loaded))
@@ -105,6 +137,7 @@ public sealed class DocumentSession : IDisposable
                 // The lock is held until the task is registered, so the load's own cleanup
                 // (which takes the lock) always runs after the registration.
                 pending = LoadAsync(pageIndex);
+                started = true;
                 if (!pending.IsCompleted)
                 {
                     _loads[pageIndex] = pending;
@@ -114,7 +147,49 @@ public sealed class DocumentSession : IDisposable
             load = pending;
         }
 
+        if (started)
+        {
+            // Outside the lock; for a load that already completed this raises before returning.
+            _ = RaiseWhenLoadedAsync(load, pageIndex);
+        }
+
         return (await load.WaitAsync(ct)).Page;
+    }
+
+    /// <summary>The editor of an already loaded page, without loading anything.</summary>
+    public bool TryGetEditor(int pageIndex, out PageEditor? editor)
+    {
+        lock (_gate)
+        {
+            return _editors.TryGetValue(pageIndex, out editor);
+        }
+    }
+
+    /// <summary>
+    /// Returns the page's editor, loading its strokes the first time only. One editor per page, the same
+    /// instance <see cref="GoToPageAsync"/> uses; all editors share <see cref="Undo"/>.
+    /// </summary>
+    public async Task<PageEditor> EnsureEditorAsync(int pageIndex, CancellationToken ct = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ValidatePageIndex(pageIndex);
+        if (TryGetEditor(pageIndex, out var existing))
+        {
+            return existing!;
+        }
+
+        var page = await EnsurePageAsync(pageIndex, ct);
+        lock (_gate)
+        {
+            // Concurrent callers awaited the same load: the first one back creates the editor.
+            if (!_editors.TryGetValue(pageIndex, out var editor))
+            {
+                editor = new PageEditor(page, Undo);
+                _editors[pageIndex] = editor;
+            }
+
+            return editor;
+        }
     }
 
     /// <summary>Shows a page, loading it if needed. Never clears the undo history.</summary>
@@ -124,51 +199,57 @@ public sealed class DocumentSession : IDisposable
         ValidatePageIndex(pageIndex); // before taking a ticket: an invalid call must not supersede a valid one
 
         var ticket = ++_navigation;
-        var page = await EnsurePageAsync(pageIndex, ct);
+        var alreadyShown = pageIndex == CurrentPageIndex && CurrentEditor is not null;
+        await EnsureEditorAsync(pageIndex, ct);
         if (ticket != _navigation || _disposed)
         {
             return; // A later navigation superseded this one, or the session was closed.
         }
 
-        if (pageIndex == CurrentPageIndex && CurrentEditor is not null)
+        if (alreadyShown)
         {
             return;
         }
 
-        if (!_editors.TryGetValue(pageIndex, out var editor))
-        {
-            editor = new PageEditor(page, Undo);
-            _editors[pageIndex] = editor;
-        }
-
         CurrentPageIndex = pageIndex;
-        CurrentEditor = editor;
         CurrentPageChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Undoes the last command, first showing the page it changed.</summary>
-    public async Task<bool> UndoAsync(CancellationToken ct = default)
+    /// <summary>
+    /// Records the page the view considers current (e.g. the one at the viewport centre) without loading its
+    /// strokes and without touching the undo history. Supersedes a <see cref="GoToPageAsync"/> in flight only
+    /// when the current page actually changes.
+    /// Ignored once the session is disposed.
+    /// </summary>
+    public void SetCurrentPageFromView(int pageIndex)
     {
-        if (Undo.PeekUndo() is not { } command)
+        if (_disposed)
         {
-            return false;
+            return;
         }
 
-        await ShowCommandPageAsync(command, ct);
-        return Undo.Undo();
-    }
-
-    /// <summary>Redoes the next command, first showing the page it changes.</summary>
-    public async Task<bool> RedoAsync(CancellationToken ct = default)
-    {
-        if (Undo.PeekRedo() is not { } command)
+        ValidatePageIndex(pageIndex);
+        if (pageIndex == CurrentPageIndex)
         {
-            return false;
+            return; // Nothing changes, so an explicit GoToPageAsync in flight stays valid.
         }
 
-        await ShowCommandPageAsync(command, ct);
-        return Undo.Redo();
+        ++_navigation;
+        CurrentPageIndex = pageIndex;
+        CurrentPageChanged?.Invoke(this, EventArgs.Empty);
     }
+
+    /// <summary>
+    /// Undoes the last command, loading its page if needed, then raises <see cref="RevealRequested"/> for that
+    /// page. The current page does not change.
+    /// </summary>
+    public Task<bool> UndoAsync(CancellationToken ct = default) => ApplyAsync(redo: false, ct);
+
+    /// <summary>
+    /// Redoes the next command, loading its page if needed, then raises <see cref="RevealRequested"/> for that
+    /// page. The current page does not change.
+    /// </summary>
+    public Task<bool> RedoAsync(CancellationToken ct = default) => ApplyAsync(redo: true, ct);
 
     /// <summary>
     /// The net change per loaded page against its baseline, ordered by page index. Removed Ids are always
@@ -252,15 +333,25 @@ public sealed class DocumentSession : IDisposable
         UpdateDirty();
     }
 
-    /// <summary>Stops listening to the undo history; no event is raised afterwards. Idempotent.</summary>
+    /// <summary>
+    /// Stops listening to the undo history and to the loaded pages; no event is raised afterwards. Idempotent.
+    /// </summary>
     public void Dispose()
     {
-        if (_disposed)
+        lock (_gate)
         {
-            return;
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            foreach (var loaded in _pages.Values)
+            {
+                loaded.Page.StrokesChanged -= OnPageStrokesChanged;
+            }
         }
 
-        _disposed = true;
         Undo.CommandApplied -= OnCommandApplied;
     }
 
@@ -270,14 +361,35 @@ public sealed class DocumentSession : IDisposable
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(pageIndex, PageCount);
     }
 
-    private async Task ShowCommandPageAsync(IUndoableCommand command, CancellationToken ct)
+    private async Task<bool> ApplyAsync(bool redo, CancellationToken ct)
     {
-        if (command is IPageCommand pageCommand
-            && pageCommand.PageIndex != CurrentPageIndex
-            && pageCommand.PageIndex >= 0
-            && pageCommand.PageIndex < PageCount)
+        while (true)
         {
-            await GoToPageAsync(pageCommand.PageIndex, ct);
+            if ((redo ? Undo.PeekRedo() : Undo.PeekUndo()) is not { } command)
+            {
+                return false;
+            }
+
+            var pageIndex = command is IPageCommand { PageIndex: var index } && index >= 0 && index < PageCount
+                ? index
+                : -1;
+            if (pageIndex >= 0 && !_disposed && !TryGetEditor(pageIndex, out _))
+            {
+                await EnsureEditorAsync(pageIndex, ct);
+                continue; // The history may have changed while the page loaded: look again.
+            }
+
+            if (!(redo ? Undo.Redo() : Undo.Undo()))
+            {
+                return false;
+            }
+
+            if (pageIndex >= 0 && !_disposed)
+            {
+                RevealRequested?.Invoke(this, new RevealRequestedEventArgs(pageIndex));
+            }
+
+            return true;
         }
     }
 
@@ -301,6 +413,11 @@ public sealed class DocumentSession : IDisposable
             lock (_gate)
             {
                 _pages[pageIndex] = loaded;
+                if (!_disposed)
+                {
+                    // Only loaded pages are listened to; Dispose (under the same lock) unsubscribes them.
+                    loaded.Page.StrokesChanged += OnPageStrokesChanged;
+                }
             }
 
             return loaded;
@@ -310,6 +427,58 @@ public sealed class DocumentSession : IDisposable
             lock (_gate)
             {
                 _loads.Remove(pageIndex);
+            }
+        }
+    }
+
+    private async Task RaiseWhenLoadedAsync(Task<LoadedPage> load, int pageIndex)
+    {
+        try
+        {
+            await load;
+        }
+        catch (Exception)
+        {
+            return; // A failed load is reported to its callers, who await it; nothing changed.
+        }
+
+        RaisePageStrokesChanged(pageIndex);
+    }
+
+    private void OnPageStrokesChanged(object? sender, EventArgs e)
+    {
+        if (sender is Page page)
+        {
+            RaisePageStrokesChanged(page.Index);
+        }
+    }
+
+    private void RaisePageStrokesChanged(int pageIndex)
+    {
+        bool disposed;
+        lock (_gate)
+        {
+            disposed = _disposed;
+        }
+
+        if (disposed || PageStrokesChanged is not { } handlers)
+        {
+            return;
+        }
+
+        // Each handler on its own, and none may throw out of here: on the edit path this runs inside
+        // command.Do(), and an exception would keep the command out of the undo history and the page out of
+        // dirty tracking and the save, although the page already changed. On the load path nobody awaits it.
+        var args = new PageStrokesChangedEventArgs(pageIndex);
+        foreach (var handler in handlers.GetInvocationList().Cast<EventHandler<PageStrokesChangedEventArgs>>())
+        {
+            try
+            {
+                handler(this, args);
+            }
+            catch (Exception)
+            {
+                // Derived data (marks) may go stale for this page; the document itself stays consistent.
             }
         }
     }

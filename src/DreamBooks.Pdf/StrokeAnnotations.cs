@@ -136,6 +136,43 @@ internal static class StrokeAnnotations
     }
 
     /// <summary>
+    /// True when the page holds at least one ink annotation carrying <see cref="PayloadKey"/>, readable or
+    /// not. The cheap pre-check of the mark scan (FR-100, NFR-02): it reads only each annotation's subtype
+    /// and the key's presence, never a payload, and stops at the first match.
+    /// </summary>
+    public static bool HasAppAnnotation(nint page)
+    {
+        EnsurePdfiumThread();
+        int count = PdfiumNative.FPDFPage_GetAnnotCount(page);
+        for (int i = 0; i < count; i++)
+        {
+            nint annot = PdfiumNative.FPDFPage_GetAnnot(page, i);
+            if (annot == 0)
+            {
+                continue;
+            }
+
+            bool ours;
+            try
+            {
+                ours = PdfiumNative.FPDFAnnot_GetSubtype(annot) == PdfiumNative.FPDF_ANNOT_INK
+                    && PdfiumNative.FPDFAnnot_HasKey(annot, PayloadKey) != 0;
+            }
+            finally
+            {
+                PdfiumNative.FPDFPage_CloseAnnot(annot);
+            }
+
+            if (ours)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Removes every readable app annotation whose payload Id is <paramref name="id"/>, so an erased
     /// stroke cannot come back through a duplicate. Matching is by payload Id only (/NM is ignored).
     /// Annotations with a newer or corrupt payload are never removed. Returns how many were removed.

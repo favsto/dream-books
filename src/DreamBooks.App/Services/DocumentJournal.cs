@@ -88,14 +88,14 @@ public sealed class DocumentJournal : IAsyncDisposable
     /// Records where the reader is, but only when there is something to restore (unsaved changes) or a journal
     /// already exists: a view change alone never creates a journal file.
     /// </summary>
-    public void RecordView(int pageIndex, double zoom, double scrollX, double scrollY)
+    public void RecordView(int pageIndex, double zoom, double scrollX, double scrollY, bool? fitWidth = null)
     {
         if (!_enabled || _recorder is null || _resyncPending || (!_session.IsDirty && !_fileOnDisk))
         {
             return;
         }
 
-        _recorder.RecordView(pageIndex, zoom, scrollX, scrollY);
+        _recorder.RecordView(pageIndex, zoom, scrollX, scrollY, fitWidth);
     }
 
     /// <summary>

@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="DreamBooks.Core.Tests" />
+    <InternalsVisibleTo Include="DreamBooks.App.Tests" />
   </ItemGroup>
 
 </Project>

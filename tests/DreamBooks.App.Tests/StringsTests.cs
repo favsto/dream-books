@@ -47,6 +47,32 @@ public class StringsTests
     }
 
     [Fact]
+    public void Strings_Designer_stays_in_sync()
+    {
+        // The marks panel's texts (FR-103, UI-04) are in both files and the formats take their arguments.
+        var keys = ResxEntries();
+        foreach (var key in new[] { "ClosePanel", "OpenMarksList", "MarksListLabel", "MarksScanning", "MarksCountNameFormat", "MarkRowNameFormat", "MarkSideLeft", "MarkSideRight" })
+        {
+            Assert.True(keys.ContainsKey(key), $"Strings.resx is missing '{key}'.");
+            Assert.NotNull(_stringsType.GetProperty(key, BindingFlags.Public | BindingFlags.Static));
+        }
+
+        var name = string.Format(CultureInfo.CurrentCulture, Strings.MarkRowNameFormat, 12, Strings.MarkSideLeft);
+        Assert.Contains("12", name, StringComparison.Ordinal);
+        Assert.Contains(Strings.MarkSideLeft, name, StringComparison.Ordinal);
+        Assert.DoesNotContain("{2}", Strings.MarkRowNameFormat, StringComparison.Ordinal); // no line number (fixed default lines)
+
+        // The Pages tab's texts (FR-103, UI-04), in both files; the row name takes the page number.
+        foreach (var key in new[] { "PagesTab", "MarksTabName", "PagesTabName", "PagesListLabel", "OpenPagesList", "PagesListButton", "PageRowNameFormat", "PageRowCurrent", "PageRowHasMarks", "PageRowHasNotes" })
+        {
+            Assert.True(keys.ContainsKey(key), $"Strings.resx is missing '{key}'.");
+            Assert.NotNull(_stringsType.GetProperty(key, BindingFlags.Public | BindingFlags.Static));
+        }
+
+        Assert.Contains("37", string.Format(CultureInfo.CurrentCulture, Strings.PageRowNameFormat, 37), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Pdf_file_filter_keeps_the_pattern_part()
     {
         Assert.EndsWith("|*.pdf", Strings.PdfFileFilter, StringComparison.Ordinal);

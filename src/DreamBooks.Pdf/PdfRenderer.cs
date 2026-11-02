@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using DreamBooks.Core.Documents;
 using DreamBooks.Core.Model;
+using DreamBooks.Core.Search;
 using DreamBooks.Pdf.Interop;
 
 namespace DreamBooks.Pdf;
@@ -10,7 +11,7 @@ namespace DreamBooks.Pdf;
 /// dedicated <see cref="PdfiumThread"/> (NFR-04); open failures surface as
 /// <see cref="PdfOpenException"/> (NFR-11). Never logs document content (NFR-12).
 /// </summary>
-public sealed class PdfRenderer : IAsyncDisposable, IPageSource
+public sealed class PdfRenderer : IAsyncDisposable, IPageSource, ISearchPageSource
 {
     private readonly PageSize[] _pageSizes;
     private readonly PageDimensions[] _dimensions;
@@ -21,6 +22,7 @@ public sealed class PdfRenderer : IAsyncDisposable, IPageSource
     // Only read and written on the PDFium thread; 0 once closed.
     private nint _document;
     private int _disposed;
+    private int _firstTouchReads;
 
     private PdfRenderer(
         string path, nint document, PageSize[] pageSizes, PageDimensions[] dimensions, PdfDocumentInfo info)
@@ -37,6 +39,12 @@ public sealed class PdfRenderer : IAsyncDisposable, IPageSource
 
     /// <summary>Encryption, restrictions and signatures, read once at open.</summary>
     public PdfDocumentInfo Info { get; }
+
+    /// <summary>Test counter: how many pages have had their strokes read on first touch.</summary>
+    internal int FirstTouchReadCount => Volatile.Read(ref _firstTouchReads);
+
+    /// <summary>Test hook: how many pages the first-touch stroke cache holds (read on the PDFium thread).</summary>
+    internal Task<int> CachedStrokePageCountAsync() => PdfiumThread.RunAsync(() => _strokes.Count, CancellationToken.None);
 
     public int PageCount
     {
@@ -85,6 +93,48 @@ public sealed class PdfRenderer : IAsyncDisposable, IPageSource
         ArgumentOutOfRangeException.ThrowIfNegative(pageIndex);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(pageIndex, _pageSizes.Length);
         return PdfiumThread.RunAsync(() => LoadStrokes(pageIndex), ct);
+    }
+
+    /// <summary>
+    /// The mark scan's read of a page (FR-100, NFR-02), one job on the PDFium thread. A page already touched
+    /// answers from the first-touch cache (a touch hides the app annotations from the in-memory page). Otherwise
+    /// the page is opened and checked for the private key only (no payload read); null when it holds none of the
+    /// app's annotations; else its strokes are read (deduplicated as on first touch) and returned WITHOUT being
+    /// cached and WITHOUT hiding them from the page, so the scan keeps only marks for pages nobody opened and a
+    /// later first touch reads the same strokes. The page is closed before the job ends, whatever happens.
+    /// Throws <see cref="InvalidOperationException"/> when PDFium cannot load the page.
+    /// </summary>
+    internal Task<PageStrokes?> ReadStrokesForScanAsync(int pageIndex, CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
+        ArgumentOutOfRangeException.ThrowIfNegative(pageIndex);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(pageIndex, _pageSizes.Length);
+        return PdfiumThread.RunAsync(() => ReadStrokesForScan(pageIndex), ct);
+    }
+
+    /// <summary>
+    /// Searches one page for <paramref name="foldedQuery"/> (a query already folded by
+    /// <see cref="TextFolding.FoldQuery"/>; folding it again changes nothing) in ONE job on the PDFium thread (FR-13,
+    /// NFR-04). See <see cref="PdfTextSearcher.Search"/>: the page and its text page are closed whatever happens,
+    /// the app's annotations and the first-touch stroke cache are not touched, and no page text is kept. At most
+    /// <paramref name="maxHits"/> hits are returned; <see cref="SearchPageResult.Truncated"/> says more exist.
+    /// Throws <see cref="InvalidOperationException"/> when PDFium cannot load the page or its text.
+    /// </summary>
+    public Task<SearchPageResult> SearchPageAsync(int pageIndex, string foldedQuery, int maxHits, CancellationToken ct)
+    {
+        ThrowIfDisposed();
+        ArgumentOutOfRangeException.ThrowIfNegative(pageIndex);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(pageIndex, _pageSizes.Length);
+        ArgumentNullException.ThrowIfNull(foldedQuery);
+        ArgumentOutOfRangeException.ThrowIfNegative(maxHits);
+        return PdfiumThread.RunAsync(
+            () =>
+            {
+                // Re-checked on the worker: a dispose queued earlier has already closed the document.
+                ObjectDisposedException.ThrowIf(_document == 0, this);
+                return PdfTextSearcher.Search(_document, pageIndex, foldedQuery, maxHits, ct);
+            },
+            ct);
     }
 
     /// <summary>
@@ -211,6 +261,48 @@ public sealed class PdfRenderer : IAsyncDisposable, IPageSource
         return _strokes[pageIndex];
     }
 
+    private PageStrokes? ReadStrokesForScan(int pageIndex)
+    {
+        // Re-checked on the worker: a dispose queued earlier has already closed the document.
+        ObjectDisposedException.ThrowIf(_document == 0, this);
+        if (_strokes.TryGetValue(pageIndex, out PageStrokes? cached))
+        {
+            return cached.Strokes.Count > 0 || cached.UnreadableCount > 0 ? cached : null;
+        }
+
+        nint page = PdfiumNative.FPDF_LoadPage(_document, pageIndex);
+        if (page == 0)
+        {
+            throw new InvalidOperationException("PDFium could not load the page.");
+        }
+
+        try
+        {
+            return StrokeAnnotations.HasAppAnnotation(page) ? ReadUnique(page) : null;
+        }
+        finally
+        {
+            PdfiumNative.FPDF_ClosePage(page);
+        }
+    }
+
+    /// <summary>The app's strokes of a loaded page, each Id once (the first occurrence wins). PDFium thread only.</summary>
+    private static PageStrokes ReadUnique(nint page)
+    {
+        StrokeReadResult read = StrokeAnnotations.Read(page, PageGeometry.From(page));
+        var seen = new HashSet<Guid>();
+        var unique = new List<InkStroke>(read.Strokes.Count);
+        foreach (InkStroke stroke in read.Strokes)
+        {
+            if (seen.Add(stroke.Id))
+            {
+                unique.Add(stroke);
+            }
+        }
+
+        return new PageStrokes(unique, read.UnreadableAnnotationIndexes.Count);
+    }
+
     /// <summary>
     /// Loads a page and, on its first touch, caches its strokes; then removes the app annotations
     /// from the in-memory page (never saved) so they cannot be drawn. Unreadable ones stay.
@@ -228,18 +320,8 @@ public sealed class PdfRenderer : IAsyncDisposable, IPageSource
         {
             if (!_strokes.ContainsKey(pageIndex))
             {
-                StrokeReadResult read = StrokeAnnotations.Read(page, PageGeometry.From(page));
-                var seen = new HashSet<Guid>();
-                var unique = new List<InkStroke>(read.Strokes.Count);
-                foreach (InkStroke stroke in read.Strokes)
-                {
-                    if (seen.Add(stroke.Id))
-                    {
-                        unique.Add(stroke);
-                    }
-                }
-
-                _strokes[pageIndex] = new PageStrokes(unique, read.UnreadableAnnotationIndexes.Count);
+                _strokes[pageIndex] = ReadUnique(page);
+                Interlocked.Increment(ref _firstTouchReads);
             }
 
             // Idempotent; also covers a page reloaded from a document that still holds them.

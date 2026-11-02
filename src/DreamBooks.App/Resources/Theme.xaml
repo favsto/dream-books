@@ -13,6 +13,163 @@
     <SolidColorBrush x:Key="EraserCursorOutline" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" />
     <sys:Double x:Key="EraserCursorOutlineThickness">1</sys:Double>
 
+    <!-- Document view (phase 3a): neutral backdrop around the pages; a page not rendered yet is white paper that
+         fades in lightly (instant when Windows animations are off, NFR-03, NFR-32). -->
+    <SolidColorBrush x:Key="PageBackdropBrush" Color="{DynamicResource {x:Static SystemColors.ControlColorKey}}" />
+    <SolidColorBrush x:Key="PagePlaceholderBrush" Color="White" />
+    <Duration x:Key="PageFadeInDuration">0:0:0.15</Duration>
+    <sys:Double x:Key="PageFadeInFromOpacity">0.6</sys:Double>
+
+    <!-- Scroll rail (UI-07, design B): a 40 px touch strip on the right edge with an 8 px bar and a 34 px knob, one large
+         page preview beside the knob while scrubbing, and the page indicator; all fade in 180 ms and out 200 ms after
+         1.5 s idle, ease-out (instant when Windows animations are off, NFR-32). Mark ticks below (3b). -->
+    <sys:TimeSpan x:Key="RailFadeInDuration">0:0:0.18</sys:TimeSpan>
+    <sys:TimeSpan x:Key="RailFadeOutDuration">0:0:0.2</sys:TimeSpan>
+    <sys:TimeSpan x:Key="RailIdleDelay">0:0:1.5</sys:TimeSpan>
+    <sys:Double x:Key="RailTouchWidth">40</sys:Double>
+    <sys:Double x:Key="RailBarWidth">8</sys:Double>
+    <sys:Double x:Key="RailKnobWidth">14</sys:Double>
+    <sys:Double x:Key="RailKnobHeight">34</sys:Double>
+    <!-- Grabbing the knob: the pen within RailKnobPenSlop of it (elsewhere on the rail the pen writes); a finger or the
+         mouse anywhere in a zone at least RailKnobFingerZoneWidth wide from the right edge (reaching into the page) and
+         RailKnobFingerZonePadding above and below it (at least 56 tall). Invisible; only while the rail is shown. -->
+    <sys:Double x:Key="RailKnobPenSlop">8</sys:Double>
+    <sys:Double x:Key="RailKnobFingerZoneWidth">56</sys:Double>
+    <sys:Double x:Key="RailKnobFingerZonePadding">20</sys:Double>
+    <sys:Double x:Key="RailKnobFingerZoneMinHeight">56</sys:Double>
+    <CornerRadius x:Key="RailBarCornerRadius">4</CornerRadius>
+    <CornerRadius x:Key="RailKnobCornerRadius">7</CornerRadius>
+    <Thickness x:Key="RailTrackMargin">0,12,0,12</Thickness>
+    <SolidColorBrush x:Key="RailTrackBrush" Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" Opacity="0.55" />
+    <SolidColorBrush x:Key="RailKnobBrush" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" />
+    <sys:Double x:Key="RailPreviewWidth">300</sys:Double>
+    <Thickness x:Key="RailPreviewMargin">0,0,48,0</Thickness>
+    <Thickness x:Key="RailPreviewPadding">6</Thickness>
+    <CornerRadius x:Key="RailPreviewCornerRadius">10</CornerRadius>
+    <SolidColorBrush x:Key="RailPreviewBackgroundBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" Opacity="0.92" />
+    <DropShadowEffect x:Key="RailPreviewShadow" BlurRadius="14" ShadowDepth="4" Opacity="0.3" />
+    <!-- The preview bubble fades in and out, and each new page fades in over the previous one, easing out (instant
+         when Windows animations are off, NFR-32). The reader's ink is drawn over it, never thinner than this. -->
+    <sys:TimeSpan x:Key="RailPreviewFadeInDuration">0:0:0.15</sys:TimeSpan>
+    <sys:TimeSpan x:Key="RailPreviewFadeOutDuration">0:0:0.12</sys:TimeSpan>
+    <sys:TimeSpan x:Key="RailPreviewCrossFadeDuration">0:0:0.14</sys:TimeSpan>
+    <CubicEase x:Key="RailPreviewEase" EasingMode="EaseOut" />
+    <sys:Double x:Key="RailPreviewMinStrokeWidth">0.75</sys:Double>
+    <!-- With Windows "Transparency effects" off (NFR-32): the same colours, opaque, and no shadow. -->
+    <SolidColorBrush x:Key="RailTrackBrushOpaque" Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
+    <SolidColorBrush x:Key="RailPreviewBackgroundBrushOpaque" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <!-- Mark ticks on the rail (FR-101, phase 3b): a short bar across the track per mark, as wide as the knob, which
+         covers the tick of the mark shown; the text colour, so they read on the grey bar in light and dark themes.
+         Search results (3b-2) get a different colour. Opaque with transparency effects off (NFR-32). -->
+    <sys:Double x:Key="RailMarkTickLength">14</sys:Double>
+    <sys:Double x:Key="RailMarkTickThickness">2</sys:Double>
+    <SolidColorBrush x:Key="RailMarkTickBrush" Color="{DynamicResource {x:Static SystemColors.ControlTextColorKey}}" Opacity="0.75" />
+    <SolidColorBrush x:Key="RailMarkTickBrushOpaque" Color="{DynamicResource {x:Static SystemColors.ControlTextColorKey}}" />
+    <!-- Note ticks (FR-101): the handwritten notes, in red (the 3a mockup's colour for notes), short bars just left of
+         the mark ticks, so a note and a mark at the same place both show; marks are drawn on top. The offset is the
+         distance from the track's centre to the bar's centre: the bar spans 6 to 12 DIP left of the centre, the mark
+         ticks 7 DIP on either side. Opaque with transparency effects off (NFR-32). -->
+    <sys:Double x:Key="RailNoteTickLength">6</sys:Double>
+    <sys:Double x:Key="RailNoteTickThickness">2</sys:Double>
+    <sys:Double x:Key="RailNoteTickOffset">-11</sys:Double>
+    <Color x:Key="RailNoteTickColor">#E0393E</Color>
+    <SolidColorBrush x:Key="RailNoteTickBrush" Color="{StaticResource RailNoteTickColor}" Opacity="0.85" />
+    <SolidColorBrush x:Key="RailNoteTickBrushOpaque" Color="{StaticResource RailNoteTickColor}" />
+    <!-- Search result ticks (FR-105, phase 3b-2): blue, clearly apart from the red notes and the dark marks; short bars
+         just right of the mark ticks (8 to 14 DIP right of the centre, mirroring the notes on the left), so a result, a
+         note and a mark at the same place all show; marks are drawn on top. Opaque with transparency effects off
+         (NFR-32). -->
+    <sys:Double x:Key="RailSearchTickLength">6</sys:Double>
+    <sys:Double x:Key="RailSearchTickThickness">2</sys:Double>
+    <sys:Double x:Key="RailSearchTickOffset">11</sys:Double>
+    <Color x:Key="RailSearchTickColor">#1E88E5</Color>
+    <SolidColorBrush x:Key="RailSearchTickBrush" Color="{StaticResource RailSearchTickColor}" Opacity="0.9" />
+    <SolidColorBrush x:Key="RailSearchTickBrushOpaque" Color="{StaticResource RailSearchTickColor}" />
+    <Thickness x:Key="RailIndicatorMargin">0,0,44,12</Thickness>
+
+    <!-- Finger fling (FR-05, NFR-03), read by FlingSettings: a pan released faster than FlingMinSpeed glides on, its
+         speed decaying like a phone's, v(t) = v0·e^(−t/τ) with τ = FlingDecayTimeConstant (ms), until it falls below
+         FlingMinSpeed, reaches the top or bottom, or anything touches. Speeds in DIP/ms; the launch speed is the release
+         speed (no gain), capped at FlingMaxSpeed. Distance τ·(v0 − vmin), duration τ·ln(v0/vmin): a release at
+         1 DIP/ms glides 428 DIP (1.35 s), 3 DIP/ms 1,328 DIP (1.84 s), 8 DIP/ms 3,578 DIP (2.28 s); the cap allows at
+         most 5,378 DIP (2.47 s, about 3 to 4.4 pages at fit width). Nothing glides longer than about 2.5 s. -->
+    <sys:Double x:Key="FlingDecayTimeConstant">450</sys:Double>
+    <sys:Double x:Key="FlingMinSpeed">0.05</sys:Double>
+    <sys:Double x:Key="FlingMaxSpeed">12</sys:Double>
+
+    <!-- Left-edge panel (UI-04, phase 3b; hosts the marks list, later the Pages tab): 320 DIP wide, slides in from the
+         left in 180 ms ease-out and out in 120 ms ease-in (the panel timings of section 4), instant when Windows
+         animations are off (NFR-32). A finger swipe that starts in the left 24 DIP opens it (the pen there inks).
+         12 px corners, a translucent window colour with a soft shadow; opaque and without shadow with transparency
+         effects off (NFR-32). -->
+    <sys:Double x:Key="EdgePanelWidth">320</sys:Double>
+    <sys:TimeSpan x:Key="EdgePanelOpenDuration">0:0:0.18</sys:TimeSpan>
+    <sys:TimeSpan x:Key="EdgePanelCloseDuration">0:0:0.12</sys:TimeSpan>
+    <sys:Double x:Key="EdgeSwipeZoneWidth">24</sys:Double>
+    <CornerRadius x:Key="EdgePanelCornerRadius">0,12,12,0</CornerRadius>
+    <Thickness x:Key="EdgePanelPadding">12,8,8,12</Thickness>
+    <Thickness x:Key="EdgePanelMargin">0,8,0,8</Thickness>
+    <SolidColorBrush x:Key="EdgePanelBackgroundBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" Opacity="0.92" />
+    <SolidColorBrush x:Key="EdgePanelBackgroundBrushOpaque" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <DropShadowEffect x:Key="EdgePanelShadow" BlurRadius="24" ShadowDepth="4" Opacity="0.25" />
+    <sys:Double x:Key="EdgePanelTitleSize">16</sys:Double>
+    <Thickness x:Key="EdgePanelDetailMargin">8,0,0,0</Thickness>
+    <!-- Close glyph (an X) and the previous/next mark chevrons, drawn in a 12 x 12 box with the text colour. -->
+    <Geometry x:Key="CloseGlyph">M 1,1 L 11,11 M 11,1 L 1,11</Geometry>
+    <Geometry x:Key="PreviousMarkGlyph">M 1,9 L 6,3 L 11,9</Geometry>
+    <Geometry x:Key="NextMarkGlyph">M 1,3 L 6,9 L 11,3</Geometry>
+    <sys:Double x:Key="GlyphSize">12</sys:Double>
+    <sys:Double x:Key="GlyphStrokeThickness">1.5</sys:Double>
+    <SolidColorBrush x:Key="GlyphBrush" Color="{DynamicResource {x:Static SystemColors.ControlTextColorKey}}" />
+
+    <!-- Marks list rows (FR-103): the mark's band of the page (full width, the mark's extent and one line above and
+         below) as vector ink on paper, 120 x 60 DIP; ink strokes are never thinner than 1 DIP at that scale. -->
+    <sys:Double x:Key="MarkThumbnailWidth">120</sys:Double>
+    <sys:Double x:Key="MarkThumbnailHeight">60</sys:Double>
+    <sys:Double x:Key="MarkThumbnailMinStrokeWidth">1</sys:Double>
+    <SolidColorBrush x:Key="MarkThumbnailBorderBrush" Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
+    <Thickness x:Key="MarkRowPadding">4</Thickness>
+    <Thickness x:Key="MarkRowLabelMargin">12,0,0,0</Thickness>
+    <sys:Double x:Key="GoToPageFieldWidth">80</sys:Double>
+
+    <!-- Left-edge panel tabs (UI-04, phase 3b-2): an accent bar under the chosen tab. -->
+    <Thickness x:Key="EdgePanelTabMargin">0,0,4,0</Thickness>
+    <Thickness x:Key="EdgePanelTabPadding">8,0,8,0</Thickness>
+    <Thickness x:Key="EdgePanelTabIndicatorThickness">0,0,0,2</Thickness>
+    <SolidColorBrush x:Key="EdgePanelTabIndicatorBrush" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" />
+
+    <!-- Pages tab (FR-103, UI-04, phase 3b-2): one row per page, a 140 DIP wide thumbnail with the page's proportions
+         (the page bitmap with the ink drawn over it; strokes never thinner than 0.75 DIP), the page number under it. The
+         current page has a 3 DIP accent ring (always laid out, transparent elsewhere, so rows never change size). Pages
+         with marks or notes show small bars at the thumbnail's top left in the rail's colours, opaque (they are tiny). -->
+    <sys:Double x:Key="PagesThumbnailWidth">140</sys:Double>
+    <sys:Double x:Key="PagesThumbnailMinStrokeWidth">0.75</sys:Double>
+    <!-- The page's edge, drawn over the thumbnail so white pages read on the panel in both themes. -->
+    <sys:Double x:Key="PagesThumbnailFrameThickness">1</sys:Double>
+    <SolidColorBrush x:Key="PagesThumbnailBorderBrush" Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
+    <Thickness x:Key="PagesRowPadding">4</Thickness>
+    <Thickness x:Key="PagesNumberMargin">0,2,0,0</Thickness>
+    <Thickness x:Key="PagesCurrentRingThickness">3</Thickness>
+    <Thickness x:Key="PagesCurrentRingPadding">1</Thickness>
+    <CornerRadius x:Key="PagesCurrentRingCornerRadius">3</CornerRadius>
+    <SolidColorBrush x:Key="PagesCurrentRingBrush" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" />
+    <GridLength x:Key="PagesTickColumnWidth">16</GridLength>
+    <Thickness x:Key="PagesTickMargin">0,4,3,0</Thickness>
+    <Thickness x:Key="PagesTickGap">0,0,2,0</Thickness>
+    <sys:Double x:Key="PagesTickWidth">3</sys:Double>
+    <sys:Double x:Key="PagesTickHeight">16</sys:Double>
+
+    <!-- Search highlights on the page (FR-13, FR-105, phase 3b-2): drawn between the PDF bitmap and the ink, so they never
+         cover the ink. Every result in translucent yellow, the current one in a stronger orange; padded 1.5 pt above and
+         below the text box (PDFium's boxes hug the glyphs). The page is white paper in both themes, so the colours are
+         fixed. They stay translucent with transparency effects off (NFR-32): an opaque highlight would hide the text it
+         marks; this is a highlight colour, not a transparency effect. -->
+    <Color x:Key="SearchHighlightColor">#FFE600</Color>
+    <Color x:Key="SearchCurrentHighlightColor">#FF8C00</Color>
+    <SolidColorBrush x:Key="SearchHighlightBrush" Color="{StaticResource SearchHighlightColor}" Opacity="0.35" />
+    <SolidColorBrush x:Key="SearchCurrentHighlightBrush" Color="{StaticResource SearchCurrentHighlightColor}" Opacity="0.5" />
+    <sys:Double x:Key="SearchHighlightPaddingPt">1.5</sys:Double>
+
     <Style TargetType="Button">
         <Setter Property="MinWidth" Value="{StaticResource TouchTarget}" />
         <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />
@@ -22,6 +179,32 @@
         <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Margin" Value="0,0,12,0" />
+    </Style>
+    <!-- The left-edge panel's tabs ("Segni" / "Pagine", UI-04): 40 px touch targets, the title size, the chosen one
+         semi-bold over an accent bar; keyboard focus shows the system focus rectangle. -->
+    <Style x:Key="EdgePanelTabStyle" TargetType="RadioButton" BasedOn="{StaticResource {x:Type RadioButton}}">
+        <Setter Property="MinWidth" Value="{StaticResource TouchTarget}" />
+        <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />
+        <Setter Property="Margin" Value="{StaticResource EdgePanelTabMargin}" />
+        <Setter Property="Padding" Value="{StaticResource EdgePanelTabPadding}" />
+        <Setter Property="FontSize" Value="{StaticResource EdgePanelTitleSize}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Bar" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"
+                            BorderThickness="{StaticResource EdgePanelTabIndicatorThickness}" BorderBrush="Transparent">
+                        <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bar" Property="BorderBrush" Value="{StaticResource EdgePanelTabIndicatorBrush}" />
+                            <Setter Property="FontWeight" Value="SemiBold" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
     <Style x:Key="SectionLabel" TargetType="TextBlock">
         <Setter Property="FontWeight" Value="SemiBold" />

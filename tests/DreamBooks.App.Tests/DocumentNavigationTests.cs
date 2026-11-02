@@ -58,11 +58,11 @@ public sealed class DocumentNavigationTests : IDisposable
             var stroke = Line(vm, 100);
 
             await vm.GoToPageCommand.ExecuteAsync(2);
-            Assert.Equal(300, vm.PageSize.WidthPt);
+            Assert.Equal(300, vm.Editor!.Page.WidthPt);
             await vm.GoToPageCommand.ExecuteAsync(1);
 
             Assert.Equal([stroke], vm.Editor!.Page.Strokes);
-            Assert.Equal(612, vm.PageSize.WidthPt);
+            Assert.Equal(612, vm.Editor!.Page.WidthPt);
         }
         finally
         {
@@ -90,13 +90,13 @@ public sealed class DocumentNavigationTests : IDisposable
         var first = vm.Editor!;
         await vm.GoToPageCommand.ExecuteAsync(2);
         var pageChanges = 0;
-        vm.PageChanged += (_, _) => pageChanges++;
+        vm.PropertyChanged += (_, e) => pageChanges += e.PropertyName == nameof(MainViewModel.PageNumber) ? 1 : 0;
 
         await vm.UndoCommand.ExecuteAsync(null);
 
         Assert.Equal(1, vm.PageNumber);
         Assert.Same(first, vm.Editor);
-        Assert.Equal(612, vm.PageSize.WidthPt);
+        Assert.Equal(612, vm.Editor!.Page.WidthPt);
         Assert.Equal(1, pageChanges);
         Assert.Empty(first.Page.Strokes);
         Assert.True(vm.RedoCommand.CanExecute(null));
@@ -130,7 +130,7 @@ public sealed class DocumentNavigationTests : IDisposable
         var line = Line(vm, 100);
         vm.Undo.Clear();
         var page1 = vm.Editor!.Page;
-        vm.BeginErase();
+        vm.BeginErase(vm.Editor!);
         vm.EraseAt(new PointD(100, 100));
 
         await vm.GoToPageCommand.ExecuteAsync(2);
@@ -230,7 +230,7 @@ public sealed class DocumentNavigationTests : IDisposable
         Assert.True(first.IsDisposed);
         Assert.False(second.IsDisposed);
         await Assert.ThrowsAsync<ObjectDisposedException>(() => session.GoToPageAsync(0));
-        Assert.Equal(300, vm.PageSize.WidthPt);
+        Assert.Equal(300, vm.Editor!.Page.WidthPt);
     }
 
     [Fact]
@@ -253,22 +253,26 @@ public sealed class DocumentNavigationTests : IDisposable
     }
 
     [Fact]
-    public async Task Failed_page_navigation_sets_error_and_keeps_state()
+    public async Task Failed_page_navigation_sets_error_and_shows_the_page_without_an_editor()
     {
         var source = new FakePageSource((612, 792), (300, 400));
         source.FailingPages.Add(1);
         var vm = await OpenFakeAsync(source);
-        var editor = vm.Editor;
+        var first = vm.Editor!;
         var changes = 0;
-        vm.PageChanged += (_, _) => changes++;
+        vm.PropertyChanged += (_, e) => changes += e.PropertyName == nameof(MainViewModel.PageNumber) ? 1 : 0;
 
         await vm.GoToPageCommand.ExecuteAsync(2); // must not throw
 
+        // The view is on page 2 (the viewport scrolled there), so the session agrees: page 2 is current but has no
+        // editor, like any page whose strokes are not loaded; page 1 keeps its strokes and editor.
         Assert.Equal(Strings.ErrorPageChangeFailed, vm.ErrorMessage);
-        Assert.Equal(1, vm.PageNumber);
-        Assert.Same(editor, vm.Editor);
-        Assert.Equal(612, vm.PageSize.WidthPt);
-        Assert.Equal(0, changes);
+        Assert.Equal(2, vm.PageNumber);
+        Assert.Null(vm.Editor);
+        Assert.Equal(1, vm.Viewport.CurrentPage);
+        Assert.Equal(1, changes);
+        Assert.True(vm.Session!.TryGetEditor(0, out var kept));
+        Assert.Same(first, kept);
     }
 
     private Task<MainViewModel> OpenFakeAsync(FakePageSource source) =>

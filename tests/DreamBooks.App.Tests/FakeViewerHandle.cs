@@ -3,14 +3,13 @@ using DreamBooks.Pdf;
 
 namespace DreamBooks.App.Tests;
 
-/// <summary>A viewer without a real renderer: records release and reopen calls in a shared log.</summary>
+/// <summary>
+/// A viewer without a real renderer: records release and reopen calls in a shared log and raises
+/// <see cref="CurrentChanged"/> for each, like the real one swapping its renderer.
+/// </summary>
 internal sealed class FakeViewerHandle(List<string> log) : IViewerHandle
 {
-    public event EventHandler? CurrentChanged
-    {
-        add { }
-        remove { }
-    }
+    public event EventHandler? CurrentChanged;
 
     public PdfDocumentInfo Info { get; set; } = new(IsEncrypted: false, HasRestrictions: false, SignatureCount: 0);
 
@@ -26,6 +25,7 @@ internal sealed class FakeViewerHandle(List<string> log) : IViewerHandle
     {
         log.Add("release");
         IsReleased = true;
+        CurrentChanged?.Invoke(this, EventArgs.Empty);
         return Task.CompletedTask;
     }
 
@@ -39,6 +39,7 @@ internal sealed class FakeViewerHandle(List<string> log) : IViewerHandle
 
         IsReleased = false;
         OpenPath = path;
+        CurrentChanged?.Invoke(this, EventArgs.Empty);
         return Task.CompletedTask;
     }
 }

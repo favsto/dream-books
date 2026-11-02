@@ -42,9 +42,11 @@ public sealed class RecoveryRoundTripTests : IDisposable
 
         // Before the crash: two strokes on page 1, the first one erased, one stroke on page 2.
         _dialogs.NextPath = path;
-        var before = new MainViewModel(_dialogs, new RecoveryStore(root));
+        var scheduler = new ManualScheduler();
+        var before = new MainViewModel(_dialogs, new RecoveryStore(root), scheduler: scheduler);
         Guid[] page1;
         Guid page2;
+        var shown = default(DreamBooks.Core.Layout.ViewPosition);
         try
         {
             await before.OpenPdfCommand.ExecuteAsync(null);
@@ -57,7 +59,9 @@ public sealed class RecoveryRoundTripTests : IDisposable
             await before.NextPageCommand.ExecuteAsync(null);
             Assert.True(before.Editor!.CommitStroke(first, InkTool.Pen, Palette.Colors[2], 1));
             page2 = before.Editor.Page.Strokes[0].Id;
-            before.ReportViewState(1, 1.5, 12, 34);
+            before.ZoomVm.Zoom = 1.5;
+            scheduler.Advance(MainViewModel.ViewSettleDelay); // the settled view is journalled
+            shown = before.Viewport.Position;
 
             // A second process sees the journal while the first still writes it (append stream shares reads).
             var seen = Assert.Single(new RecoveryStore(root).FindAll());
@@ -84,7 +88,7 @@ public sealed class RecoveryRoundTripTests : IDisposable
             Assert.Equal(Strings.NoticeRestored, after.Notice);
             Assert.Equal(2, after.PageNumber);
             Assert.Equal(1.5, after.ZoomVm.Zoom);
-            Assert.Equal(new RestoredView(1.5, 12, 34), after.ViewToRestore);
+            Assert.Equal(shown, after.Viewport.Position);
             Assert.Equal([page2], after.Editor!.Page.Strokes.Select(s => s.Id));
             var restored1 = await after.Session.EnsurePageAsync(0);
             Assert.Equal(page1, restored1.Strokes.Select(s => s.Id));

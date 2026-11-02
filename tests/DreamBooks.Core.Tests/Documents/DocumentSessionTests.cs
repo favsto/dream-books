@@ -87,12 +87,14 @@ public class DocumentSessionTests
     }
 
     [Fact]
-    public async Task Undo_history_is_shared_across_pages_and_undo_navigates_to_the_command_page()
+    public async Task Undo_history_is_shared_across_pages_and_undo_requests_reveal_of_the_command_page()
     {
         var source = new FakePageSource(3);
         var session = Open(source);
         var pageChanges = 0;
+        var reveals = new List<int>();
         session.CurrentPageChanged += (_, _) => pageChanges++;
+        session.RevealRequested += (_, e) => reveals.Add(e.PageIndex);
 
         await session.GoToPageAsync(0);
         Draw(session, 100);
@@ -102,28 +104,28 @@ public class DocumentSessionTests
         Assert.Equal(3, pageChanges);
 
         Assert.True(await session.UndoAsync());
-        Assert.Equal(1, session.CurrentPageIndex);
-        Assert.Equal(1, session.CurrentEditor!.Page.Index);
+        Assert.Equal([1], reveals);
         Assert.Empty((await session.EnsurePageAsync(1)).Strokes);
         Assert.Single((await session.EnsurePageAsync(0)).Strokes);
-        Assert.Equal(4, pageChanges);
 
         Assert.True(await session.UndoAsync());
-        Assert.Equal(0, session.CurrentPageIndex);
+        Assert.Equal([1, 0], reveals);
         Assert.Empty((await session.EnsurePageAsync(0)).Strokes);
         Assert.False(await session.UndoAsync());
-        Assert.Equal(5, pageChanges);
+        Assert.Equal([1, 0], reveals);
 
         Assert.True(await session.RedoAsync());
-        Assert.Equal(0, session.CurrentPageIndex);
-        Assert.Equal(5, pageChanges);
+        Assert.Equal([1, 0, 0], reveals);
         Assert.Single((await session.EnsurePageAsync(0)).Strokes);
 
         Assert.True(await session.RedoAsync());
-        Assert.Equal(1, session.CurrentPageIndex);
+        Assert.Equal([1, 0, 0, 1], reveals);
         Assert.Single((await session.EnsurePageAsync(1)).Strokes);
         Assert.False(await session.RedoAsync());
-        Assert.Equal(6, pageChanges);
+
+        // Undo and redo no longer navigate: the view decides whether to scroll to the revealed page.
+        Assert.Equal(2, session.CurrentPageIndex);
+        Assert.Equal(3, pageChanges);
     }
 
     [Fact]

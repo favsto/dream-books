@@ -28,6 +28,7 @@ public sealed class RecoveryServiceTests : IDisposable
     private readonly FakeFileDialogService _dialogs = new();
     private readonly FakeDocumentWriter _writer = new();
     private readonly FakeViewerHandle _viewer = new([]);
+    private readonly ManualScheduler _scheduler = new();
     private readonly string _docPath;
 
     /// <summary>The strokes "in the file", per page, handed to every fresh page source.</summary>
@@ -103,13 +104,15 @@ public sealed class RecoveryServiceTests : IDisposable
     public async Task View_change_alone_creates_no_journal()
     {
         var vm = await OpenAsync(NewVm(), pages: 2);
-        vm.ReportViewState(1, 2.0, 10, 20);
+        vm.ZoomVm.Zoom = 2.0;
+        Settle();
 
         Assert.False(File.Exists(JournalFile(_docPath)));
 
         Draw(vm);
-        vm.ReportViewState(0, 1.5, 0, 0);
-        Assert.Equal(3, JournalLines(_docPath).Length); // dirty now: the view is journalled
+        vm.ZoomVm.Zoom = 1.5;
+        Settle();
+        Assert.Equal(3, JournalLines(_docPath).Length); // dirty now: the settled view is journalled
     }
 
     [Fact]
@@ -247,7 +250,9 @@ public sealed class RecoveryServiceTests : IDisposable
         await vm.NextPageCommand.ExecuteAsync(null);
         Draw(vm);
         var onSecond = vm.Editor!.Page.Strokes[0].Id;
-        vm.ReportViewState(1, 2.0, 30, 40);
+        vm.ZoomVm.Zoom = 2.0;
+        Settle();
+        var shown = vm.Viewport.Position;
 
         await vm.SimulateCrashForTestAsync();
         Assert.True(File.Exists(JournalFile(_docPath)));
@@ -259,7 +264,7 @@ public sealed class RecoveryServiceTests : IDisposable
         var first = await next.Session!.EnsurePageAsync(0);
         Assert.Equal([drawn], first.Strokes.Select(s => s.Id)); // the baseline stroke stays erased
         Assert.Equal(2.0, next.ZoomVm.Zoom);
-        Assert.Equal(new RestoredView(2.0, 30, 40), next.ViewToRestore);
+        Assert.Equal(shown, next.Viewport.Position);
         Assert.True(next.IsDirty);
     }
 
@@ -426,7 +431,8 @@ public sealed class RecoveryServiceTests : IDisposable
             Assert.Equal(Strings.ErrorJournalUnreadable, unreadable.ErrorMessage);
             Assert.Equal(Strings.NoticeJournalDisabled, unreadable.Notice);
             Draw(unreadable);
-            unreadable.ReportViewState(0, 2, 1, 1);
+            unreadable.ZoomVm.Zoom = 2;
+            Settle();
         }
 
         _dialogs.SaveChangesAnswer = SaveChangesAnswer.DontSave;
@@ -608,9 +614,11 @@ public sealed class RecoveryServiceTests : IDisposable
     {
         var vm = await OpenAsync(NewVm(), pages: 3);
         Draw(vm);
-        vm.ReportViewState(2, 1.5, 10, 20);
-        vm.ReportViewState(1, 20, double.NaN, -5); // the last one wins; clamped and sanitised
-        vm.ReportViewState(0, double.NaN, 1, 1); // no usable zoom: not recorded
+        vm.Viewport.ScrollToPage(2, recordHistory: false);
+        Settle();
+        vm.Viewport.ScrollToPage(1, recordHistory: false);
+        vm.ZoomVm.Zoom = 20; // the last settled view wins; the zoom is clamped
+        Settle();
         Assert.Null(vm.JournalWarning);
         await vm.SimulateCrashForTestAsync();
 
@@ -618,7 +626,8 @@ public sealed class RecoveryServiceTests : IDisposable
 
         Assert.Equal(2, next.PageNumber);
         Assert.Equal(8, next.ZoomVm.Zoom);
-        Assert.Equal(new RestoredView(8, 0, 0), next.ViewToRestore);
+        Assert.Equal(1, next.Viewport.Position.PageIndex);
+        Assert.Equal(0, next.Viewport.Position.YPt);
     }
 
     [Fact]
@@ -626,7 +635,8 @@ public sealed class RecoveryServiceTests : IDisposable
     {
         var vm = await OpenAsync(NewVm(), pages: 3);
         Draw(vm);
-        vm.ReportViewState(2, 1, 0, 0);
+        vm.Viewport.ScrollToPage(2, recordHistory: false);
+        Settle();
         await vm.SimulateCrashForTestAsync();
 
         var next = await OpenAsync(NewVm(), pages: 2); // the stroke is on page 1, the view on a missing page 3
@@ -848,7 +858,8 @@ public sealed class RecoveryServiceTests : IDisposable
 
         Assert.Equal(Strings.ErrorUnknown, disabled.ErrorMessage);
         Draw(disabled);
-        disabled.ReportViewState(0, 2, 0, 0);
+        disabled.ZoomVm.Zoom = 2;
+        Settle();
         Assert.Equal(bytes, JournalBytes(_docPath)); // never appended under the stale header
     }
 
@@ -1093,9 +1104,12 @@ public sealed class RecoveryServiceTests : IDisposable
         Assert.Null(startup.Session);
     }
 
+    /// <summary>Lets the view settle: the position is journalled after <see cref="MainViewModel.ViewSettleDelay"/>.</summary>
+    private void Settle() => _scheduler.Advance(MainViewModel.ViewSettleDelay);
+
     private MainViewModel NewVm()
     {
-        var vm = new MainViewModel(_dialogs, new RecoveryStore(_root));
+        var vm = new MainViewModel(_dialogs, new RecoveryStore(_root), scheduler: _scheduler);
         InstallFake(vm);
         vm.SaveService = new DocumentSaveService(_writer, _dialogs);
         return vm;

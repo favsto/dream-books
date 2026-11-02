@@ -193,6 +193,10 @@ public static class JournalCodec
             w.WriteNumber("z", view.Zoom);
             w.WriteNumber("x", view.ScrollX);
             w.WriteNumber("y", view.ScrollY);
+            if (view.FitWidth is { } fit)
+            {
+                w.WriteBoolean("f", fit); // optional: absent in entries of the single-page view
+            }
         });
     }
 
@@ -343,6 +347,9 @@ public static class JournalCodec
             return null;
         }
 
-        return new ViewEntry(page, zoom, x, y);
+        bool? fit = props.TryGetValue("f", out var f) && f.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? f.GetBoolean()
+            : null;
+        return new ViewEntry(page, zoom, x, y, fit);
     }
 }

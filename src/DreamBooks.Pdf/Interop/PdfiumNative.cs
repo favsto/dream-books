@@ -126,20 +126,7 @@ internal static partial class PdfiumNative
     [LibraryImport(Library)]
     public static unsafe partial int FPDF_SaveAsCopy(nint document, FPDF_FILEWRITE* fileWrite, uint flags);
 
-    // ---- Text (fpdf_text.h) ----
-
-    [LibraryImport(Library)]
-    public static partial nint FPDFText_LoadPage(nint page);
-
-    [LibraryImport(Library)]
-    public static partial void FPDFText_ClosePage(nint textPage);
-
-    [LibraryImport(Library)]
-    public static partial int FPDFText_CountChars(nint textPage);
-
-    /// <summary>Writes <paramref name="count"/> UTF-16 units plus a terminator; returns units written including it.</summary>
-    [LibraryImport(Library)]
-    public static unsafe partial int FPDFText_GetText(nint textPage, int startIndex, int count, char* result);
+    // ---- Text (fpdf_text.h): see PdfiumText ----
 
     // ---- Annotations (fpdf_annot.h) ----
 

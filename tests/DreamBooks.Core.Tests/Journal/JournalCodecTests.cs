@@ -234,4 +234,22 @@ public class JournalCodecTests
         Assert.Contains(fingerprint.ToToken(), line, StringComparison.Ordinal);
         Assert.StartsWith("{\"k\":\"hdr\",\"fv\":1,", line, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void View_entry_fit_width_flag_round_trips_and_is_optional()
+    {
+        var fit = JournalCodec.ParseEntry(JournalCodec.SerializeEntry(new ViewEntry(3, 1.25, 306, -4, FitWidth: true)));
+        var manual = JournalCodec.ParseEntry(JournalCodec.SerializeEntry(new ViewEntry(3, 1.25, 306, 40, FitWidth: false)));
+        var legacy = JournalCodec.SerializeEntry(new ViewEntry(3, 1.25, 30, 40));
+
+        Assert.Equal(new ViewEntry(3, 1.25, 306, -4, true), fit);
+        Assert.Equal(new ViewEntry(3, 1.25, 306, 40, false), manual);
+        Assert.DoesNotContain("\"f\"", legacy, StringComparison.Ordinal); // entries without the flag stay as before
+        Assert.Equal(new ViewEntry(3, 1.25, 30, 40), JournalCodec.ParseEntry(legacy));
+        Assert.Null(((ViewEntry)JournalCodec.ParseEntry(legacy)!).FitWidth);
+
+        // A line written before the flag existed, and one with a malformed flag, read as "no flag".
+        Assert.Equal(new ViewEntry(1, 2, 30, 40), JournalCodec.ParseEntry("{\"k\":\"view\",\"p\":1,\"z\":2,\"x\":30,\"y\":40}"));
+        Assert.Equal(new ViewEntry(1, 2, 30, 40), JournalCodec.ParseEntry("{\"k\":\"view\",\"p\":1,\"z\":2,\"x\":30,\"y\":40,\"f\":1}"));
+    }
 }
