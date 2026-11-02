@@ -12,7 +12,6 @@ namespace DreamBooks.App.Tests;
 internal static class WpfTestThread
 {
     private static readonly Lazy<Dispatcher> _dispatcher = new(Start);
-    private static readonly Uri _themeUri = new("/DreamBooks.App;component/Resources/Theme.xaml", UriKind.Relative);
     private static Exception? _unhandled;
 
     public static void Run(Action action)
@@ -80,10 +79,10 @@ internal static class WpfTestThread
             };
             try
             {
-                // Not `new App()`: its startup would open the real MainWindow (StartupUri). Merge the same
-                // theme dictionary App.xaml merges instead.
+                // Not `new App()`: its startup would open the real MainWindow. Merge the same resources App
+                // merges instead (WPF UI theme and controls, our tokens, the light theme).
                 var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-                app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = _themeUri });
+                App.AddThemeResources(app.Resources);
             }
             catch (Exception ex)
             {

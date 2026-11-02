@@ -174,6 +174,13 @@ public partial class DocumentView : UserControl
     /// <summary>Gives the keyboard to the document (its scroll viewer), e.g. after Esc in the search field.</summary>
     internal void FocusDocument() => Viewport.Focus();
 
+    /// <summary>
+    /// The area around the pages (section 3): a translucent grey over the window's Mica, or the opaque grey with Windows
+    /// transparency effects off (NFR-32). Both are theme brushes, so a theme switch repaints them.
+    /// </summary>
+    internal void ApplyTransparency(bool transparent) =>
+        Viewport.SetResourceReference(BackgroundProperty, transparent ? "PageBackdropBrush" : "PageBackdropBrushOpaque");
+
     /// <summary>The surface showing a page, or null when the page is outside the window.</summary>
     internal InkSurface? SurfaceFor(int pageIndex) => _slots.TryGetValue(pageIndex, out var slot) ? slot.Surface : null;
 

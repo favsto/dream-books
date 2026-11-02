@@ -1,25 +1,30 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime">
-    <!-- Visual values are defined once here (see .claude/rules/wpf-ui.md). Minimal for the prototype. -->
+    <!-- Visual values are defined once here (see .claude/rules/wpf-ui.md): the tokens that are the same in both themes.
+         Colours that change with the theme (backdrop, panels, rail, glyphs, accent brushes, shadows) are in
+         Theme.Light.xaml / Theme.Dark.xaml, merged after this one by App.AddThemeResources and swapped by ThemeService; reach them
+         with DynamicResource. -->
     <sys:Double x:Key="TouchTarget">40</sys:Double>
     <sys:Double x:Key="PanelWidth">280</sys:Double>
     <sys:Double x:Key="ProgressBarHeight">4</sys:Double>
     <Thickness x:Key="Gap">0,4,0,0</Thickness>
     <Thickness x:Key="SectionGap">0,12,0,0</Thickness>
+    <!-- The window's title bar (UI-06) lies over the document: 40 px (the touch target; WPF UI's default is 48),
+         elements docked at the top stay below it. -->
+    <sys:Double x:Key="TitleBarHeight">40</sys:Double>
+    <Thickness x:Key="TitleBarClearance">0,40,0,0</Thickness>
 
     <!-- Chisel angle slider (FR-46): one degree per arrow key, fifteen per page key. -->
     <sys:Double x:Key="ChiselAngleSmallChange">1</sys:Double>
     <sys:Double x:Key="ChiselAngleLargeChange">15</sys:Double>
 
-    <!-- Eraser cursor (FR-32): system accent colour, fill at 20% opacity, 1 DIP outline. -->
-    <SolidColorBrush x:Key="EraserCursorFill" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" Opacity="0.2" />
-    <SolidColorBrush x:Key="EraserCursorOutline" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" />
+    <!-- Eraser cursor (FR-32): accent colour brushes in the theme dictionaries, 1 DIP outline. -->
     <sys:Double x:Key="EraserCursorOutlineThickness">1</sys:Double>
 
     <!-- Document view (phase 3a): neutral backdrop around the pages; a page not rendered yet is white paper that
-         fades in lightly (instant when Windows animations are off, NFR-03, NFR-32). -->
-    <SolidColorBrush x:Key="PageBackdropBrush" Color="{DynamicResource {x:Static SystemColors.ControlColorKey}}" />
+         fades in lightly (instant when Windows animations are off, NFR-03, NFR-32). The backdrop brushes are in the
+         theme dictionaries; the paper is white in both themes. -->
     <SolidColorBrush x:Key="PagePlaceholderBrush" Color="White" />
     <Duration x:Key="PageFadeInDuration">0:0:0.15</Duration>
     <sys:Double x:Key="PageFadeInFromOpacity">0.6</sys:Double>
@@ -44,14 +49,11 @@
     <CornerRadius x:Key="RailBarCornerRadius">4</CornerRadius>
     <CornerRadius x:Key="RailKnobCornerRadius">7</CornerRadius>
     <Thickness x:Key="RailTrackMargin">0,12,0,12</Thickness>
-    <SolidColorBrush x:Key="RailTrackBrush" Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" Opacity="0.55" />
-    <SolidColorBrush x:Key="RailKnobBrush" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" />
+    <!-- Track, knob, preview background and shadow brushes (and their opaque variants): theme dictionaries. -->
     <sys:Double x:Key="RailPreviewWidth">300</sys:Double>
     <Thickness x:Key="RailPreviewMargin">0,0,48,0</Thickness>
     <Thickness x:Key="RailPreviewPadding">6</Thickness>
     <CornerRadius x:Key="RailPreviewCornerRadius">10</CornerRadius>
-    <SolidColorBrush x:Key="RailPreviewBackgroundBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" Opacity="0.92" />
-    <DropShadowEffect x:Key="RailPreviewShadow" BlurRadius="14" ShadowDepth="4" Opacity="0.3" />
     <!-- The preview bubble fades in and out, and each new page fades in over the previous one, easing out (instant
          when Windows animations are off, NFR-32). The reader's ink is drawn over it, never thinner than this. -->
     <sys:TimeSpan x:Key="RailPreviewFadeInDuration">0:0:0.15</sys:TimeSpan>
@@ -59,16 +61,12 @@
     <sys:TimeSpan x:Key="RailPreviewCrossFadeDuration">0:0:0.14</sys:TimeSpan>
     <CubicEase x:Key="RailPreviewEase" EasingMode="EaseOut" />
     <sys:Double x:Key="RailPreviewMinStrokeWidth">0.75</sys:Double>
-    <!-- With Windows "Transparency effects" off (NFR-32): the same colours, opaque, and no shadow. -->
-    <SolidColorBrush x:Key="RailTrackBrushOpaque" Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
-    <SolidColorBrush x:Key="RailPreviewBackgroundBrushOpaque" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
     <!-- Mark ticks on the rail (FR-101, phase 3b): a short bar across the track per mark, as wide as the knob, which
          covers the tick of the mark shown; the text colour, so they read on the grey bar in light and dark themes.
          Search results (3b-2) get a different colour. Opaque with transparency effects off (NFR-32). -->
     <sys:Double x:Key="RailMarkTickLength">14</sys:Double>
     <sys:Double x:Key="RailMarkTickThickness">2</sys:Double>
-    <SolidColorBrush x:Key="RailMarkTickBrush" Color="{DynamicResource {x:Static SystemColors.ControlTextColorKey}}" Opacity="0.75" />
-    <SolidColorBrush x:Key="RailMarkTickBrushOpaque" Color="{DynamicResource {x:Static SystemColors.ControlTextColorKey}}" />
+    <!-- RailMarkTickBrush and RailMarkTickBrushOpaque: theme dictionaries (the text colour). -->
     <!-- Note ticks (FR-101): the handwritten notes, in red (the 3a mockup's colour for notes), short bars just left of
          the mark ticks, so a note and a mark at the same place both show; marks are drawn on top. The offset is the
          distance from the track's centre to the bar's centre: the bar spans 6 to 12 DIP left of the centre, the mark
@@ -113,9 +111,7 @@
     <CornerRadius x:Key="EdgePanelCornerRadius">0,12,12,0</CornerRadius>
     <Thickness x:Key="EdgePanelPadding">12,8,8,12</Thickness>
     <Thickness x:Key="EdgePanelMargin">0,8,0,8</Thickness>
-    <SolidColorBrush x:Key="EdgePanelBackgroundBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" Opacity="0.92" />
-    <SolidColorBrush x:Key="EdgePanelBackgroundBrushOpaque" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
-    <DropShadowEffect x:Key="EdgePanelShadow" BlurRadius="24" ShadowDepth="4" Opacity="0.25" />
+    <!-- EdgePanelBackgroundBrush(Opaque) and EdgePanelShadow: theme dictionaries. -->
     <sys:Double x:Key="EdgePanelTitleSize">16</sys:Double>
     <Thickness x:Key="EdgePanelDetailMargin">8,0,0,0</Thickness>
     <!-- Close glyph (an X) and the previous/next mark chevrons, drawn in a 12 x 12 box with the text colour. -->
@@ -124,14 +120,13 @@
     <Geometry x:Key="NextMarkGlyph">M 1,3 L 6,9 L 11,3</Geometry>
     <sys:Double x:Key="GlyphSize">12</sys:Double>
     <sys:Double x:Key="GlyphStrokeThickness">1.5</sys:Double>
-    <SolidColorBrush x:Key="GlyphBrush" Color="{DynamicResource {x:Static SystemColors.ControlTextColorKey}}" />
+    <!-- GlyphBrush: theme dictionaries. -->
 
     <!-- Marks list rows (FR-103): the mark's band of the page (full width, the mark's extent and one line above and
          below) as vector ink on paper, 120 x 60 DIP; ink strokes are never thinner than 1 DIP at that scale. -->
     <sys:Double x:Key="MarkThumbnailWidth">120</sys:Double>
     <sys:Double x:Key="MarkThumbnailHeight">60</sys:Double>
     <sys:Double x:Key="MarkThumbnailMinStrokeWidth">1</sys:Double>
-    <SolidColorBrush x:Key="MarkThumbnailBorderBrush" Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
     <Thickness x:Key="MarkRowPadding">4</Thickness>
     <Thickness x:Key="MarkRowLabelMargin">12,0,0,0</Thickness>
     <sys:Double x:Key="GoToPageFieldWidth">80</sys:Double>
@@ -140,7 +135,6 @@
     <Thickness x:Key="EdgePanelTabMargin">0,0,4,0</Thickness>
     <Thickness x:Key="EdgePanelTabPadding">8,0,8,0</Thickness>
     <Thickness x:Key="EdgePanelTabIndicatorThickness">0,0,0,2</Thickness>
-    <SolidColorBrush x:Key="EdgePanelTabIndicatorBrush" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" />
 
     <!-- Pages tab (FR-103, UI-04, phase 3b-2): one row per page, a 140 DIP wide thumbnail with the page's proportions
          (the page bitmap with the ink drawn over it; strokes never thinner than 0.75 DIP), the page number under it. The
@@ -150,13 +144,11 @@
     <sys:Double x:Key="PagesThumbnailMinStrokeWidth">0.75</sys:Double>
     <!-- The page's edge, drawn over the thumbnail so white pages read on the panel in both themes. -->
     <sys:Double x:Key="PagesThumbnailFrameThickness">1</sys:Double>
-    <SolidColorBrush x:Key="PagesThumbnailBorderBrush" Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
     <Thickness x:Key="PagesRowPadding">4</Thickness>
     <Thickness x:Key="PagesNumberMargin">0,2,0,0</Thickness>
     <Thickness x:Key="PagesCurrentRingThickness">3</Thickness>
     <Thickness x:Key="PagesCurrentRingPadding">1</Thickness>
     <CornerRadius x:Key="PagesCurrentRingCornerRadius">3</CornerRadius>
-    <SolidColorBrush x:Key="PagesCurrentRingBrush" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" />
     <GridLength x:Key="PagesTickColumnWidth">16</GridLength>
     <Thickness x:Key="PagesTickMargin">0,4,3,0</Thickness>
     <Thickness x:Key="PagesTickGap">0,0,2,0</Thickness>
@@ -174,17 +166,18 @@
     <SolidColorBrush x:Key="SearchCurrentHighlightBrush" Color="{StaticResource SearchCurrentHighlightColor}" Opacity="0.5" />
     <sys:Double x:Key="SearchHighlightPaddingPt">1.5</sys:Double>
 
-    <Style TargetType="Button">
+    <!-- The 40 px touch targets over WPF UI's Fluent styles (ControlsDictionary, merged before this dictionary). -->
+    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="MinWidth" Value="{StaticResource TouchTarget}" />
         <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />
         <Setter Property="Margin" Value="0,0,4,0" />
     </Style>
-    <Style TargetType="RadioButton">
+    <Style TargetType="RadioButton" BasedOn="{StaticResource {x:Type RadioButton}}">
         <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Margin" Value="0,0,12,0" />
     </Style>
-    <Style TargetType="CheckBox">
+    <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
         <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
@@ -206,7 +199,7 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Bar" Property="BorderBrush" Value="{StaticResource EdgePanelTabIndicatorBrush}" />
+                            <Setter TargetName="Bar" Property="BorderBrush" Value="{DynamicResource EdgePanelTabIndicatorBrush}" />
                             <Setter Property="FontWeight" Value="SemiBold" />
                         </Trigger>
                     </ControlTemplate.Triggers>

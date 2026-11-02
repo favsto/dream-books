@@ -17,7 +17,7 @@
             <Border x:Name="PreviewBubble" HorizontalAlignment="Right" VerticalAlignment="Top"
                     Width="{StaticResource RailPreviewWidth}" Margin="{StaticResource RailPreviewMargin}"
                     Padding="{StaticResource RailPreviewPadding}" CornerRadius="{StaticResource RailPreviewCornerRadius}"
-                    Background="{StaticResource RailPreviewBackgroundBrush}" Effect="{StaticResource RailPreviewShadow}"
+                    Background="{DynamicResource RailPreviewBackgroundBrush}" Effect="{DynamicResource RailPreviewShadow}"
                     IsHitTestVisible="False" Visibility="Collapsed" Opacity="0" SizeChanged="OnBubbleSizeChanged">
                 <Border.RenderTransform>
                     <TranslateTransform x:Name="BubbleOffset" />
@@ -43,7 +43,7 @@
             <Border x:Name="Strip" HorizontalAlignment="Right" Width="{StaticResource RailTouchWidth}" Focusable="False">
                 <Grid x:Name="Track" Margin="{StaticResource RailTrackMargin}">
                     <Border x:Name="TrackBar" Width="{StaticResource RailBarWidth}" HorizontalAlignment="Center"
-                            CornerRadius="{StaticResource RailBarCornerRadius}" Background="{StaticResource RailTrackBrush}" />
+                            CornerRadius="{StaticResource RailBarCornerRadius}" Background="{DynamicResource RailTrackBrush}" />
                     <!-- The notes' ticks (FR-101), beside the marks' in another colour, then the marks' ticks on top: over
                          the bar, under the knob; decorative, never hit-tested. -->
                     <local:RailTickLayer x:Name="NoteTicks" Fill="{StaticResource RailNoteTickBrush}"
@@ -55,12 +55,12 @@
                                          TickLength="{StaticResource RailSearchTickLength}"
                                          TickThickness="{StaticResource RailSearchTickThickness}"
                                          TickOffset="{StaticResource RailSearchTickOffset}" />
-                    <local:RailTickLayer x:Name="Ticks" Fill="{StaticResource RailMarkTickBrush}"
+                    <local:RailTickLayer x:Name="Ticks" Fill="{DynamicResource RailMarkTickBrush}"
                                          TickLength="{StaticResource RailMarkTickLength}"
                                          TickThickness="{StaticResource RailMarkTickThickness}" />
                     <Border x:Name="Knob" Width="{StaticResource RailKnobWidth}" Height="{StaticResource RailKnobHeight}"
                             HorizontalAlignment="Center" VerticalAlignment="Top"
-                            CornerRadius="{StaticResource RailKnobCornerRadius}" Background="{StaticResource RailKnobBrush}">
+                            CornerRadius="{StaticResource RailKnobCornerRadius}" Background="{DynamicResource RailKnobBrush}">
                         <Border.RenderTransform>
                             <TranslateTransform x:Name="KnobOffset" />
                         </Border.RenderTransform>

@@ -18,12 +18,14 @@
              layout rounding inside: the scroll offsets and geometry stay exact (zoom anchored to the sub-pixel) and
              VirtualPagePanel snaps each page itself to whole device pixels on screen, so the bitmap maps 1:1 (the window
              rounds its own layout, so this viewer's origin is on a whole pixel too). The scroll bars are hidden: the
-             rail (UI-07) replaces them; the wheel scrolls, and the navigation keys go through the view model. -->
+             rail (UI-07) replaces them; the wheel scrolls, and the navigation keys go through the view model.
+             Style="{x:Null}": not WPF UI's implicit ScrollViewer style (its own template and scroll bars), so the pen,
+             pan and zoom path stays the system one. -->
         <ScrollViewer x:Name="Viewport"
                       HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"
                       CanContentScroll="False"
                       PanningMode="None" IsManipulationEnabled="True" UseLayoutRounding="False"
-                      Background="{DynamicResource PageBackdropBrush}"
+                      Background="{DynamicResource PageBackdropBrush}" Style="{x:Null}"
                       Stylus.IsPressAndHoldEnabled="False" Stylus.IsFlicksEnabled="False"
                       Stylus.IsTapFeedbackEnabled="False" Stylus.IsTouchFeedbackEnabled="False"
                       ScrollChanged="OnScrollChanged"

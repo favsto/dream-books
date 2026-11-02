@@ -18,7 +18,7 @@ Date: 2026-11-02 (Task 0 of the phase 4a plan). Fausto approved adding WPF UI on
 
 ## Usage in Dream Books
 
-- `App.xaml` merges, in this order: `ui:ThemesDictionary` (WPF UI colours, swapped by `ApplicationThemeManager`),
+- `App.AddThemeResources` (code, shared with the tests' application) merges, in this order: `ui:ThemesDictionary` (WPF UI colours, swapped by `ApplicationThemeManager`),
   `ui:ControlsDictionary` (implicit Fluent styles for the standard controls), our `Resources/Theme.xaml`
   (theme-independent tokens) and `Resources/Theme.Light.xaml` or `Theme.Dark.xaml` (our colour tokens per theme,
   swapped by `ThemeService`). Our implicit `Button`/`RadioButton`/`CheckBox` styles are `BasedOn` the WPF UI ones, so
@@ -34,13 +34,27 @@ Date: 2026-11-02 (Task 0 of the phase 4a plan). Fausto approved adding WPF UI on
 
 - **ControlsDictionary restyles every standard control implicitly** (Button, TextBox, ScrollViewer, Expander...). The
   document's own `ScrollViewer` opts out (`Style="{x:Null}"`): WPF UI's template adds its own scroll bars and must not
-  touch the pen/pan/zoom path. The debug panel takes the Fluent look as is (it disappears in Task 5).
+  touch the pen/pan/zoom path. The debug panel's buttons, fields and sliders take the Fluent look as is (the panel
+  disappears in Task 5), but its `Expander` keeps the system style (`Style="{x:Null}"`): **WPF UI's Expander lays a
+  sideways (`ExpandDirection="Right"`) expander out without its content** (the panel's buttons had no size and were
+  missing from the visual tree; three existing tests caught it).
+- Our implicit `Button`/`RadioButton`/`CheckBox` styles must be `BasedOn="{StaticResource {x:Type ...}}"`, or they
+  replace WPF UI's style with the bare system template (light buttons in the dark theme).
+- **The `TitleBar` is 48 px tall by default** (the WinUI tall title bar). Dream Books sets it to 40 px
+  (`TitleBarHeight`, the touch target): a smaller strip over the document, still a 40 px target for the window buttons.
 - **Mica** is applied by `FluentWindow` when its handle is created (`OnSourceInitialized`) through DWM
   (`DWMWA_SYSTEMBACKDROP_TYPE`, Windows 11 22H2+). On older builds WPF UI falls back to the legacy Mica attribute or
   to the plain window background. It does **not** look at the "Transparency effects" setting: Dream Books does
   (`TransparencySetting`, NFR-32) and switches the window to `WindowBackdropType.None` with an opaque theme brush.
-- `ApplicationThemeManager.Apply` also re-applies the backdrop to `Application.MainWindow`
-  (`WindowBackgroundManager.UpdateBackground`), so `ThemeService` passes the backdrop currently in use.
+- `ApplicationThemeManager.Apply` also re-applies the backdrop and the dark/light window frame to
+  `Application.MainWindow` (`WindowBackgroundManager.UpdateBackground`), so `ThemeService` passes the backdrop
+  currently in use. At startup the theme is applied before the window has a handle, so `MainWindow` calls
+  `UpdateBackground` itself on `SourceInitialized` (dark Mica tint and frame in the dark theme).
+- `Application.ThemeMode` (WPF's own experimental Fluent theme, .NET 9+) clashes by name with a `ThemeMode` enum inside
+  `App`: ours is `AppThemeMode`. WPF's own Fluent theme is not used.
 - The title bar is a real caption area (WPF UI answers `WM_NCHITTEST`): a press in its height drags the window, also
   with the pen, as with any title bar (it hides in full screen, UI-06, later).
+- Tests: the theme lives in the shared test application's resources and `WpfTestThread.Drain`/`PumpUntil` also run
+  work that parallel tests queued on the WPF thread, so the tests that switch the theme run alone
+  (`ThemeCollection`, parallelization disabled).
 - Trimming: WPF does not support trimming, so nothing changes (the app is published self-contained, untrimmed).

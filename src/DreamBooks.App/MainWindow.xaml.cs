@@ -6,14 +6,20 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using DreamBooks.App.Services;
 using DreamBooks.App.ViewModels;
 using DreamBooks.App.Views;
 using DreamBooks.Pdf;
+using Microsoft.Win32;
+using Wpf.Ui.Appearance;
+using FluentWindow = Wpf.Ui.Controls.FluentWindow;
+using WindowBackdrop = Wpf.Ui.Controls.WindowBackdrop;
+using WindowBackdropType = Wpf.Ui.Controls.WindowBackdropType;
 
 namespace DreamBooks.App;
 
-public partial class MainWindow : Window
+public partial class MainWindow : FluentWindow
 {
     /// <summary>The left-edge panel's tabs: the marks list and the page thumbnails.</summary>
     internal const int MarksTab = 0;
@@ -26,6 +32,8 @@ public partial class MainWindow : Window
     private static readonly DependencyPropertyDescriptor _statusText =
         DependencyPropertyDescriptor.FromProperty(TextBlock.TextProperty, typeof(TextBlock));
 
+    private readonly ThemeService? _theme;
+
     private int? _dismissTouchId;
 
     // Set once the view model allowed closing, so the second Close() goes through.
@@ -33,10 +41,37 @@ public partial class MainWindow : Window
     private bool _closeCheckRunning;
 
     public MainWindow()
+        : this(null)
     {
+    }
+
+    /// <summary>
+    /// The window with the app's theme service (null in tests that do not switch themes): after each theme change the
+    /// backdrop is applied again, as WPF UI's theme manager re-applies the main window's backdrop itself.
+    /// </summary>
+    internal MainWindow(ThemeService? theme)
+    {
+        _theme = theme;
         InitializeComponent();
         DataContext = _viewModel;
         Loaded += OnLoaded;
+        ApplyBackdrop();
+        if (theme is not null)
+        {
+            theme.ThemeChanged += OnThemeChanged;
+            Closed += (_, _) => theme.ThemeChanged -= OnThemeChanged;
+        }
+
+        // Windows "Transparency effects" (NFR-32) switched while the app runs: Mica or the solid brush.
+        SourceInitialized += (_, _) =>
+        {
+            SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+
+            // The theme was applied before this window had a handle: give it the theme's dark or light frame and
+            // Mica tint now (WPF UI does it itself on later theme changes).
+            WindowBackgroundManager.UpdateBackground(this, ApplicationThemeManager.GetAppTheme(), WindowBackdropType);
+        };
+        Closed += (_, _) => SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         PreviewKeyDown += OnPreviewKeyDown;
         DocumentViewer.LeftEdgeSwiped += (_, _) => MarksPanel.Open(); // a finger swipe from the left edge (UI-04)
 
@@ -83,6 +118,47 @@ public partial class MainWindow : Window
 
     /// <summary>How many times the marks status was announced as a live region (tests).</summary>
     internal int StatusAnnouncements { get; private set; }
+
+    /// <summary>The Windows "Transparency effects" setting (NFR-32); replaceable by tests.</summary>
+    internal Func<bool> TransparencyEnabled { get; set; } = TransparencySetting.IsEnabled;
+
+    /// <summary>Whether Windows can draw Mica (Windows 11); replaceable by tests.</summary>
+    internal Func<bool> MicaSupported { get; set; } = () => WindowBackdrop.IsSupported(WindowBackdropType.Mica);
+
+    /// <summary>
+    /// The window's backdrop (section 3, NFR-32): Mica behind a transparent window and a translucent grey around the
+    /// pages; with Windows "Transparency effects" off, or without Mica (Windows 10), no backdrop and solid theme brushes
+    /// instead (window and the area around the pages). The theme service learns the backdrop, as WPF UI's theme manager
+    /// re-applies it on each theme change.
+    /// </summary>
+    internal void ApplyBackdrop()
+    {
+        var transparent = TransparencyEnabled() && MicaSupported();
+        var backdrop = transparent ? WindowBackdropType.Mica : WindowBackdropType.None;
+        if (_theme is not null)
+        {
+            _theme.Backdrop = backdrop;
+        }
+
+        // The background first: FluentWindow applies the backdrop when the type changes (with a handle), and Mica needs
+        // the window transparent (WPF UI's style background is opaque).
+        if (transparent)
+        {
+            Background = Brushes.Transparent;
+        }
+        else
+        {
+            SetResourceReference(BackgroundProperty, "WindowBackgroundOpaqueBrush");
+        }
+
+        WindowBackdropType = backdrop;
+        DocumentViewer.ApplyTransparency(transparent);
+    }
+
+    private void OnThemeChanged(object? sender, EventArgs e) => ApplyBackdrop();
+
+    private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e) =>
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, ApplyBackdrop); // raised on another thread
 
     /// <summary>The finger that closed the panel from outside, held by the page host until it lifts; null otherwise.</summary>
     internal int? DismissTouchId => _dismissTouchId;

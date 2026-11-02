@@ -1,0 +1,88 @@
+using System.Windows;
+
+namespace DreamBooks.App.Tests;
+
+/// <summary>
+/// The theme tokens split into Theme.xaml (the same in both themes) and Theme.Light.xaml / Theme.Dark.xaml: every key
+/// the views used before the split (the old single Theme.xaml) still resolves in both themes, and the two theme
+/// dictionaries define the same keys.
+/// </summary>
+public sealed class ThemeResourcesTests
+{
+    private static readonly string[] _keysBeforeTheSplit =
+    [
+        "TouchTarget", "PanelWidth", "ProgressBarHeight", "Gap", "SectionGap", "ChiselAngleSmallChange",
+        "ChiselAngleLargeChange", "EraserCursorFill", "EraserCursorOutline", "EraserCursorOutlineThickness",
+        "PageBackdropBrush", "PagePlaceholderBrush", "PageFadeInDuration", "PageFadeInFromOpacity", "RailFadeInDuration",
+        "RailFadeOutDuration", "RailIdleDelay", "RailTouchWidth", "RailBarWidth", "RailKnobWidth", "RailKnobHeight",
+        "RailKnobPenSlop", "RailKnobFingerZoneWidth", "RailKnobFingerZonePadding", "RailKnobFingerZoneMinHeight",
+        "RailBarCornerRadius", "RailKnobCornerRadius", "RailTrackMargin", "RailTrackBrush", "RailKnobBrush",
+        "RailPreviewWidth", "RailPreviewMargin", "RailPreviewPadding", "RailPreviewCornerRadius",
+        "RailPreviewBackgroundBrush", "RailPreviewShadow", "RailPreviewFadeInDuration", "RailPreviewFadeOutDuration",
+        "RailPreviewCrossFadeDuration", "RailPreviewEase", "RailPreviewMinStrokeWidth", "RailTrackBrushOpaque",
+        "RailPreviewBackgroundBrushOpaque", "RailMarkTickLength", "RailMarkTickThickness", "RailMarkTickBrush",
+        "RailMarkTickBrushOpaque", "RailNoteTickLength", "RailNoteTickThickness", "RailNoteTickOffset", "RailNoteTickColor",
+        "RailNoteTickBrush", "RailNoteTickBrushOpaque", "RailSearchTickLength", "RailSearchTickThickness",
+        "RailSearchTickOffset", "RailSearchTickColor", "RailSearchTickBrush", "RailSearchTickBrushOpaque",
+        "RailIndicatorMargin", "FlingDecayTimeConstant", "FlingMinSpeed", "FlingMaxSpeed", "EdgePanelWidth",
+        "EdgePanelOpenDuration", "EdgePanelCloseDuration", "EdgeSwipeZoneWidth", "EdgePanelCornerRadius",
+        "EdgePanelPadding", "EdgePanelMargin", "EdgePanelBackgroundBrush", "EdgePanelBackgroundBrushOpaque",
+        "EdgePanelShadow", "EdgePanelTitleSize", "EdgePanelDetailMargin", "CloseGlyph", "PreviousMarkGlyph",
+        "NextMarkGlyph", "GlyphSize", "GlyphStrokeThickness", "GlyphBrush", "MarkThumbnailWidth", "MarkThumbnailHeight",
+        "MarkThumbnailMinStrokeWidth", "MarkThumbnailBorderBrush", "MarkRowPadding", "MarkRowLabelMargin",
+        "GoToPageFieldWidth", "EdgePanelTabMargin", "EdgePanelTabPadding", "EdgePanelTabIndicatorThickness",
+        "EdgePanelTabIndicatorBrush", "PagesThumbnailWidth", "PagesThumbnailMinStrokeWidth",
+        "PagesThumbnailFrameThickness", "PagesThumbnailBorderBrush", "PagesRowPadding", "PagesNumberMargin",
+        "PagesCurrentRingThickness", "PagesCurrentRingPadding", "PagesCurrentRingCornerRadius", "PagesCurrentRingBrush",
+        "PagesTickColumnWidth", "PagesTickMargin", "PagesTickGap", "PagesTickWidth", "PagesTickHeight",
+        "SearchHighlightColor", "SearchCurrentHighlightColor", "SearchHighlightBrush", "SearchCurrentHighlightBrush",
+        "SearchHighlightPaddingPt", "EdgePanelTabStyle", "SectionLabel",
+    ];
+
+    /// <summary>The new shell's tokens (section 3): window fallback, page shadow, floating panels.</summary>
+    private static readonly string[] _shellKeys =
+    [
+        "WindowBackgroundOpaqueBrush", "PageBackdropBrushOpaque", "PageShadow", "PanelTintBrush", "PanelTintBrushOpaque",
+        "PanelDiffuseShadow", "PanelContactShadow", "TitleBarHeight", "TitleBarClearance",
+    ];
+
+    [Theory]
+    [InlineData("Light")]
+    [InlineData("Dark")]
+    public void Every_key_used_by_the_views_resolves_in_both_themes(string theme)
+    {
+        WpfTestThread.Run(() =>
+        {
+            var resources = new ResourceDictionary();
+            resources.MergedDictionaries.Add(Load("Theme.xaml"));
+            resources.MergedDictionaries.Add(Load($"Theme.{theme}.xaml"));
+            foreach (var key in _keysBeforeTheSplit.Concat(_shellKeys))
+            {
+                Assert.True(resources.Contains(key), $"'{key}' is missing in the {theme} theme.");
+                Assert.NotNull(resources[key]);
+            }
+
+            // The implicit styles (40 px targets) are still there.
+            Assert.True(resources.Contains(typeof(System.Windows.Controls.Button)));
+        });
+    }
+
+    [Fact]
+    public void The_light_and_dark_dictionaries_define_the_same_keys_and_nothing_of_the_shared_one()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var light = Keys(Load("Theme.Light.xaml"));
+            var dark = Keys(Load("Theme.Dark.xaml"));
+            var shared = Keys(Load("Theme.xaml"));
+            Assert.Equal(light.Order(), dark.Order());
+            Assert.Empty(light.Intersect(shared));
+        });
+    }
+
+    private static ResourceDictionary Load(string file) =>
+        new() { Source = new Uri($"/DreamBooks.App;component/Resources/{file}", UriKind.Relative) };
+
+    private static List<string> Keys(ResourceDictionary dictionary) =>
+        dictionary.Keys.Cast<object>().Select(k => k.ToString()!).ToList();
+}
