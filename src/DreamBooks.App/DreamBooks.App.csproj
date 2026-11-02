@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="WPF-UI" />
     <ProjectReference Include="..\DreamBooks.Core\DreamBooks.Core.csproj" />
     <ProjectReference Include="..\DreamBooks.Pdf\DreamBooks.Pdf.csproj" />
     <InternalsVisibleTo Include="DreamBooks.App.Tests" />
