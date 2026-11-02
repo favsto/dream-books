@@ -220,6 +220,30 @@ public sealed class MarksViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Without_marks_the_ink_of_thumbnails_and_the_rail_preview_still_follows_the_strokes()
+    {
+        // The rail bubble and the Pages thumbnails drop a page's ink on InkChanged: a failing tracker must not stop it.
+        var pages = Pages(3);
+        var vm = NewVm(pages, _ => new FakeMarkPageSource(pages));
+        vm.MarkTrackerFactory = (_, _, _) => throw new InvalidOperationException("broken");
+        var marksInk = new List<int>();
+        var pagesInk = new List<int>();
+        vm.Marks.InkChanged += (_, e) => marksInk.Add(e.PageIndex);
+        vm.Pages.InkChanged += (_, e) => pagesInk.Add(e.PageIndex);
+
+        await OpenAsync(vm, "a.pdf");
+        Assert.Null(vm.MarkIndexForTest);
+        marksInk.Clear();
+        pagesInk.Clear();
+
+        Draw(vm);
+        Assert.Contains(0, marksInk);
+        Assert.Contains(0, pagesInk);
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Equal(2, pagesInk.Count(p => p == 0));
+    }
+
+    [Fact]
     public void Commands_do_nothing_when_there_are_no_marks()
     {
         var (viewport, marks, _) = Standalone();

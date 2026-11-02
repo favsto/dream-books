@@ -76,7 +76,7 @@ public sealed class MainViewModel : ObservableObject
     private MarkIndex? _markIndex;
     private MarkTracker? _markTracker;
     private MarkScanner? _markScanner;
-    private DocumentSession? _markSession;
+    private DocumentSession? _inkSession; // the session whose stroke changes reach the ink pictures (rail, thumbnails)
     private bool _scanPausedForInk;
     private bool _scanPausedForSave;
     private IDisposable? _pendingScanStart;
@@ -1185,6 +1185,10 @@ public sealed class MainViewModel : ObservableObject
     /// </remarks>
     private void StartMarks(DocumentSession session)
     {
+        // The ink pictures (rail bubble, Pages thumbnails) follow the strokes whether or not the marks work.
+        _inkSession = session;
+        session.PageStrokesChanged += OnPageInkChanged;
+
         var index = new MarkIndex(session.PageCount);
         try
         {
@@ -1199,14 +1203,12 @@ public sealed class MainViewModel : ObservableObject
         }
 
         _markIndex = index;
-        _markSession = session;
-        session.PageStrokesChanged += OnMarkPageStrokesChanged;
         Marks.Attach(index);
         StartScan(deferred: true);
     }
 
     // Any thread (the session raises it where the edit or the load happened): the rows of that page redraw their ink.
-    private void OnMarkPageStrokesChanged(object? sender, PageStrokesChangedEventArgs e) => Marks.NotifyInkChanged(e.PageIndex);
+    private void OnPageInkChanged(object? sender, PageStrokesChangedEventArgs e) => Marks.NotifyInkChanged(e.PageIndex);
 
     /// <summary>
     /// The ink of a whole page for the scroll rail's preview bubble (UI-07): the page's strokes, read as the marks list
@@ -1406,10 +1408,10 @@ public sealed class MainViewModel : ObservableObject
     private void StopMarks()
     {
         StopScan();
-        if (_markSession is { } markSession)
+        if (_inkSession is { } inkSession)
         {
-            markSession.PageStrokesChanged -= OnMarkPageStrokesChanged;
-            _markSession = null;
+            inkSession.PageStrokesChanged -= OnPageInkChanged;
+            _inkSession = null;
         }
 
         _markTracker?.Dispose();
