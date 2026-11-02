@@ -8,7 +8,8 @@ using DreamBooks.App.Resources;
 using DreamBooks.App.ViewModels;
 using DreamBooks.App.Views;
 using DreamBooks.Core.Search;
-using static DreamBooks.App.Tests.FakeSearchPageSource;
+using DreamBooks.Core.Tests.Search;
+using static DreamBooks.Core.Tests.Search.FakeSearchPageSource;
 
 namespace DreamBooks.App.Tests;
 
