@@ -436,13 +436,21 @@ public sealed class SearchViewModel : ObservableObject
             NoTextLayerMessage = Strings.SearchNoTextLayer;
         }
 
-        FailedPagesText = index is not null && scanner is { IsCompleted: true, FailedCount: > 0 } failed
-            && !AllPagesFailed(index, failed)
-            ? string.Format(CultureInfo.CurrentCulture, failed.FailedCount == 1 ? Strings.SearchFailedPageOne : Strings.SearchFailedPagesFormat, failed.FailedCount)
+        var unread = index is not null && IsPartial(index) ? index.PageCount - index.SearchedCount
+            : index is not null && scanner is { IsCompleted: true, FailedCount: > 0 } failed && !AllPagesFailed(index, failed)
+                ? failed.FailedCount
+                : 0;
+        FailedPagesText = unread > 0
+            ? string.Format(CultureInfo.CurrentCulture, unread == 1 ? Strings.SearchFailedPageOne : Strings.SearchFailedPagesFormat, unread)
             : null;
 
         UpdateCount();
     }
+
+    // The search stopped short with pages never read and no scan to read them (a save whose renderer did not come back):
+    // its results are not the final ones.
+    private bool IsPartial(SearchIndex index) =>
+        !IsSearching && _scanner is not { IsCompleted: true } && !index.Truncated && index.SearchedCount < index.PageCount;
 
     // Every page failed (a damaged file): that is not "no text layer".
     private static bool AllPagesFailed(SearchIndex index, SearchScanner scanner) =>
@@ -466,7 +474,8 @@ public sealed class SearchViewModel : ObservableObject
             return;
         }
 
-        var totalText = index.Truncated
+        var more = index.Truncated || IsPartial(index);
+        var totalText = more
             ? string.Format(CultureInfo.CurrentCulture, Strings.SearchTruncatedFormat, total)
             : total.ToString(CultureInfo.CurrentCulture);
         if (_current is { } current && OrdinalOf(index, current) is { } ordinal)
@@ -475,7 +484,7 @@ public sealed class SearchViewModel : ObservableObject
         }
         else
         {
-            CountText = total == 1 && !index.Truncated
+            CountText = total == 1 && !more
                 ? Strings.SearchOneResult
                 : string.Format(CultureInfo.CurrentCulture, Strings.SearchResultsFormat, totalText);
         }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Input;
 using DreamBooks.App.Resources;
@@ -504,6 +505,38 @@ public sealed class SearchViewModelTests : IDisposable
         await OpenFileAsync(vm, "b.pdf");
         Assert.Null(vm.Search.NoTextLayerMessage);
         Assert.Equal(string.Empty, vm.Search.QueryText);
+    }
+
+    [Fact]
+    public async Task A_search_left_partial_by_a_renderer_that_never_came_back_does_not_look_complete()
+    {
+        // Final review M3: a save whose reopen failed leaves no scan and unsearched pages; the count must not read as
+        // final ("1 risultato") but as more possible ("1+"), with the pages not read noted beside it.
+        var viewer = new FakeViewerHandle(_log);
+        var source = new FakeSearchPageSource(8);
+        source.Hits[1] = [Hit(1, 100)];
+        var held = source.Hold(4);
+        var vm = await OpenAsync(source, viewer);
+        vm.Viewport.ScrollToPage(1, recordHistory: false);
+        _scheduler.Advance(DocumentViewportViewModel.CurrentPageDelay);
+        var scanner = Search(vm, "x");
+        await source.Started(4).WaitAsync(_timeout);
+        _scheduler.Advance(SearchViewModel.RefreshInterval);
+        Assert.Equal(1, vm.Search.Index!.TotalHits);
+        Assert.True(vm.Search.IsSearching);
+
+        vm.SearchSourceFactory = _ => null; // the renderer does not come back
+        await viewer.ReleaseAsync();
+        held.SetResult();
+        await scanner.WhenStoppedAsync().WaitAsync(_timeout);
+        _scheduler.Advance(SearchViewModel.RefreshInterval);
+
+        var index = vm.Search.Index!;
+        Assert.Equal(3, index.SearchedCount); // pages 1, 2 and 3 of 8
+        Assert.False(vm.Search.IsSearching);
+        var more = string.Format(CultureInfo.CurrentCulture, Strings.SearchTruncatedFormat, 1);
+        Assert.Equal(string.Format(CultureInfo.CurrentCulture, Strings.SearchResultsFormat, more), vm.Search.CountText);
+        Assert.Equal(string.Format(CultureInfo.CurrentCulture, Strings.SearchFailedPagesFormat, 5), vm.Search.FailedPagesText);
     }
 
     [Fact]
