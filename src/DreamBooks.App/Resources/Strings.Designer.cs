@@ -306,6 +306,42 @@ internal static class Strings
     /// <summary>Added to the row name of a page with handwritten notes.</summary>
     public static string PageRowHasNotes => Get(nameof(PageRowHasNotes));
 
+    /// <summary>The highlighter tool (FR-41).</summary>
+    public static string ToolHighlighter => Get(nameof(ToolHighlighter));
+
+    /// <summary>Header of the highlighter options.</summary>
+    public static string HighlighterOptions => Get(nameof(HighlighterOptions));
+
+    /// <summary>The round highlighter tip.</summary>
+    public static string HighlighterTipRound => Get(nameof(HighlighterTipRound));
+
+    /// <summary>The chisel highlighter tip (FR-46).</summary>
+    public static string HighlighterTipChisel => Get(nameof(HighlighterTipChisel));
+
+    /// <summary>The chisel angle in degrees (FR-46).</summary>
+    public static string HighlighterAngle => Get(nameof(HighlighterAngle));
+
+    /// <summary>The straight-line switch (FR-44).</summary>
+    public static string HighlighterStraightLine => Get(nameof(HighlighterStraightLine));
+
+    /// <summary>Highlighter colour name (FR-41).</summary>
+    public static string HighlighterYellow => Get(nameof(HighlighterYellow));
+
+    /// <summary>Highlighter colour name (FR-41).</summary>
+    public static string HighlighterGreen => Get(nameof(HighlighterGreen));
+
+    /// <summary>Highlighter colour name (FR-41).</summary>
+    public static string HighlighterLightBlue => Get(nameof(HighlighterLightBlue));
+
+    /// <summary>Highlighter colour name (FR-41).</summary>
+    public static string HighlighterPink => Get(nameof(HighlighterPink));
+
+    /// <summary>Highlighter colour name (FR-41).</summary>
+    public static string HighlighterOrange => Get(nameof(HighlighterOrange));
+
+    /// <summary>Highlighter colour name (FR-41).</summary>
+    public static string HighlighterPurple => Get(nameof(HighlighterPurple));
+
     private static string Get(string name) =>
         Manager.GetString(name, System.Globalization.CultureInfo.CurrentUICulture) ?? name;
 }

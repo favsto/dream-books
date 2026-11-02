@@ -70,6 +70,18 @@ public class StringsTests
         }
 
         Assert.Contains("37", string.Format(CultureInfo.CurrentCulture, Strings.PageRowNameFormat, 37), StringComparison.Ordinal);
+
+        // The highlighter tool and its options (FR-41, FR-44, FR-46), in both files.
+        foreach (var key in new[]
+                 {
+                     "ToolHighlighter", "HighlighterOptions", "HighlighterTipRound", "HighlighterTipChisel", "HighlighterAngle",
+                     "HighlighterStraightLine", "HighlighterYellow", "HighlighterGreen", "HighlighterLightBlue",
+                     "HighlighterPink", "HighlighterOrange", "HighlighterPurple",
+                 })
+        {
+            Assert.True(keys.ContainsKey(key), $"Strings.resx is missing '{key}'.");
+            Assert.NotNull(_stringsType.GetProperty(key, BindingFlags.Public | BindingFlags.Static));
+        }
     }
 
     [Fact]

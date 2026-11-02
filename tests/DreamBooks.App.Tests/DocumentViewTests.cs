@@ -173,6 +173,29 @@ public sealed class DocumentViewTests : IDisposable
     }
 
     [Fact]
+    public async Task With_the_highlighter_the_pen_commits_a_highlighter_stroke_through_the_same_path() // FR-41, FR-42
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            Settle(view);
+            LoadEditors(view);
+            vm.Tools.ActiveTool = AppTool.Highlighter;
+            var surface = view.SurfaceFor(vm.Viewport.CurrentPage)!;
+
+            surface.BeginPenStroke(stylusId: 1, hasPressure: true);
+            vm.Tools.ActiveTool = AppTool.Pen; // the tool of a live stroke is the one it started with
+            surface.AppendPenPoints([new(20, 20, 0.2f), new(200, 22, 0.9f)], timestamp: 10);
+            surface.FinishPenStroke();
+
+            var stroke = Assert.Single(surface.Editor!.Page.Strokes);
+            Assert.Equal(InkTool.Highlighter, stroke.Tool);
+            Assert.Equal(DreamBooks.Core.Model.HighlighterPresets.Alpha, stroke.Color.A);
+            Assert.Equal(DreamBooks.Core.Ink.HighlighterSettings.Default.RoundWidthPt, stroke.BaseWidthPt);
+            Assert.False(vm.ZoomVm.IsLocked);
+        });
+    }
+
+    [Fact]
     public async Task Erase_gesture_starts_on_the_page_under_the_eraser_only()
     {
         await WithViewAsync((vm, view) =>

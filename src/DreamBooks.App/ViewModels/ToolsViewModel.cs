@@ -23,9 +23,20 @@ public sealed class ToolsViewModel : ObservableObject
     private EraserMode _eraserMode = EraserMode.WholeStroke;
     private double _eraserSizeMm = 6;
 
-    public ToolsViewModel() => SelectColorCommand = new RelayCommand<InkColor>(c => Color = c);
+    public ToolsViewModel()
+    {
+        SelectColorCommand = new RelayCommand<InkColor>(c => Color = c);
+        ToggleHighlighterCommand = new RelayCommand(
+            () => ActiveTool = ActiveTool == AppTool.Highlighter ? AppTool.Pen : AppTool.Highlighter);
+    }
 
     public IRelayCommand<InkColor> SelectColorCommand { get; }
+
+    /// <summary>The highlighter as a toggle next to the pen: on selects it, off goes back to the pen (FR-41).</summary>
+    public IRelayCommand ToggleHighlighterCommand { get; }
+
+    /// <summary>The highlighter options (FR-41, FR-44, FR-46).</summary>
+    public HighlighterOptionsViewModel Highlighter { get; } = new();
 
     public AppTool ActiveTool
     {
@@ -35,6 +46,7 @@ public sealed class ToolsViewModel : ObservableObject
             if (SetProperty(ref _activeTool, value))
             {
                 OnPropertyChanged(nameof(EffectiveTool));
+                OnPropertyChanged(nameof(IsDrawingTool));
             }
         }
     }
@@ -42,6 +54,20 @@ public sealed class ToolsViewModel : ObservableObject
     public bool IsInverted => _isInverted;
 
     public AppTool EffectiveTool => _isInverted ? AppTool.Eraser : _activeTool;
+
+    /// <summary>True when the pen inks with the effective tool: the pen or the highlighter (FR-30, FR-41).</summary>
+    public bool IsDrawingTool => EffectiveTool is AppTool.Pen or AppTool.Highlighter;
+
+    /// <summary>
+    /// The colour of a stroke started now with the effective tool: the highlighter's translucent colour, otherwise
+    /// the pen colour. Read when a stroke starts (the live stroke keeps it).
+    /// </summary>
+    public InkColor ActiveInkColor =>
+        EffectiveTool == AppTool.Highlighter ? Highlighter.Settings.StrokeColor : _color;
+
+    /// <summary>The base width of a stroke started now: the highlighter's constant width (FR-42), otherwise the pen's.</summary>
+    public double ActiveInkWidthPt =>
+        EffectiveTool == AppTool.Highlighter ? Highlighter.Settings.WidthPt : BaseWidthPt;
 
     public PressureCurve Curve
     {
@@ -102,5 +128,6 @@ public sealed class ToolsViewModel : ObservableObject
         _isInverted = value;
         OnPropertyChanged(nameof(IsInverted));
         OnPropertyChanged(nameof(EffectiveTool));
+        OnPropertyChanged(nameof(IsDrawingTool));
     }
 }

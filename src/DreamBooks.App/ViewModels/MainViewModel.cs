@@ -110,6 +110,7 @@ public sealed class MainViewModel : ObservableObject
         _scheduler = scheduler ?? new DispatcherDelayScheduler();
         Recovery = recovery is null ? null : new RecoveryService(recovery, dialogs);
         Tools = new ToolsViewModel();
+        Tools.Highlighter.SettingsChanged += OnHighlighterSettingsChanged;
         ZoomVm = new ZoomViewModel();
         Viewport = new DocumentViewportViewModel(ZoomVm, _scheduler) { PageNavigator = NavigateToPageAsync };
         Viewport.PositionChanged += OnViewportPositionChanged;
@@ -529,6 +530,50 @@ public sealed class MainViewModel : ObservableObject
         RefreshCurrentEditor();
         UpdateNotice();
         return editor;
+    }
+
+    /// <summary>
+    /// Commits a finished pen stroke on <paramref name="editor"/>'s page with the tool it was started with: the
+    /// highlighter commits through <see cref="PageEditor.CommitHighlighterStroke"/> with the editor's highlighter
+    /// settings (constant width, translucent colour, chisel, straight line: FR-41, FR-42, FR-44, FR-46), the pen with
+    /// <paramref name="penColor"/> and <paramref name="penWidthPt"/>; the eraser commits nothing. One input path for
+    /// both tools. Returns false when nothing was committed.
+    /// </summary>
+    public bool CommitInk(
+        PageEditor editor, IReadOnlyList<InkPoint> points, AppTool tool, InkColor penColor, double penWidthPt)
+    {
+        ArgumentNullException.ThrowIfNull(editor);
+        ArgumentNullException.ThrowIfNull(points);
+        return tool switch
+        {
+            AppTool.Highlighter => CommitHighlighter(editor, points),
+            AppTool.Pen => editor.CommitStroke(points, InkTool.Pen, penColor, penWidthPt),
+            _ => false,
+        };
+    }
+
+    /// <summary>
+    /// An editor of this document already has the current settings (the session hands them to every editor); one from
+    /// elsewhere gets them now, so the stroke always uses the options shown.
+    /// </summary>
+    private bool CommitHighlighter(PageEditor editor, IReadOnlyList<InkPoint> points)
+    {
+        var settings = Tools.Highlighter.Settings;
+        if (!ReferenceEquals(editor.HighlighterSettings, settings))
+        {
+            editor.SetHighlighterSettings(settings);
+        }
+
+        return editor.CommitHighlighterStroke(points);
+    }
+
+    /// <summary>The highlighter options changed: every page editor of the document, loaded or not yet, uses them.</summary>
+    private void OnHighlighterSettingsChanged(object? sender, EventArgs e)
+    {
+        if (Session is { } session)
+        {
+            session.HighlighterSettings = Tools.Highlighter.Settings;
+        }
     }
 
     /// <summary>
@@ -1147,6 +1192,7 @@ public sealed class MainViewModel : ObservableObject
         _listenerFailed = false;
         _reportedLoadFailures.Clear();
         AttachJournal(journal);
+        session.HighlighterSettings = Tools.Highlighter.Settings; // the editors already loaded and those to come
         Session = session;
         Viewport.Attach(session, layout, restored?.Position, firstPage, restored?.FitWidth ?? false);
         session.CurrentPageChanged += OnCurrentPageChanged;

@@ -180,6 +180,10 @@
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Margin" Value="0,0,12,0" />
     </Style>
+    <Style TargetType="CheckBox">
+        <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
     <!-- The left-edge panel's tabs ("Segni" / "Pagine", UI-04): 40 px touch targets, the title size, the chosen one
          semi-bold over an accent bar; keyboard focus shows the system focus rectangle. -->
     <Style x:Key="EdgePanelTabStyle" TargetType="RadioButton" BasedOn="{StaticResource {x:Type RadioButton}}">

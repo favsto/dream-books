@@ -763,13 +763,13 @@ public sealed class InkSurface : FrameworkElement
         Editor is { } editor
         && ReferenceEquals(editor.Page, Page)
         && ViewModel is { } vm
-        && vm.Tools.EffectiveTool == AppTool.Pen
+        && vm.Tools.IsDrawingTool
         && device?.Inverted != true;
 
     private StrokeStyle CurrentStyle()
     {
         var tools = ViewModel!.Tools;
-        return new StrokeStyle(tools.Color, tools.BaseWidthPt);
+        return new StrokeStyle(tools.EffectiveTool, tools.ActiveInkColor, tools.ActiveInkWidthPt);
     }
 
     private void AppendStylusPoints(StylusEventArgs e) => AppendPenPoints(e.GetStylusPoints(this), e.Timestamp);
@@ -886,12 +886,19 @@ public sealed class InkSurface : FrameworkElement
     {
         // Committing raises Page.StrokesChanged, which redraws the committed ink synchronously, before the
         // dynamic renderer drops its wet visual: no gap between wet and committed ink. The editor clips the stroke
-        // to this page (FR-27).
+        // to this page (FR-27). The tool is the one the stroke started with: the pen or the highlighter (FR-41).
         try
         {
             if (points.Count > 0 && Editor is { } editor && ReferenceEquals(editor.Page, Page))
             {
-                editor.CommitStroke(points, InkTool.Pen, style.Color, style.WidthPt);
+                if (ViewModel is { } vm)
+                {
+                    vm.CommitInk(editor, points, style.Tool, style.Color, style.WidthPt);
+                }
+                else
+                {
+                    editor.CommitStroke(points, InkTool.Pen, style.Color, style.WidthPt);
+                }
             }
         }
         finally
@@ -1048,7 +1055,7 @@ public sealed class InkSurface : FrameworkElement
 
         var enabled = Editor is not null
             && ViewModel is { } vm
-            && vm.Tools.EffectiveTool == AppTool.Pen
+            && vm.Tools.IsDrawingTool
             && device?.Inverted != true;
         if (_renderer.Enabled != enabled)
         {
@@ -1085,7 +1092,7 @@ public sealed class InkSurface : FrameworkElement
         _renderer.SetIgnoredDevices(touchTablets, invertedStyluses);
     }
 
-    private readonly record struct StrokeStyle(InkColor Color, double WidthPt);
+    private readonly record struct StrokeStyle(AppTool Tool, InkColor Color, double WidthPt);
 
     /// <param name="StylusId">The erasing pen's stylus device Id, or null for the mouse.</param>
     /// <param name="Inverted">True for the pen's back end: the previous tool comes back on lift (FR-30).</param>

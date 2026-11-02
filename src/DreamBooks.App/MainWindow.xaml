@@ -5,6 +5,7 @@
         xmlns:ink="clr-namespace:DreamBooks.App.Ink"
         xmlns:conv="clr-namespace:DreamBooks.App.Converters"
         xmlns:views="clr-namespace:DreamBooks.App.Views"
+        xmlns:vm="clr-namespace:DreamBooks.App.ViewModels"
         Title="{Binding WindowTitle}" Height="720" Width="1200">
     <Window.Resources>
         <conv:EnumMatchConverter x:Key="EnumMatch" />
@@ -243,6 +244,9 @@
                     <StackPanel Orientation="Horizontal" Margin="{StaticResource SectionGap}">
                         <RadioButton GroupName="Tool" Content="{x:Static res:Strings.ToolPen}"
                                      IsChecked="{Binding Tools.ActiveTool, Converter={StaticResource EnumMatch}, ConverterParameter=Pen}" />
+                        <RadioButton GroupName="Tool" Content="{x:Static res:Strings.ToolHighlighter}"
+                                     AutomationProperties.Name="{x:Static res:Strings.ToolHighlighter}"
+                                     IsChecked="{Binding Tools.ActiveTool, Converter={StaticResource EnumMatch}, ConverterParameter=Highlighter}" />
                         <RadioButton GroupName="Tool" Content="{x:Static res:Strings.ToolEraser}"
                                      IsChecked="{Binding Tools.ActiveTool, Converter={StaticResource EnumMatch}, ConverterParameter=Eraser}" />
                     </StackPanel>
@@ -297,6 +301,46 @@
                     </ItemsControl>
                     <Border Height="8" Margin="{StaticResource Gap}"
                             Background="{Binding Tools.Color, Converter={StaticResource ColorBrush}}" />
+
+                    <!-- Highlighter options (FR-41, FR-44, FR-46) -->
+                    <TextBlock Text="{x:Static res:Strings.HighlighterOptions}" Style="{StaticResource SectionLabel}" />
+                    <ItemsControl ItemsSource="{Binding Tools.Highlighter.Swatches}" Focusable="False">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Background="{Binding Color, Converter={StaticResource ColorBrush}}"
+                                        Command="{Binding DataContext.Tools.Highlighter.SelectColorCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding Color}"
+                                        ToolTip="{Binding Name}"
+                                        AutomationProperties.Name="{Binding Name}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton GroupName="HighlighterTip" Content="{x:Static res:Strings.HighlighterTipRound}"
+                                     AutomationProperties.Name="{x:Static res:Strings.HighlighterTipRound}"
+                                     IsChecked="{Binding Tools.Highlighter.IsRound}" />
+                        <RadioButton GroupName="HighlighterTip" Content="{x:Static res:Strings.HighlighterTipChisel}"
+                                     AutomationProperties.Name="{x:Static res:Strings.HighlighterTipChisel}"
+                                     IsChecked="{Binding Tools.Highlighter.IsChisel}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="{StaticResource Gap}">
+                        <TextBlock Text="{x:Static res:Strings.HighlighterAngle}" />
+                        <TextBlock Text="{Binding Tools.Highlighter.ChiselAngleDeg, StringFormat={}{0:0}°}" Margin="8,0,0,0" />
+                    </StackPanel>
+                    <Slider Minimum="{x:Static vm:HighlighterOptionsViewModel.MinChiselAngleDeg}"
+                            Maximum="{x:Static vm:HighlighterOptionsViewModel.MaxChiselAngleDeg}"
+                            Value="{Binding Tools.Highlighter.ChiselAngleDeg}"
+                            MinHeight="{StaticResource TouchTarget}"
+                            IsEnabled="{Binding Tools.Highlighter.IsChisel}"
+                            AutomationProperties.Name="{x:Static res:Strings.HighlighterAngle}" />
+                    <CheckBox Content="{x:Static res:Strings.HighlighterStraightLine}"
+                              AutomationProperties.Name="{x:Static res:Strings.HighlighterStraightLine}"
+                              IsChecked="{Binding Tools.Highlighter.IsStraightLine}" />
 
                     <!-- Eraser -->
                     <TextBlock Text="{x:Static res:Strings.EraserMode}" Style="{StaticResource SectionLabel}" />
