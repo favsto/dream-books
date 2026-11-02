@@ -114,7 +114,7 @@ public class TextFoldingTests
     [Fact]
     public void Queries_are_trimmed_and_their_inner_whitespace_collapses()
     {
-        Assert.Equal("mondo senza fine", TextFolding.FoldQuery("  Mondo \t senza\r\nFINE  "));
+        Assert.Equal("storia breve breve", TextFolding.FoldQuery("  Storia \t breve\r\nBREVE  "));
     }
 
     [Fact]
