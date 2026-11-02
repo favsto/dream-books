@@ -19,7 +19,8 @@ namespace DreamBooks.App.Ink;
 
 /// <summary>
 /// One page: white paper (the placeholder, never a hole, NFR-03), PDF bitmap, search highlights (FR-105, under the
-/// ink, never hit-tested), committed ink (outline layer) and the wet ink of the pen. Its size is the page size × <see cref="Scale"/>; strokes are kept in page points and only
+/// ink, never hit-tested), committed highlighter strokes (under the pen ink, FR-40), committed pen ink (outline layer)
+/// and the wet ink of the pen, shaped as the active tool's (pressure for the pen, constant or chisel for the highlighter). Its size is the page size × <see cref="Scale"/>; strokes are kept in page points and only
 /// scaled to draw (FR-26). Pen ink is drawn live by a <see cref="DynamicRenderer"/> on the real-time stylus thread
 /// (FR-24, NFR-04); on pen-up one stroke is committed through this surface's own <see cref="Editor"/>, clipped to
 /// its page (FR-27). Without an editor (strokes not loaded yet) the surface shows the page but accepts no ink.
@@ -82,6 +83,7 @@ public sealed class InkSurface : FrameworkElement
 
     private readonly Image _image;
     private readonly SearchHighlightLayer _highlights;
+    private readonly HighlighterLayer _highlighterLayer;
     private readonly CustomInkLayer _customLayer;
     private readonly InkPresenter _presenter;
     private readonly Canvas _overlay;
@@ -90,7 +92,7 @@ public sealed class InkSurface : FrameworkElement
 
     private readonly CustomDynamicRenderer _renderer = new();
     private bool _hasPressure = true;
-    private (InkColor Color, double WidthPt, double Scale, PressureCurve Curve, bool HasPressure)? _rendererSettings;
+    private (bool Highlighter, InkColor Color, double WidthPt, ChiselTip? Chisel, double Scale, PressureCurve Curve, bool HasPressure)? _rendererSettings;
 
     // Pen stroke in progress (UI thread copy of the points; the wet ink comes from the renderer).
     private List<InkPoint>? _penPoints;
@@ -115,6 +117,7 @@ public sealed class InkSurface : FrameworkElement
         _image = new Image { Stretch = Stretch.Fill, IsHitTestVisible = false };
         RenderOptions.SetBitmapScalingMode(_image, BitmapScalingMode.HighQuality);
         _highlights = new SearchHighlightLayer();
+        _highlighterLayer = new HighlighterLayer();
         _customLayer = new CustomInkLayer();
         _presenter = new InkPresenter { IsHitTestVisible = false };
         _eraserCursor = new Ellipse { IsHitTestVisible = false, Visibility = Visibility.Collapsed };
@@ -123,7 +126,8 @@ public sealed class InkSurface : FrameworkElement
         _eraserCursor.SetResourceReference(Shape.StrokeThicknessProperty, "EraserCursorOutlineThickness");
         _overlay = new Canvas { IsHitTestVisible = false };
         _overlay.Children.Add(_eraserCursor);
-        _children = [_image, _highlights, _customLayer, _presenter, _overlay]; // search highlights between the bitmap and the ink
+        // Search highlights between the bitmap and the ink; highlighter strokes under the pen ink (FR-40, FR-105).
+        _children = [_image, _highlights, _highlighterLayer, _customLayer, _presenter, _overlay];
         foreach (var child in _children)
         {
             AddVisualChild(child);
@@ -137,6 +141,7 @@ public sealed class InkSurface : FrameworkElement
         Stylus.SetIsTouchFeedbackEnabled(this, false);
 
         _highlights.Scale = Scale;
+        _highlighterLayer.Scale = Scale;
         _customLayer.Scale = Scale;
         _customLayer.Curve = Curve;
         _customLayer.Smoothing = Smoothing;
@@ -241,7 +246,11 @@ public sealed class InkSurface : FrameworkElement
     /// <summary>The wet-ink renderer; exposed for tests.</summary>
     internal CustomDynamicRenderer ActiveRenderer => _renderer;
 
+    /// <summary>The committed pen ink (never highlighters); exposed for tests.</summary>
     internal CustomInkLayer CustomLayer => _customLayer;
+
+    /// <summary>The committed highlighter strokes, under the pen ink (FR-40); exposed for tests.</summary>
+    internal HighlighterLayer HighlighterInkLayer => _highlighterLayer;
 
     /// <summary>The search results of this page, between the bitmap and the ink (FR-105); exposed for tests.</summary>
     internal SearchHighlightLayer HighlightLayer => _highlights;
@@ -711,6 +720,7 @@ public sealed class InkSurface : FrameworkElement
         }
 
         HideEraserCursor();
+        UpdateRendererSettings();
         UpdateRendererEnabled(null);
         InkingEnded?.Invoke(this, EventArgs.Empty);
     }
@@ -906,6 +916,7 @@ public sealed class InkSurface : FrameworkElement
             LockZoom(false);
         }
 
+        UpdateRendererSettings(); // what changed while the stroke was live
         UpdateRendererEnabled(null);
     }
 
@@ -938,12 +949,14 @@ public sealed class InkSurface : FrameworkElement
             }
 
             oldValue.Tools.PropertyChanged -= OnToolsChanged;
+            oldValue.Tools.Highlighter.SettingsChanged -= OnHighlighterSettingsChanged;
             oldValue.ErasePreviewChanged -= OnErasePreviewChanged;
         }
 
         if (newValue is not null)
         {
             newValue.Tools.PropertyChanged += OnToolsChanged;
+            newValue.Tools.Highlighter.SettingsChanged += OnHighlighterSettingsChanged;
             newValue.ErasePreviewChanged += OnErasePreviewChanged;
         }
 
@@ -982,6 +995,8 @@ public sealed class InkSurface : FrameworkElement
         }
     }
 
+    private void OnHighlighterSettingsChanged(object? sender, EventArgs e) => UpdateRendererSettings();
+
     private void OnPageChanged(CorePage? oldValue, CorePage? newValue)
     {
         if (oldValue is not null)
@@ -1009,6 +1024,7 @@ public sealed class InkSurface : FrameworkElement
     private void OnScaleChanged()
     {
         _customLayer.Scale = Scale;
+        _highlighterLayer.Scale = Scale;
         _highlights.Scale = Scale;
         UpdateRendererSettings();
         PlaceEraserCursor();
@@ -1021,25 +1037,47 @@ public sealed class InkSurface : FrameworkElement
         UpdateRendererSettings();
     }
 
-    /// <summary>Hands the committed strokes to the outline layer, which caches one geometry per stroke Id.</summary>
-    private void RefreshInk() => _customLayer.Strokes = DisplayStrokes;
+    /// <summary>
+    /// Hands the committed strokes to the outline layers (highlighters underneath, pen ink above), which cache one
+    /// geometry per stroke Id; each draws only its own kind.
+    /// </summary>
+    private void RefreshInk()
+    {
+        _highlighterLayer.Strokes = DisplayStrokes;
+        _customLayer.Strokes = DisplayStrokes;
+    }
 
-    /// <summary>Pushes colour, width, scale and curve to the wet renderer, only when something changed.</summary>
+    /// <summary>
+    /// Pushes the active tool's wet shape to the renderer, only when something changed: the pen's colour, width,
+    /// scale and curve, or the highlighter's colour, constant width and chisel (FR-42, FR-46). Never during a live
+    /// stroke (its wet ink keeps the look it started with); the commit pushes what changed meanwhile.
+    /// </summary>
     private void UpdateRendererSettings()
     {
-        if (ViewModel is not { } vm)
+        if (ViewModel is not { } vm || _penPoints is not null)
         {
             return;
         }
 
-        var settings = (vm.Tools.Color, vm.Tools.BaseWidthPt, Scale, Curve, _hasPressure);
+        var tools = vm.Tools;
+        var highlighter = tools.Highlighter.Settings;
+        var settings = tools.ActiveTool == AppTool.Highlighter
+            ? (Highlighter: true, highlighter.StrokeColor, highlighter.WidthPt, highlighter.Tip, Scale, Curve, _hasPressure)
+            : (Highlighter: false, tools.Color, tools.BaseWidthPt, (ChiselTip?)null, Scale, Curve, _hasPressure);
         if (_rendererSettings == settings)
         {
             return;
         }
 
         _rendererSettings = settings;
-        _renderer.Configure(vm.Tools.Color, vm.Tools.BaseWidthPt, Scale, Curve, _hasPressure);
+        if (settings.Highlighter)
+        {
+            _renderer.ConfigureHighlighter(highlighter.StrokeColor, highlighter.WidthPt, highlighter.Tip, Scale);
+        }
+        else
+        {
+            _renderer.Configure(tools.Color, tools.BaseWidthPt, Scale, Curve, _hasPressure);
+        }
     }
 
     /// <summary>

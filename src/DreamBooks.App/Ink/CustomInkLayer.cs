@@ -1,56 +1,17 @@
-using System.Windows;
-using System.Windows.Media;
-using System.Windows.Threading;
+using DreamBooks.Core.Geometry;
 using DreamBooks.Core.Ink;
 using DreamBooks.Core.Model;
 
 namespace DreamBooks.App.Ink;
 
 /// <summary>
-/// Committed strokes: one retained <see cref="DrawingVisual"/> per stroke, in page points, diffed against
-/// <see cref="Strokes"/> by stroke Id so a commit adds one visual and an erase touches only the affected ones.
-/// Outlines are cached by stroke Id; zooming changes only the layer's single scale transform (FR-26, NFR-04, NFR-06).
+/// Committed pen ink: the pressure-shaped, smoothed outline from Core (FR-20, FR-22, FR-23), one retained visual per
+/// stroke. Highlighter strokes are never drawn here: <see cref="HighlighterLayer"/> draws them underneath (FR-40).
 /// </summary>
-public sealed class CustomInkLayer : FrameworkElement
+public sealed class CustomInkLayer : RetainedStrokeLayer
 {
-    private readonly Dictionary<Guid, StreamGeometry> _geometries = [];
-    private readonly Dictionary<Guid, DrawingVisual> _visuals = [];
-    private readonly Dictionary<InkColor, Brush> _brushes = [];
-    private readonly VisualCollection _children;
-    private readonly ScaleTransform _transform = new(Units.DipPerPt, Units.DipPerPt);
-    private IReadOnlyList<InkStroke> _strokes = [];
     private PressureCurve _curve = PressureCurve.Linear;
     private SmoothingLevel _smoothing = SmoothingLevel.Light;
-    private bool _rebuildPending;
-
-    public CustomInkLayer()
-    {
-        _children = new VisualCollection(this);
-        IsHitTestVisible = false;
-        RenderTransform = _transform;
-    }
-
-    public IReadOnlyList<InkStroke> Strokes
-    {
-        get => _strokes;
-        set
-        {
-            ArgumentNullException.ThrowIfNull(value);
-            _strokes = value;
-            Sync();
-        }
-    }
-
-    /// <summary>DIPs per page point (zoom × DipPerPt).</summary>
-    public double Scale
-    {
-        get => _transform.ScaleX;
-        set
-        {
-            _transform.ScaleX = value;
-            _transform.ScaleY = value;
-        }
-    }
 
     public PressureCurve Curve
     {
@@ -78,120 +39,8 @@ public sealed class CustomInkLayer : FrameworkElement
         }
     }
 
-    /// <summary>Number of cached outlines; exposed for tests.</summary>
-    internal int CachedCount => _geometries.Count;
+    protected override bool Draws(InkStroke stroke) => stroke.Tool != InkTool.Highlighter;
 
-    protected override int VisualChildrenCount => _children.Count;
-
-    protected override Visual GetVisualChild(int index) => _children[index];
-
-    internal static Color ToColor(InkColor c) => Color.FromArgb(c.A, c.R, c.G, c.B);
-
-    private void Sync()
-    {
-        if (_rebuildPending)
-        {
-            _rebuildPending = false;
-            _children.Clear();
-            _visuals.Clear();
-        }
-
-        var desired = new List<DrawingVisual>(_strokes.Count);
-        var alive = new HashSet<Guid>();
-        foreach (var stroke in _strokes)
-        {
-            if (!alive.Add(stroke.Id))
-            {
-                continue; // the same stroke twice is drawn once
-            }
-
-            if (!_visuals.TryGetValue(stroke.Id, out var visual))
-            {
-                visual = CreateVisual(stroke);
-                _visuals[stroke.Id] = visual;
-            }
-
-            desired.Add(visual);
-        }
-
-        foreach (var id in _visuals.Keys.Where(id => !alive.Contains(id)).ToArray())
-        {
-            _children.Remove(_visuals[id]);
-            _visuals.Remove(id);
-        }
-
-        foreach (var id in _geometries.Keys.Where(id => !alive.Contains(id)).ToArray())
-        {
-            _geometries.Remove(id);
-        }
-
-        for (var i = 0; i < desired.Count; i++)
-        {
-            if (i < _children.Count && ReferenceEquals(_children[i], desired[i]))
-            {
-                continue;
-            }
-
-            var at = _children.IndexOf(desired[i]);
-            if (at >= 0)
-            {
-                _children.RemoveAt(at);
-            }
-
-            _children.Insert(i, desired[i]);
-        }
-    }
-
-    private DrawingVisual CreateVisual(InkStroke stroke)
-    {
-        var visual = new DrawingVisual();
-        using (var dc = visual.RenderOpen())
-        {
-            dc.DrawGeometry(BrushFor(stroke.Color), null, GeometryFor(stroke));
-        }
-
-        return visual;
-    }
-
-    private StreamGeometry GeometryFor(InkStroke stroke)
-    {
-        if (!_geometries.TryGetValue(stroke.Id, out var geometry))
-        {
-            geometry = OutlineGeometry.ToStreamGeometry(StrokeGeometry.BuildOutline(stroke, _curve, _smoothing));
-            _geometries[stroke.Id] = geometry;
-        }
-
-        return geometry;
-    }
-
-    private Brush BrushFor(InkColor color)
-    {
-        if (!_brushes.TryGetValue(color, out var brush))
-        {
-            brush = new SolidColorBrush(ToColor(color));
-            brush.Freeze();
-            _brushes[color] = brush;
-        }
-
-        return brush;
-    }
-
-    /// <summary>Curve and smoothing are usually set together: drop the cache now, rebuild all visuals once.</summary>
-    private void ScheduleRebuild()
-    {
-        _geometries.Clear();
-        if (_rebuildPending)
-        {
-            return;
-        }
-
-        _rebuildPending = true;
-        Dispatcher.BeginInvoke(DispatcherPriority.Render, () =>
-        {
-            if (_rebuildPending)
-            {
-                Sync();
-            }
-        });
-    }
+    protected override IReadOnlyList<IReadOnlyList<PointD>> BuildFigures(InkStroke stroke) =>
+        StrokeGeometry.BuildOutline(stroke, _curve, _smoothing);
 }

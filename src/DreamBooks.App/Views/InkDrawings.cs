@@ -13,13 +13,29 @@ namespace DreamBooks.App.Views;
 /// </summary>
 internal static class InkDrawings
 {
-    /// <summary>Thread pool: each stroke's outline in page points, with its colour.</summary>
+    /// <summary>
+    /// Thread pool: each stroke's outline in page points, with its colour; highlighters first, with their own
+    /// outline, so they lie under the pen ink as on the page (FR-40).
+    /// </summary>
     public static List<(InkColor Color, IReadOnlyList<IReadOnlyList<PointD>> Figures)> BuildOutlines(
         IEnumerable<InkStroke> strokes, PressureCurve curve, SmoothingLevel smoothing)
     {
         ArgumentNullException.ThrowIfNull(strokes);
         var outlines = new List<(InkColor, IReadOnlyList<IReadOnlyList<PointD>>)>();
+        var pen = new List<InkStroke>();
         foreach (var stroke in strokes)
+        {
+            if (stroke.Tool == InkTool.Highlighter)
+            {
+                outlines.Add((stroke.Color, [HighlighterLayer.OutlineFor(stroke)]));
+            }
+            else
+            {
+                pen.Add(stroke);
+            }
+        }
+
+        foreach (var stroke in pen)
         {
             outlines.Add((stroke.Color, StrokeGeometry.BuildOutline(stroke, curve, smoothing)));
         }
