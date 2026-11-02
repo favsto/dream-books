@@ -20,6 +20,42 @@ public static class HighlighterGeometry
     private const double _maxStraightDeviation = 0.02;
 
     /// <summary>
+    /// The inked outline of a highlighter stroke: the chisel outline if it has a nib (FR-46), the constant-width one
+    /// otherwise (FR-42). The one choice shared by the saved appearance, the page layer and the live ink.
+    /// </summary>
+    public static IReadOnlyList<PointD> Outline(InkStroke stroke)
+    {
+        ArgumentNullException.ThrowIfNull(stroke);
+        return Outline(stroke.Points, stroke.BaseWidthPt, stroke.Chisel);
+    }
+
+    /// <summary>
+    /// <see cref="Outline(InkStroke)"/> for raw points: both outlines scale uniformly, so the live ink passes screen
+    /// points and the width times the scale.
+    /// </summary>
+    public static IReadOnlyList<PointD> Outline(IReadOnlyList<InkPoint> points, double widthPt, ChiselTip? chisel) =>
+        chisel is { } tip ? ChiselOutline(points, tip, widthPt) : ConstantWidthOutline(points, widthPt);
+
+    /// <summary>
+    /// The highlighter's nib, the shape swept along the centre-line: the half segment <c>h</c> (zero for a round tip;
+    /// <c>(1 − r)·L/2·(cos θ, −sin θ)</c> for a chisel) and the radius of its rounded ends (half the width for a round
+    /// tip; <c>r·L/2</c> for a chisel). The ink is the centre-line swept by the segment [−h, h] grown by the radius,
+    /// so it reaches the inked extent used by the eraser and the marks (FR-31, FR-100).
+    /// </summary>
+    public static (PointD Half, double Radius) InkNib(InkStroke stroke)
+    {
+        ArgumentNullException.ThrowIfNull(stroke);
+        if (stroke.Chisel is not { } chisel)
+        {
+            return (default, stroke.BaseWidthPt / 2);
+        }
+
+        var theta = chisel.AngleDeg * Math.PI / 180;
+        var half = (1 - chisel.Ratio) * stroke.BaseWidthPt / 2;
+        return (new PointD(half * Math.Cos(theta), -half * Math.Sin(theta)), chisel.Ratio * stroke.BaseWidthPt / 2);
+    }
+
+    /// <summary>
     /// Round-tip outline of constant width <paramref name="widthPt"/>: the pen contour with the same
     /// width at every point, so pressure never changes it (FR-42).
     /// </summary>

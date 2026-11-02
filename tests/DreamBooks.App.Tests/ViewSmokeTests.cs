@@ -99,6 +99,10 @@ public sealed class ViewSmokeTests : IDisposable
                 var angle = Assert.IsType<Slider>(Named(Strings.HighlighterAngle));
                 Assert.Equal(0, angle.Minimum);
                 Assert.Equal(180, angle.Maximum);
+                Assert.Equal(1, angle.SmallChange); // one degree per arrow key (M5)
+                angle.Value = 45;
+                Slider.IncreaseSmall.Execute(null, angle);
+                Assert.Equal(46, vm.Tools.Highlighter.ChiselAngleDeg);
                 angle.Value = 90;
                 Assert.Equal(90, vm.Tools.Highlighter.ChiselAngleDeg);
 

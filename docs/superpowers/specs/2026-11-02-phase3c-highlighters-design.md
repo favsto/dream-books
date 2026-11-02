@@ -83,6 +83,16 @@ Conventions: page points, y down (as stored). Angles are measured in page space 
   after a pen stroke was saved is appended after it and, in other readers, can paint over that pen ink (slightly
   tinted). Within one save, new highlighters are written before new pens. On screen the highlighter is always under
   the pen.
+- Raw centre-line: round and chisel outlines follow the raw points, not the smoothed centre-line of section 4, for
+  the live, page and saved shapes alike (so nothing jumps on pen-up).
+- Highlight marks cluster vertically only: on a two-column page highlights on the same lines in both columns merge
+  into one centre mark, and two short highlights at opposite ends of a line become one mark.
+- No current-colour feedback for the highlighter: the swatches have no selected state and no preview.
+- `ToggleHighlighterCommand` is tested but not bound in the view yet (the debug panel uses a radio button); for phase 4.
+- The highlighter settings are read at commit, not at pen-down: an option changed mid-stroke makes the saved shape
+  differ from the live one.
+- One test's fidelity check (`HighlighterAnnotationTests`) filters out pixel differences, so a render-only content
+  change would pass it; the real save pipeline's fidelity check is not affected.
 
 ## 9. Requirement changes (same commit)
 

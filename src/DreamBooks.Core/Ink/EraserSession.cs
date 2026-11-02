@@ -53,8 +53,7 @@ public sealed class EraserSession
         {
             if (_mode == EraserMode.WholeStroke)
             {
-                var reach = radiusPt + (entry.Stroke.BaseWidthPt * EraserGeometry.HitMarginFactor);
-                if (EraserGeometry.Hits(entry.Stroke, entry.Bounds, from, centerPt, reach))
+                if (EraserGeometry.HitsStroke(entry.Stroke, entry.Bounds, from, centerPt, radiusPt))
                 {
                     changed = true;
                 }

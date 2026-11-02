@@ -335,6 +335,8 @@
                     <Slider Minimum="{x:Static vm:HighlighterOptionsViewModel.MinChiselAngleDeg}"
                             Maximum="{x:Static vm:HighlighterOptionsViewModel.MaxChiselAngleDeg}"
                             Value="{Binding Tools.Highlighter.ChiselAngleDeg}"
+                            SmallChange="{StaticResource ChiselAngleSmallChange}"
+                            LargeChange="{StaticResource ChiselAngleLargeChange}"
                             MinHeight="{StaticResource TouchTarget}"
                             IsEnabled="{Binding Tools.Highlighter.IsChisel}"
                             AutomationProperties.Name="{x:Static res:Strings.HighlighterAngle}" />

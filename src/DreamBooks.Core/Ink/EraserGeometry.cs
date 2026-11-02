@@ -13,15 +13,21 @@ public static class EraserGeometry
 
     public const double MinRunLengthPt = 0.5;
 
-    /// <summary>True if the stroke polyline comes within radius + 0.75 x base width of the segment from-to.</summary>
+    /// <summary>
+    /// True if the eraser capsule (the segment from-to grown by the radius) touches the stroke's ink. A pen stroke's
+    /// ink is taken to reach 0.75 x base width from its centre-line (pressure up to 1.5x width); a highlighter's ink
+    /// is exactly its nib swept along the centre-line (half the width round, the chisel nib), FR-31, FR-46.
+    /// </summary>
     public static bool Hits(InkStroke stroke, PointD from, PointD to, double radiusPt)
     {
         ArgumentNullException.ThrowIfNull(stroke);
-        return Hits(stroke, Bounds.Of(stroke), from, to, radiusPt + (stroke.BaseWidthPt * HitMarginFactor));
+        return HitsStroke(stroke, Bounds.Of(stroke), from, to, radiusPt);
     }
 
     /// <summary>
-    /// Removes the parts of the stroke inside the capsule (distance &lt;= radius, no width margin).
+    /// Removes the parts of the stroke under the capsule. A pen stroke loses the centre-line within the radius (no width
+    /// margin). A highlighter loses every centre-line sample whose nib touches the capsule, so the pieces left end
+    /// outside the erased area and the visible gap is the eraser's size (FR-31).
     /// Returns the surviving runs as new strokes, or the same instance in a one-item list if nothing is hit.
     /// </summary>
     public static IReadOnlyList<InkStroke> ErasePartial(InkStroke stroke, PointD from, PointD to, double radiusPt)
@@ -30,7 +36,40 @@ public static class EraserGeometry
         return ErasePartial(stroke, Bounds.Of(stroke), from, to, radiusPt);
     }
 
-    internal static bool Hits(InkStroke stroke, Bounds bounds, PointD from, PointD to, double reachPt)
+    /// <summary>The whole-stroke rule of <see cref="Hits(InkStroke, PointD, PointD, double)"/>, with cached bounds.</summary>
+    internal static bool HitsStroke(InkStroke stroke, Bounds bounds, PointD from, PointD to, double radiusPt)
+    {
+        if (stroke.Tool != InkTool.Highlighter)
+        {
+            return WithinReach(stroke, bounds, from, to, radiusPt + (stroke.BaseWidthPt * HitMarginFactor));
+        }
+
+        var (half, nibRadius) = HighlighterGeometry.InkNib(stroke);
+        var reach = radiusPt + nibRadius;
+        if (!bounds.Expanded(reach + Math.Max(Math.Abs(half.X), Math.Abs(half.Y))).Intersects(Bounds.Of(from, to)))
+        {
+            return false;
+        }
+
+        var points = stroke.Points;
+        if (points.Count == 1)
+        {
+            return NibDistance(points[0].Position, half, from, to) <= reach;
+        }
+
+        for (var i = 1; i < points.Count; i++)
+        {
+            if (SweptNibDistance(points[i - 1].Position, points[i].Position, half, from, to) <= reach)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>True if the stroke's centre-line comes within <paramref name="reachPt"/> of the segment from-to.</summary>
+    internal static bool WithinReach(InkStroke stroke, Bounds bounds, PointD from, PointD to, double reachPt)
     {
         if (!bounds.Expanded(reachPt).Intersects(Bounds.Of(from, to)))
         {
@@ -43,16 +82,23 @@ public static class EraserGeometry
     internal static IReadOnlyList<InkStroke> ErasePartial(
         InkStroke stroke, Bounds bounds, PointD from, PointD to, double radiusPt)
     {
-        if (!Hits(stroke, bounds, from, to, radiusPt))
+        var highlighter = stroke.Tool == InkTool.Highlighter;
+        if (highlighter
+            ? !HitsStroke(stroke, bounds, from, to, radiusPt)
+            : !WithinReach(stroke, bounds, from, to, radiusPt))
         {
             return [stroke];
         }
 
+        var (half, nibRadius) = highlighter ? HighlighterGeometry.InkNib(stroke) : (default(PointD), 0.0);
         var result = new List<InkStroke>();
         var run = new List<InkPoint>();
         foreach (var sample in Resample(stroke.Points))
         {
-            if (DistanceToSegment(sample.Position, from, to) <= radiusPt)
+            var erased = highlighter
+                ? NibDistance(sample.Position, half, from, to) <= radiusPt + nibRadius
+                : DistanceToSegment(sample.Position, from, to) <= radiusPt;
+            if (erased)
             {
                 Flush(stroke, run, result);
             }
@@ -103,6 +149,48 @@ public static class EraserGeometry
         }
 
         return false;
+    }
+
+    /// <summary>Distance from the nib segment [p − h, p + h] to the segment from-to.</summary>
+    private static double NibDistance(PointD p, PointD half, PointD from, PointD to) =>
+        SegmentDistance(new PointD(p.X - half.X, p.Y - half.Y), new PointD(p.X + half.X, p.Y + half.Y), from, to);
+
+    /// <summary>
+    /// Distance from the parallelogram swept by the nib segment [−h, h] from a to b (its rounded ends excluded) to the
+    /// segment from-to: zero if the segment starts inside it, otherwise the nearest of its four edges.
+    /// </summary>
+    private static double SweptNibDistance(PointD a, PointD b, PointD half, PointD from, PointD to)
+    {
+        var a0 = new PointD(a.X - half.X, a.Y - half.Y);
+        var a1 = new PointD(a.X + half.X, a.Y + half.Y);
+        var b0 = new PointD(b.X - half.X, b.Y - half.Y);
+        var b1 = new PointD(b.X + half.X, b.Y + half.Y);
+        if (InsideParallelogram(from, a, b, half))
+        {
+            return 0;
+        }
+
+        return Math.Min(
+            Math.Min(SegmentDistance(a0, b0, from, to), SegmentDistance(a1, b1, from, to)),
+            Math.Min(SegmentDistance(a0, a1, from, to), SegmentDistance(b0, b1, from, to)));
+    }
+
+    /// <summary>True if q = a + s·(b − a) + t·h with s in [0, 1] and t in [−1, 1]; false for a flat parallelogram.</summary>
+    private static bool InsideParallelogram(PointD q, PointD a, PointD b, PointD half)
+    {
+        var ux = b.X - a.X;
+        var uy = b.Y - a.Y;
+        var det = (ux * half.Y) - (uy * half.X);
+        if (Math.Abs(det) < 1e-12)
+        {
+            return false; // flat: its edges alone give the distance
+        }
+
+        var qx = q.X - a.X;
+        var qy = q.Y - a.Y;
+        var s = ((qx * half.Y) - (qy * half.X)) / det;
+        var t = ((ux * qy) - (uy * qx)) / det;
+        return s >= 0 && s <= 1 && t >= -1 && t <= 1;
     }
 
     private static List<InkPoint> Resample(IReadOnlyList<InkPoint> points)

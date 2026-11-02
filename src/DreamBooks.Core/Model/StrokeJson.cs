@@ -58,7 +58,6 @@ public static class StrokeJson
                 w.WriteNumber("angle", chisel.AngleDeg);
                 w.WriteNumber("ratio", chisel.Ratio);
                 w.WriteEndObject();
-
             }
             w.WriteEndObject();
         }

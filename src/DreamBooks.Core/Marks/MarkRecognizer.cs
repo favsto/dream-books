@@ -1,3 +1,4 @@
+using DreamBooks.Core.Ink;
 using DreamBooks.Core.Model;
 
 namespace DreamBooks.Core.Marks;
@@ -154,20 +155,9 @@ public sealed class MarkRecognizer(IPageLineMetrics? metrics = null)
     private static (double MinX, double MaxX, double MinY, double MaxY) InkBounds(InkStroke s)
     {
         var (minX, maxX, minY, maxY) = Bounds(s);
-        double growX, growY;
-        if (s.Chisel is { } chisel)
-        {
-            var theta = chisel.AngleDeg * Math.PI / 180;
-            var segment = (1 - chisel.Ratio) * s.BaseWidthPt / 2;
-            var round = chisel.Ratio * s.BaseWidthPt / 2;
-            growX = (segment * Math.Abs(Math.Cos(theta))) + round;
-            growY = (segment * Math.Abs(Math.Sin(theta))) + round;
-        }
-        else
-        {
-            growX = growY = s.BaseWidthPt / 2;
-        }
-
+        var (half, radius) = HighlighterGeometry.InkNib(s);
+        var growX = Math.Abs(half.X) + radius;
+        var growY = Math.Abs(half.Y) + radius;
         return (minX - growX, maxX + growX, minY - growY, maxY + growY);
     }
 

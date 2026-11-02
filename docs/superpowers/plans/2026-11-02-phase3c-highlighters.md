@@ -14,7 +14,7 @@
 
 - Core never references WPF/PDFium; PDFium only on the PDFium thread; the UI thread handles input and drawing (NFR-04); no new content is written into the PDF other than the highlighter annotations; the save verification of phases 2/3a is unchanged.
 - The stroke JSON gains only optional fields; unknown keys stay ignored (test it); no schema version bump unless a reader rejects unknown keys (task 1 checks).
-- Highlighter alpha: `HighlighterAlpha` = 89 (0.35 of 255) on every preset; the six presets (FR-41): yellow `#FFE14D`, green `#7BD88F`, light blue `#7CC4FF`, pink `#FF9BC4`, orange `#FFB366`, purple `#C8A2FF` (RGB; the alpha is applied on top).
+- Highlighter alpha: `HighlighterAlpha` = 89 (0.35 of 255) on every preset; the six presets (FR-41, `HighlighterPresets`, the shipped values): yellow `#FFEB00`, green `#40DC46`, light blue `#50C8FF`, pink `#FF5AAA`, orange `#FF961E`, purple `#AA64FF` (RGB; the alpha is applied on top). The spike (Task 0) rendered its test highlight with `#FFE14D`.
 - Constant width for highlighters (FR-42): no pressure mapping; `BaseWidthPt` is the nib length for chisel and the full width for round tips; the default round width is 16 pt, the chisel nib length 22 pt (at 45° a horizontal pass is about 17.2 pt tall, so one line is a mark).
 - Pen and eraser rules unchanged (FR-30, FR-34): the pen draws, the back end erases whatever the tool, fingers never draw, the highlight layer is not hit-testable.
 - User-visible text only in `Strings.resx` (+ `Strings.Designer.cs`, drift test); values/colours/durations in `Theme.xaml`; NFR-32 respected (the highlight itself stays translucent by design; the note is in requirements).

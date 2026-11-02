@@ -16,16 +16,8 @@ namespace DreamBooks.App.Ink;
 /// </remarks>
 public sealed class HighlighterLayer : RetainedStrokeLayer
 {
-    /// <summary>A highlighter stroke's outline in page points: chisel (FR-46) or constant width (FR-42).</summary>
-    internal static IReadOnlyList<PointD> OutlineFor(InkStroke stroke)
-    {
-        ArgumentNullException.ThrowIfNull(stroke);
-        return stroke.Chisel is { } chisel
-            ? HighlighterGeometry.ChiselOutline(stroke.Points, chisel, stroke.BaseWidthPt)
-            : HighlighterGeometry.ConstantWidthOutline(stroke.Points, stroke.BaseWidthPt);
-    }
-
     protected override bool Draws(InkStroke stroke) => stroke.Tool == InkTool.Highlighter;
 
-    protected override IReadOnlyList<IReadOnlyList<PointD>> BuildFigures(InkStroke stroke) => [OutlineFor(stroke)];
+    protected override IReadOnlyList<IReadOnlyList<PointD>> BuildFigures(InkStroke stroke) =>
+        [HighlighterGeometry.Outline(stroke)];
 }

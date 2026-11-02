@@ -27,7 +27,7 @@ internal static class InkDrawings
         {
             if (stroke.Tool == InkTool.Highlighter)
             {
-                outlines.Add((stroke.Color, [HighlighterLayer.OutlineFor(stroke)]));
+                outlines.Add((stroke.Color, [HighlighterGeometry.Outline(stroke)]));
             }
             else
             {

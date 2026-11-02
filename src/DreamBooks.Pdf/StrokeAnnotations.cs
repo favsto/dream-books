@@ -326,7 +326,7 @@ internal static class StrokeAnnotations
         PageGeometry geometry, InkStroke stroke, byte alpha)
     {
         IReadOnlyList<IReadOnlyList<PointD>> figures = stroke.Tool == InkTool.Highlighter
-            ? [HighlighterOutline(stroke)]
+            ? [HighlighterGeometry.Outline(stroke)]
             : StrokeGeometry.BuildOutline(stroke, _appearanceCurve, _appearanceSmoothing);
 
         var content = new StringBuilder();
@@ -382,11 +382,6 @@ internal static class StrokeAnnotations
         };
         return (content.ToString(), rect);
     }
-
-    /// <summary>The highlighter outline the app draws: chisel (FR-46) or constant width (FR-42), model space.</summary>
-    private static IReadOnlyList<PointD> HighlighterOutline(InkStroke stroke) => stroke.Chisel is { } chisel
-        ? HighlighterGeometry.ChiselOutline(stroke.Points, chisel, stroke.BaseWidthPt)
-        : HighlighterGeometry.ConstantWidthOutline(stroke.Points, stroke.BaseWidthPt);
 
     /// <summary>The stroke's points in user space, evenly decimated to at most 100 (first and last kept).</summary>
     private static PdfiumNative.FS_POINTF[] BuildCentreline(PageGeometry geometry, InkStroke stroke)

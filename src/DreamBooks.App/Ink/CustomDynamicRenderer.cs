@@ -171,11 +171,7 @@ public sealed class CustomDynamicRenderer : DynamicRenderer
 
         // The saved shape, scaled: both outlines scale uniformly with the page (FR-26, FR-42, FR-46).
         var points = centers.Select(c => new InkPoint(c.X, c.Y, null, null, null, null, 0)).ToArray();
-        var widthDip = s.BaseWidthPt * s.Scale;
-        var outline = s.Chisel is { } chisel
-            ? HighlighterGeometry.ChiselOutline(points, chisel, widthDip)
-            : HighlighterGeometry.ConstantWidthOutline(points, widthDip);
-        return OutlineGeometry.ToStreamGeometry([outline]);
+        return OutlineGeometry.ToStreamGeometry([HighlighterGeometry.Outline(points, s.BaseWidthPt * s.Scale, s.Chisel)]);
     }
 
     /// <summary>UI thread: the settings for the next points, and the opacity of the whole wet ink.</summary>
