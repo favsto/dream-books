@@ -89,6 +89,7 @@ Il documento è sempre protagonista: nessuna barra fissa, nessuna cornice, nessu
 | Ritiro toolbar durante la scrittura | Dissolvenza a 0% | 200 ms dopo 300 ms di scrittura |
 | Cambio strumento | Indicatore che scorre sotto l'icona attiva | 150 ms |
 | Undo / redo | Breve evidenziazione dell'area modificata | 250 ms |
+| Anteprima della barra di scorrimento (UI-07) | Dissolvenza in entrata e in uscita; ogni nuova pagina sfuma sopra la precedente | 150 ms in entrata, 120 ms in uscita, 140 ms di dissolvenza incrociata, tutte ease-out |
 
 Tutte le animazioni si disattivano se l'utente ha attivato "Effetti di animazione: off" in Windows.
 

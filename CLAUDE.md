@@ -45,18 +45,25 @@ implementation, review). Project-specific additions:
   page), VirtualPagePanel, PageSurfacePool, ScrollRail (fading rail, page
   preview, go to page) and PageBitmapCoordinator (bitmaps through the render
   scheduler); its state is `ViewModels/DocumentViewportViewModel`. Marks:
-  RailTickLayer (ticks on the rail), EdgePanel (left-edge panel shell),
-  MarksListView with MarkInkThumbnail rows, `ViewModels/MarksViewModel`.
+  RailTickLayer (ticks on the rail), EdgePanel (left-edge panel shell with
+  tabs, IEdgePanelContent), MarksListView with MarkInkThumbnail rows,
+  `ViewModels/MarksViewModel`. Search: `ViewModels/SearchViewModel`,
+  SearchHighlightLayer (in InkSurface, under the ink). Pages tab:
+  PagesListView with PageThumbnail rows, `ViewModels/PagesViewModel`,
+  PageThumbnailCache and PageInkCache; thumbnails go through the
+  coordinator's low-priority queue (RenderThumbnailAsync, RunWhenIdleAsync).
 - `src/DreamBooks.Core/` — domain model, ink math, UndoManager,
   DocumentSession (lazy pages, dirty tracking, PageStrokesChanged), stroke
   JSON schema, journal (recorder, replayer), `Layout/` (DocumentLayout,
   ViewPosition, PositionHistory), `Rendering/` (RenderScheduler: priorities,
   budgeted bitmap cache) and `Marks/` (MarkRecognizer, MarkIndex,
   MarkScanner, MarkTracker, RailTickLayout, MarkTarget: derived data, never
-  saved). No references to WPF or PDFium.
+  saved) and `Search/` (TextFolding, SearchIndex, SearchScanner and the
+  result types: derived data, never saved). No references to WPF or PDFium.
 - `src/DreamBooks.Pdf/` — PDFium (PdfRenderer on its own thread, stroke
   annotations, PdfDocumentSaver and FileReplacer: verified full rewrite,
-  MarkPageSource: the mark scan's uncached stroke reads) and
+  MarkPageSource: the mark scan's uncached stroke reads, PdfTextSearcher and
+  `Interop/PdfiumText`: text search, one job per page) and
   the app's files under LocalAppData: RecoveryStore (journals,
   `DreamBooks\recovery`) and ViewPositionStore (last position per document,
   `DreamBooks\positions`, plain file I/O). References Core. PDFsharp is not
