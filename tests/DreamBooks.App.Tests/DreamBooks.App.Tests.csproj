@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <Compile Include="..\DreamBooks.Pdf.Tests\TestPdfFactory.cs" Link="TestPdfFactory.cs" />
+    <Compile Include="..\DreamBooks.Pdf.Tests\TextPdfFactory.cs" Link="TextPdfFactory.cs" />
   </ItemGroup>
 
   <ItemGroup>
