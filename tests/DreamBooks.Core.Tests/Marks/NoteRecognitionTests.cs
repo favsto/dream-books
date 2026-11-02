@@ -110,7 +110,7 @@ public class NoteRecognitionTests
     }
 
     [Fact]
-    public void Highlighter_strokes_count_as_notes_for_now()
+    public void A_highlight_thinner_than_a_line_is_still_a_note()
     {
         var hl = Stroke([(100, 300), (400, 302)], InkTool.Highlighter);
         Assert.Equal([hl.Id], Assert.Single(Notes(hl)).StrokeIds);

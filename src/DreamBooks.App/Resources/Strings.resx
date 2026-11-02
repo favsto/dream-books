@@ -121,9 +121,10 @@
   <data name="MarksListLabel" xml:space="preserve"><value>Elenco dei segni</value></data>
   <data name="MarksScanning" xml:space="preserve"><value>Ricerca dei segni in corso…</value></data>
   <data name="MarksCountNameFormat" xml:space="preserve"><value>Numero di segni: {0}</value></data>
-  <data name="MarkRowNameFormat" xml:space="preserve"><value>Segno a pagina {0}, margine {1}</value></data>
-  <data name="MarkSideLeft" xml:space="preserve"><value>sinistro</value></data>
-  <data name="MarkSideRight" xml:space="preserve"><value>destro</value></data>
+  <data name="MarkRowNameFormat" xml:space="preserve"><value>Segno a pagina {0}, {1}</value></data>
+  <data name="MarkSideLeft" xml:space="preserve"><value>margine sinistro</value></data>
+  <data name="MarkSideRight" xml:space="preserve"><value>margine destro</value></data>
+  <data name="MarkSideCentre" xml:space="preserve"><value>al centro</value></data>
   <data name="Search" xml:space="preserve"><value>Cerca</value></data>
   <data name="SearchField" xml:space="preserve"><value>Cerca nel documento</value></data>
   <data name="SearchHint" xml:space="preserve"><value>Scrivi il testo da cercare (Ctrl+F). Invio: risultato successivo, Maiusc+Invio: precedente, Esc: annulla</value></data>

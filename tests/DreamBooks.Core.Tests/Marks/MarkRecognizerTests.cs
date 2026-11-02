@@ -86,6 +86,26 @@ public class MarkRecognizerTests
     }
 
     [Fact]
+    public void Margin_line_marks_are_unchanged_by_highlights_on_the_page()
+    {
+        var lines = new[] { Line(30, 100, 260), Line(570, 400, 560), Line(30, 300, 340) };
+        var wide = new InkStroke(
+            Guid.NewGuid(),
+            InkTool.Highlighter,
+            HighlighterPresets.Yellow,
+            16,
+            [new InkPoint(20, 200, 0.5f, null, null, null, 0), new InkPoint(560, 200, 0.5f, null, null, null, 1)]);
+        var tall = Line(40, 290, 360, tool: InkTool.Highlighter); // vertical, in the margin, beside a line
+
+        var alone = Recognize(lines);
+        var withHighlights = Recognize([.. lines, wide, tall]);
+
+        Assert.Equal(alone, withHighlights.Where(m => !m.StrokeIds.Contains(wide.Id)));
+        Assert.Equal(MarkSide.Centre, Assert.Single(withHighlights, m => m.StrokeIds.Contains(wide.Id)).Side);
+        Assert.DoesNotContain(withHighlights, m => m.StrokeIds.Contains(tall.Id));
+    }
+
+    [Fact]
     public void Two_overlapping_or_close_lines_merge_into_one_mark_with_the_union_extent()
     {
         var a = Line(30, 100, 260);

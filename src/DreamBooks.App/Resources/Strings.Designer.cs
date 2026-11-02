@@ -211,12 +211,18 @@ internal static class Strings
     /// <summary>Automation name of the count in the marks panel's header: {0} the number of marks.</summary>
     public static string MarksCountNameFormat => Get(nameof(MarksCountNameFormat));
 
-    /// <summary>A row's automation name: {0} page number, {1} side (no line: the fixed default "line" is not a printed line).</summary>
+    /// <summary>
+    /// A row's automation name: {0} page number, {1} where the mark is (<see cref="MarkSideLeft"/>,
+    /// <see cref="MarkSideRight"/> or <see cref="MarkSideCentre"/>; no line: the fixed default "line" is not a printed line).
+    /// </summary>
     public static string MarkRowNameFormat => Get(nameof(MarkRowNameFormat));
 
     public static string MarkSideLeft => Get(nameof(MarkSideLeft));
 
     public static string MarkSideRight => Get(nameof(MarkSideRight));
+
+    /// <summary>Where a highlight mark in the middle of the page is, in a row's automation name (FR-100).</summary>
+    public static string MarkSideCentre => Get(nameof(MarkSideCentre));
 
     /// <summary>Section label of the text search in the navigation panel (FR-13).</summary>
     public static string Search => Get(nameof(Search));

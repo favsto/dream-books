@@ -1,7 +1,8 @@
 namespace DreamBooks.Core.Marks;
 
 /// <summary>
-/// A recognised mark: one or more merged margin lines. Extent is in page points as displayed
+/// A recognised mark: one or more merged margin lines, or a cluster of highlighter strokes covering a text line (its
+/// inked extent). Extent is in page points as displayed
 /// (top-left origin, y down). Marks are derived data and never stored in the PDF.
 /// Equality is by value, including the stroke ids in order; the ids are copied and read-only.
 /// </summary>

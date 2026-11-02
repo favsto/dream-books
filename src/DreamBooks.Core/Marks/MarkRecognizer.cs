@@ -3,8 +3,8 @@ using DreamBooks.Core.Model;
 namespace DreamBooks.Core.Marks;
 
 /// <summary>
-/// Turns the ink strokes of one page into marks (margin lines, FR-100, FR-104) and notes (every other stroke, grouped,
-/// FR-101).
+/// Turns the ink strokes of one page into marks (margin lines and line-sized highlights, FR-100, FR-104) and notes
+/// (every other stroke, grouped, FR-101).
 /// </summary>
 public sealed class MarkRecognizer(IPageLineMetrics? metrics = null)
 {
@@ -17,8 +17,9 @@ public sealed class MarkRecognizer(IPageLineMetrics? metrics = null)
     /// <summary>
     /// The page's marks and notes in one pass over its strokes (the scan and the live tracker read a page once for
     /// both). A short, mostly vertical pen stroke along a margin line (a second pass over it, or its continuation;
-    /// see <see cref="MarkRules.PassReachLines"/>) joins that line's mark. Every other stroke that is not a margin line,
-    /// pen or highlighter, belongs to a note: they are taken from the top
+    /// see <see cref="MarkRules.PassReachLines"/>) joins that line's mark. Highlighter strokes are never margin lines:
+    /// a cluster of them large enough to cover a text line is a mark of its own (see <see cref="HighlightMarks"/>).
+    /// Every other stroke, pen or highlighter, belongs to a note: they are taken from the top
     /// and a gap of more than <see cref="MarkRules.NoteGapLines"/> lines starts a new note; a note smaller than
     /// <see cref="MarkRules.NoteMinSizeLines"/> in both directions (a dot, a tap) is dropped. Notes are ordered by top,
     /// their stroke ids by top (then by z-order). An invalid page width or line height throws
@@ -33,9 +34,14 @@ public sealed class MarkRecognizer(IPageLineMetrics? metrics = null)
 
         var lines = new List<LineGroup>();
         var others = new List<InkStroke>();
+        var highlights = new List<InkStroke>();
         foreach (var s in strokes)
         {
-            if (TryMarginLine(s, pageWidthPt, line, out var side, out var top, out var bottom))
+            if (s.Tool == InkTool.Highlighter)
+            {
+                highlights.Add(s);
+            }
+            else if (TryMarginLine(s, pageWidthPt, line, out var side, out var top, out var bottom))
             {
                 var box = Bounds(s);
                 lines.Add(new LineGroup(side, top, bottom, box.MinX, box.MaxX, [s.Id]));
@@ -55,10 +61,114 @@ public sealed class MarkRecognizer(IPageLineMetrics? metrics = null)
 
         var marks = groups
             .Select(g => new Mark(pageIndex, g.Side, g.Top, g.Bottom, g.Ids))
+            .Concat(HighlightMarks(pageIndex, pageWidthPt, highlights, out var smallHighlights))
             .OrderBy(m => m.TopPt)
             .ThenBy(m => m.Side)
             .ToList();
+        if (smallHighlights.Count > 0)
+        {
+            var noteIds = smallHighlights.Concat(others.Select(s => s.Id)).ToHashSet();
+            others = strokes.Where(s => noteIds.Contains(s.Id)).ToList(); // in the page's z-order, as before
+        }
+
         return (marks, GroupNotes(pageIndex, line, others));
+    }
+
+    /// <summary>
+    /// Highlights as marks (FR-100): highlighter strokes whose inked extents touch or overlap vertically form a
+    /// cluster; a cluster at least <see cref="MarkRules.HighlightMinHeightPt"/> tall and
+    /// <see cref="MarkRules.HighlightMinWidthPt"/> wide (inclusive) is a mark, on <see cref="MarkSide.Centre"/> when its
+    /// horizontal centre lies in the middle <see cref="MarkRules.HighlightCentreBandFraction"/> of the page, else on
+    /// the side of its centre. The strokes of smaller clusters are returned in <paramref name="small"/> for the notes.
+    /// </summary>
+    private static List<Mark> HighlightMarks(int pageIndex, double pageWidthPt, List<InkStroke> highlights, out List<Guid> small)
+    {
+        var marks = new List<Mark>();
+        small = [];
+        if (highlights.Count == 0)
+        {
+            return marks;
+        }
+
+        var boxes = highlights
+            .Select((s, z) => (Stroke: s, Z: z, Box: InkBounds(s)))
+            .OrderBy(b => b.Box.MinY)
+            .ThenBy(b => b.Z)
+            .ToList();
+        var ids = new List<Guid>();
+        double minX = 0, maxX = 0, top = 0, bottom = 0;
+        foreach (var (stroke, _, box) in boxes)
+        {
+            if (ids.Count > 0 && box.MinY > bottom)
+            {
+                Close(small);
+                ids = [];
+            }
+
+            if (ids.Count == 0)
+            {
+                (minX, maxX, top, bottom) = (box.MinX, box.MaxX, box.MinY, box.MaxY);
+            }
+            else
+            {
+                minX = Math.Min(minX, box.MinX);
+                maxX = Math.Max(maxX, box.MaxX);
+                bottom = Math.Max(bottom, box.MaxY);
+            }
+
+            ids.Add(stroke.Id);
+        }
+
+        Close(small);
+        return marks;
+
+        void Close(List<Guid> rest)
+        {
+            if (bottom - top >= MarkRules.HighlightMinHeightPt && maxX - minX >= MarkRules.HighlightMinWidthPt)
+            {
+                marks.Add(new Mark(pageIndex, HighlightSide((minX + maxX) / 2, pageWidthPt), top, bottom, ids));
+            }
+            else
+            {
+                rest.AddRange(ids);
+            }
+        }
+    }
+
+    private static MarkSide HighlightSide(double centreX, double pageWidthPt)
+    {
+        var halfBand = MarkRules.HighlightCentreBandFraction / 2 * pageWidthPt;
+        var middle = pageWidthPt / 2;
+        if (Math.Abs(centreX - middle) <= halfBand)
+        {
+            return MarkSide.Centre;
+        }
+
+        return centreX < middle ? MarkSide.Left : MarkSide.Right;
+    }
+
+    /// <summary>
+    /// The inked box of a highlighter stroke: its points grown by the tip, half the width on every side for a round
+    /// tip, the chisel nib's half-extents (its segment at the fixed angle plus its rounded thickness) otherwise.
+    /// </summary>
+    private static (double MinX, double MaxX, double MinY, double MaxY) InkBounds(InkStroke s)
+    {
+        var (minX, maxX, minY, maxY) = Bounds(s);
+        double growX, growY;
+        if (s.Chisel is { } chisel)
+        {
+            var theta = chisel.AngleDeg * Math.PI / 180;
+            var segment = (1 - chisel.Ratio) * s.BaseWidthPt / 2;
+            var round = chisel.Ratio * s.BaseWidthPt / 2;
+            growX = (segment * Math.Abs(Math.Cos(theta))) + round;
+            growY = (segment * Math.Abs(Math.Sin(theta))) + round;
+        }
+        else
+        {
+            growX = growY = s.BaseWidthPt / 2;
+        }
+
+        return (minX - growX, maxX + growX, minY - growY, maxY + growY);
     }
 
     /// <summary>Lines (or groups) on one side whose vertical gap is at most <see cref="MarkRules.MergeGapLines"/> merge.</summary>
@@ -186,7 +296,8 @@ public sealed class MarkRecognizer(IPageLineMetrics? metrics = null)
 
     /// <summary>
     /// The pen strokes that are not margin lines (nor passes of this mark's line) and sit near the mark: its margin note. Highlighter strokes
-    /// are not notes (the 3c highlighter source handles them); strokes without points are ignored.
+    /// are never margin notes, and a <see cref="MarkSide.Centre"/> mark (a highlight in the middle of the page) has none;
+    /// strokes without points are ignored.
     /// An invalid page width or line height throws <see cref="ArgumentOutOfRangeException"/>.
     /// </summary>
     public IReadOnlyList<InkStroke> MarginNotes(Mark mark, double pageWidthPt, IReadOnlyList<InkStroke> strokes)
@@ -195,6 +306,11 @@ public sealed class MarkRecognizer(IPageLineMetrics? metrics = null)
         ArgumentNullException.ThrowIfNull(strokes);
         ValidateWidth(pageWidthPt);
         var line = ValidLineHeight(mark.PageIndex);
+        if (mark.Side == MarkSide.Centre)
+        {
+            return []; // a highlight in the middle of the page has no margin to write in
+        }
+
         var windowTop = mark.TopPt - (MarkRules.NoteWindowLines * line);
         var windowBottom = mark.BottomPt + (MarkRules.NoteWindowLines * line);
         var reach = (MarkRules.MarginZoneFraction + MarkRules.NoteReachFraction) * pageWidthPt;

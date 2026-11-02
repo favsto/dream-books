@@ -51,7 +51,7 @@ public class StringsTests
     {
         // The marks panel's texts (FR-103, UI-04) are in both files and the formats take their arguments.
         var keys = ResxEntries();
-        foreach (var key in new[] { "ClosePanel", "OpenMarksList", "MarksListLabel", "MarksScanning", "MarksCountNameFormat", "MarkRowNameFormat", "MarkSideLeft", "MarkSideRight" })
+        foreach (var key in new[] { "ClosePanel", "OpenMarksList", "MarksListLabel", "MarksScanning", "MarksCountNameFormat", "MarkRowNameFormat", "MarkSideLeft", "MarkSideRight", "MarkSideCentre" })
         {
             Assert.True(keys.ContainsKey(key), $"Strings.resx is missing '{key}'.");
             Assert.NotNull(_stringsType.GetProperty(key, BindingFlags.Public | BindingFlags.Static));

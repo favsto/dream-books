@@ -56,4 +56,19 @@ public static class MarkRules
     /// of the same line (drawn again over it, or continued): it joins the mark instead of becoming a note.
     /// </summary>
     public const double PassReachLines = 1;
+
+    /// <summary>
+    /// Highlights as marks (FR-100, phase 3c): the smallest inked height of a highlighter cluster (strokes that touch
+    /// or overlap vertically) that makes it a mark: one text line. Inclusive.
+    /// </summary>
+    public const double HighlightMinHeightPt = DefaultLineHeightPt;
+
+    /// <summary>The smallest inked width of a highlighter cluster that makes it a mark (about three short words). Inclusive.</summary>
+    public const double HighlightMinWidthPt = 60;
+
+    /// <summary>
+    /// A highlight mark whose horizontal centre lies in this middle band of the page width (inclusive) is on
+    /// <see cref="MarkSide.Centre"/>; outside it, Left or Right by its centre.
+    /// </summary>
+    public const double HighlightCentreBandFraction = 0.36;
 }
