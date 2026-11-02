@@ -43,6 +43,43 @@ public sealed class SlicedVerificationTests : IDisposable
         Assert.Equal(whole.IsFaithful, sliced.IsFaithful);
     }
 
+    [Theory]
+    [InlineData("faithful", false)]
+    [InlineData("faithful", true)]
+    [InlineData("edited", false)]
+    [InlineData("edited", true)]
+    [InlineData("fewer pages", false)]
+    [InlineData("fewer pages", true)]
+    public async Task The_sliced_comparison_equals_the_single_job_one_for_every_kind_of_pair(string pair, bool defaultSlice)
+    {
+        // Many pages, so that the default 15 ms slice also ends several slices.
+        const int pages = 150;
+        var (source, saved) = await SourceAndSavedCopyAsync(pages);
+        var other = pair switch
+        {
+            "faithful" => CopyOf(source),
+            "edited" => saved,
+            _ => WriteText("shorter.pdf", pages - 7),
+        };
+        var slice = defaultSlice ? PdfFidelity.DefaultSlice : TimeSpan.Zero;
+        var slices = 0;
+
+        FidelityReport whole = await PdfiumThread.RunAsync(() => PdfFidelity.Compare(source, other), CancellationToken.None);
+        FidelityReport sliced = await PdfFidelity.CompareAsync(source, other, slice, () => slices++, CancellationToken.None);
+
+        Assert.Equal(whole.Differences, sliced.Differences);
+        Assert.Equal(whole.Summary, sliced.Summary);
+        Assert.Equal(whole.IsFaithful, sliced.IsFaithful);
+        Assert.Equal(pair == "faithful", sliced.IsFaithful);
+        if (pair == "faithful")
+        {
+            Assert.Empty(sliced.Differences);
+        }
+
+        // One page per slice at zero; with the default slice as many as the machine's speed gives (at least one).
+        Assert.True(defaultSlice ? slices >= 1 : slices >= pages - 7, $"{slices} slices");
+    }
+
     [Fact]
     public async Task Other_PDFium_work_runs_between_the_slices_of_a_comparison()
     {
@@ -120,6 +157,20 @@ public sealed class SlicedVerificationTests : IDisposable
         var saved = await new PdfDocumentSaver(packObjects: false)
             .WriteVerifiedCopyAsync(source, source, [new PageChange(3, [], [Stroke()])]);
         return (source, saved);
+    }
+
+    private string CopyOf(string path)
+    {
+        var copy = Path.Combine(_dir, "copy.pdf");
+        File.Copy(path, copy);
+        return copy;
+    }
+
+    private string WriteText(string name, int pages)
+    {
+        var path = Path.Combine(_dir, name);
+        TestPdfFactory.WriteWithText(path, "Lorem ipsum dolor sit amet", Enumerable.Repeat((612.0, 792.0), pages).ToArray());
+        return path;
     }
 
     private static InkStroke Stroke() =>
