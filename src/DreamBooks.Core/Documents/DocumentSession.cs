@@ -25,6 +25,7 @@ public sealed class DocumentSession : IDisposable
     private readonly Dictionary<int, LoadedPage> _pages = [];
     private readonly Dictionary<int, Task<LoadedPage>> _loads = [];
     private readonly Dictionary<int, PageEditor> _editors = [];
+    private HighlighterSettings _highlighterSettings = HighlighterSettings.Default;
     private int _dirtyPages;
     private bool _isDirty;
     private int _navigation;
@@ -88,6 +89,35 @@ public sealed class DocumentSession : IDisposable
 
     /// <summary>The editor of the current page, or null while that page has no editor yet.</summary>
     public PageEditor? CurrentEditor => TryGetEditor(CurrentPageIndex, out var editor) ? editor : null;
+
+    /// <summary>
+    /// The highlighter tool settings of the document (FR-41..FR-46): setting them reaches every page editor already
+    /// created, and every editor created later starts with them, so a highlighter stroke on any page uses the current
+    /// tool whatever the order of loads and changes.
+    /// </summary>
+    public HighlighterSettings HighlighterSettings
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _highlighterSettings;
+            }
+        }
+
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            lock (_gate)
+            {
+                _highlighterSettings = value;
+                foreach (var editor in _editors.Values)
+                {
+                    editor.SetHighlighterSettings(value);
+                }
+            }
+        }
+    }
 
     /// <summary>True when some loaded page's stroke Id sequence differs from its loaded or last saved one.</summary>
     public bool IsDirty => _isDirty;
@@ -185,6 +215,7 @@ public sealed class DocumentSession : IDisposable
             if (!_editors.TryGetValue(pageIndex, out var editor))
             {
                 editor = new PageEditor(page, Undo);
+                editor.SetHighlighterSettings(_highlighterSettings);
                 _editors[pageIndex] = editor;
             }
 

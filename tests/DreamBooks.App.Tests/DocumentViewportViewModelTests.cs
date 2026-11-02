@@ -822,6 +822,26 @@ public sealed class DocumentViewportViewModelTests : IDisposable
         Assert.Equal(Strings.ErrorPageChangeFailed, vm.ErrorMessage);
     }
 
+    [Fact]
+    public async Task Layout_change_to_a_shorter_document_never_exposes_the_previous_ranges()
+    {
+        var vm = await OpenSizedAsync(Pages(1076));
+        var viewport = vm.Viewport;
+        await viewport.GoToPageCommand.ExecuteAsync(1070);
+        Assert.True(viewport.RetainedRange.First > 1000);
+        var seen = new List<((int First, int Last) Retained, int[] Visible, int Count)>();
+        viewport.LayoutChanged += (_, _) => seen.Add((viewport.RetainedRange, viewport.VisiblePages.ToArray(), viewport.PageCount));
+
+        await OpenAsync(vm, Pages(3));
+
+        var (retained, visible, count) = Assert.Single(seen);
+        Assert.Equal(3, count);
+        Assert.True(retained.Last < count, $"retained {retained} for {count} pages");
+        Assert.All(visible, page => Assert.InRange(page, 0, count - 1));
+        Assert.True(viewport.RetainedRange.Last < 3);
+        Assert.All(viewport.VisiblePages, page => Assert.InRange(page, 0, 2));
+    }
+
     private static double Offset(DocumentViewportViewModel viewport) =>
         viewport.Layout!.ToOffsets(viewport.Position, viewport.ViewportWidthDip, viewport.ViewportHeightDip).OffsetYDip;
 

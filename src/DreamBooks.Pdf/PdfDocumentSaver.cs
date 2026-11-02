@@ -326,7 +326,7 @@ public sealed class PdfDocumentSaver : IDocumentWriter
         try
         {
             var geometry = PageGeometry.From(page);
-            IReadOnlyList<(Guid Id, string Payload)> payloads =
+            IReadOnlyList<(InkStroke Stroke, string Payload)> payloads =
                 StrokeAnnotations.ReadAppPayloads(page, out int unreadable, out int foreign);
 
             // An added stroke replaces every existing copy with its Id (ruling 14): its Id is
@@ -336,12 +336,16 @@ public sealed class PdfDocumentSaver : IDocumentWriter
             toRemove.UnionWith(addedIds);
 
             string[] added = [.. change.Added.Select(StrokeJson.Serialize)];
-            List<string> expected = [.. payloads.Where(p => !toRemove.Contains(p.Id)).Select(p => p.Payload), .. added];
+            List<string> expected =
+                [.. payloads.Where(p => !toRemove.Contains(p.Stroke.Id)).Select(p => p.Payload), .. added];
             expected.Sort(StringComparer.Ordinal);
             var gone = new HashSet<Guid>(change.RemovedIds.Where(id => !addedIds.Contains(id)));
 
+            // Within one save, new highlighters are written before new pens (under the pen ink, spec 3c
+            // section 5). Existing annotations are never rewritten (NFR-10): a highlighter added later is
+            // appended after older pens (known limit, spec section 8).
             StrokeAnnotations.RemoveByIds(page, toRemove); // Ids absent from the page are ignored
-            foreach (InkStroke stroke in change.Added)
+            foreach (InkStroke stroke in change.Added.OrderBy(s => s.Tool == InkTool.Highlighter ? 0 : 1))
             {
                 StrokeAnnotations.Write(page, geometry, stroke);
             }
@@ -408,7 +412,7 @@ public sealed class PdfDocumentSaver : IDocumentWriter
         try
         {
             // Read afresh from the copy, never from what was written.
-            IReadOnlyList<(Guid Id, string Payload)> payloads =
+            IReadOnlyList<(InkStroke Stroke, string Payload)> payloads =
                 StrokeAnnotations.ReadAppPayloads(page, out int unreadable, out int foreign);
 
             if (foreign != expected.ForeignCount)
@@ -421,15 +425,15 @@ public sealed class PdfDocumentSaver : IDocumentWriter
                 throw new SaveVerificationException(Inv($"unreadable strokes on page {label}"));
             }
 
-            if (payloads.Any(p => expected.GoneIds.Contains(p.Id)))
+            if (payloads.Any(p => expected.GoneIds.Contains(p.Stroke.Id)))
             {
                 throw new SaveVerificationException(Inv($"erased stroke still on page {label}"));
             }
 
             var idCounts = new Dictionary<Guid, int>();
-            foreach ((Guid id, _) in payloads)
+            foreach ((InkStroke stroke, _) in payloads)
             {
-                idCounts[id] = idCounts.GetValueOrDefault(id) + 1;
+                idCounts[stroke.Id] = idCounts.GetValueOrDefault(stroke.Id) + 1;
             }
 
             if (expected.AddedIds.Any(id => idCounts.GetValueOrDefault(id) != 1))

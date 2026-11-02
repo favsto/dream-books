@@ -113,7 +113,7 @@ La toolbar contiene, da sinistra a destra: Penna, Evidenziatore, Gomma, Selezion
 
 - Un tocco su uno strumento lo attiva. Un secondo tocco sullo strumento già attivo apre il suo **pannello opzioni** flottante sopra la toolbar.
 - Il pannello opzioni della penna mostra: 8 colori preimpostati, selettore colore libero, 3 spessori preimpostati, slider spessore, anteprima del tratto con pressione.
-- Il pannello dell'evidenziatore mostra: 6 colori (giallo, verde, azzurro, rosa, arancio, viola), 3 spessori, modalità "tratto dritto".
+- Il pannello dell'evidenziatore mostra: 6 colori (giallo, verde, azzurro, rosa, arancio, viola), punta tonda o a scalpello, angolo dello scalpello (0–180°), modalità "linea dritta". Gli spessori sono fissi (FR-46). Nel blocco 3c lo strumento e le sue opzioni stanno nel pannello degli strumenti; la toolbar finale arriva con la fase 4.
 - Il pannello della gomma mostra: cancella tratto intero / cancella parte del tratto, dimensione, "Cancella tutto nella pagina".
 - Ogni strumento ricorda colore e spessore scelti tra una sessione e l'altra.
 
@@ -188,12 +188,12 @@ La scrittura è la funzione centrale: deve essere immediata, fluida e fedele all
 
 | ID | Requisito | Priorità |
 | --- | --- | --- |
-| FR-40 | Tratto largo, semitrasparente, che non copre il testo sottostante (fusione tipo "moltiplica") | Must |
-| FR-41 | 6 colori preimpostati: giallo, verde, azzurro, rosa, arancio, viola | Must |
-| FR-42 | Spessore costante, non dipendente dalla pressione | Must |
-| FR-43 | Sovrapporre due passate dello stesso colore non scurisce il risultato | Should |
-| FR-44 | Modalità "tratto dritto": il tratto si raddrizza in orizzontale se resta quasi rettilineo | Should |
-| FR-45 | Evidenziazione del testo selezionato (aggancio alle parole del PDF) | Could |
+| FR-40 | Tratto largo, semitrasparente, che non copre il testo sottostante. Sullo schermo l'evidenziatore sta sempre sotto l'inchiostro della penna. **Approssimazione (3c):** la trasparenza è l'opacità dell'annotazione (0,35, `/CA`), salvata così che anche gli altri lettori la mostrino; la fusione "moltiplica" non si può scrivere con l'API pubblica di PDFium, quindi il testo sotto un'evidenziazione resta leggibile ma appare leggermente tinto, non moltiplicato | Must |
+| FR-41 | 6 colori preimpostati: giallo, verde, azzurro, rosa, arancio, viola, tutti con la stessa opacità (0,35) | Must |
+| FR-42 | Spessore costante, non dipendente dalla pressione, sia mentre si traccia sia nel tratto salvato | Must |
+| FR-43 | Sovrapporre due passate dello stesso colore non scurisce il risultato. **Rinviato (3c):** senza "moltiplica" (FR-40) le passate sovrapposte si scuriscono | Should, rinviato |
+| FR-44 | Modalità "linea dritta": al sollevamento della penna, se la corda dal primo all'ultimo punto è entro 3° dall'orizzontale e ogni punto resta entro il 2% della lunghezza della corda da essa, il tratto diventa il segmento orizzontale tra i due estremi (si tengono le loro x e i loro tempi, all'altezza media dei due); altrimenti resta com'è. Il raddrizzamento si annulla come ogni altra modifica (un primo Annulla toglie il raddrizzamento, un secondo il tratto) | Should |
+| FR-45 | Evidenziazione del testo selezionato (aggancio alle parole del PDF). **Rinviato (3c):** richiede un'interfaccia di selezione del testo | Could, rinviato |
 
 #### Punta a scalpello
 
@@ -201,13 +201,23 @@ Oltre alla punta tonda, l'evidenziatore offre una punta a scalpello (rettangolar
 
 | ID | Requisito | Priorità |
 | --- | --- | --- |
-| FR-46 | Punta a scalpello con angolo fisso, regolabile nel pannello opzioni (0–180°, predefinito 45°); proporzioni della punta regolabili | Should |
-| FR-47 | Modalità "segui l'impugnatura": l'orientamento della punta segue la direzione verso cui pende la penna (azimut dell'inclinazione), aggiornato punto per punto | Could |
-| FR-48 | Se la penna trasmette la rotazione attorno al proprio asse (barrel rotation), l'orientamento della punta segue la rotazione reale; altrimenti si applica FR-47 o FR-46 | Could |
+| FR-46 | Punta a scalpello con angolo fisso per tutto il tratto, regolabile nel pannello opzioni (0–180°, predefinito 45°). Punta lunga L = 22 pt, con proporzione spessore/lunghezza r = 0,25 (fissa nel blocco 3c: le proporzioni regolabili sono rinviate); la punta tonda è larga 16 pt. Per un tratto di direzione φ il segno è largo L·(r + (1 − r)·\|sin(θ − φ)\|), con θ l'angolo della punta: sottile (r·L) se il tratto è parallelo alla punta, pieno (L) se è perpendicolare. A 45° una passata orizzontale è alta circa 17,2 pt, quindi basta a coprire una riga di testo e a diventare un segno (FR-100) | Should |
+| FR-47 | Modalità "segui l'impugnatura": l'orientamento della punta segue la direzione verso cui pende la penna (azimut dell'inclinazione), aggiornato punto per punto. **Rinviato (3c)** | Could, rinviato |
+| FR-48 | Se la penna trasmette la rotazione attorno al proprio asse (barrel rotation), l'orientamento della punta segue la rotazione reale; altrimenti si applica FR-47 o FR-46. **Rinviato (3c):** la Slim Pen 2 non trasmette la rotazione (limite hardware, sotto) | Could, rinviato |
 
 **Limite hardware.** Le specifiche della Surface Slim Pen 2 citano pressione e inclinazione, ma non la rotazione attorno al proprio asse: salvo verifica contraria (vedi Domande aperte), con questa penna FR-48 non è attivabile e ruotare la penna tra le dita non cambia il segno. App come Photoshop e Illustrator gestiscono la rotazione solo con penne che la trasmettono (es. Wacom Art Pen). FR-48 va comunque predisposto leggendo il campo di rotazione dell'input Windows quando presente, per penne future.
 
 **Impatto tecnico.** L'`InkCanvas` di WPF supporta una punta rettangolare con orientamento fisso per tutto il tratto, sufficiente per FR-46. FR-47 e FR-48 richiedono un rendering personalizzato del tratto, con orientamento variabile punto per punto; il dato va salvato per ogni `InkPoint` (campo `TipAngle`). Il salvataggio come contorno vettoriale (sezione 7) copre già qualsiasi forma della punta.
+
+**Limiti noti (blocco 3c, 02/11/2026).**
+
+- Le passate sovrapposte si scuriscono, perché non c'è la fusione "moltiplica": FR-43 è rinviato.
+- Il testo sotto un'evidenziazione è leggermente tinto, non moltiplicato (FR-40 approssimato).
+- La rotazione della penna attorno al proprio asse non è usata (FR-48 rinviato, limite hardware); nemmeno l'inclinazione (FR-47 rinviato): la punta a scalpello segue solo l'angolo fisso di FR-46.
+- L'evidenziazione agganciata alle parole del testo (FR-45) è rinviata.
+- Ordine delle annotazioni negli altri lettori: il salvataggio non riscrive mai le annotazioni già presenti (NFR-10), quindi un'evidenziazione aggiunta dopo che un tratto a penna è già stato salvato viene scritta dopo quel tratto e, in un altro lettore, può passargli sopra (l'inchiostro resta visibile, leggermente tinto). Nello stesso salvataggio le nuove evidenziazioni sono scritte prima dei nuovi tratti a penna. Nell'app l'evidenziatore sta sempre sotto la penna.
+- Mentre si traccia un'evidenziazione, il tratto vivo sta sopra l'inchiostro della penna; al sollevamento della penna passa sotto.
+- Un lettore che applicasse l'opacità due volte (annotazione e aspetto) mostrerebbe un'evidenziazione più chiara (circa 0,12 invece di 0,35), con il testo comunque leggibile: da verificare aprendo il file salvato in Edge o Acrobat.
 
 ### Selezione
 
@@ -250,7 +260,7 @@ Il salvataggio è il requisito più delicato: il file prodotto deve essere un PD
 
 | ID | Requisito | Priorità |
 | --- | --- | --- |
-| FR-100 | Una linea laterale tracciata a penna (quasi verticale, anche leggermente inclinata, curva, ripassata più volte o tracciata in più tratti (un tratto corto e quasi verticale lungo la linea fa parte del segno e non diventa una nota), lunga almeno 2 righe di testo, nel margine esterno della pagina; tracciata a mano libera: il tremolio della penna non conta. Finché non si legge il testo della pagina (3b-2) una riga vale 15 pt, quindi almeno 30 pt, circa 1 cm) è riconosciuta come segno; anche un passaggio evidenziato diventa un segno quando esiste l'evidenziatore (3c). I segni sono ricavati dai tratti a ogni apertura e modifica: non si scrive nulla di nuovo nel PDF | Must |
+| FR-100 | Una linea laterale tracciata a penna (quasi verticale, anche leggermente inclinata, curva, ripassata più volte o tracciata in più tratti (un tratto corto e quasi verticale lungo la linea fa parte del segno e non diventa una nota), lunga almeno 2 righe di testo, nel margine esterno della pagina; tracciata a mano libera: il tremolio della penna non conta. Finché non si legge il testo della pagina (3b-2) una riga vale 15 pt, quindi almeno 30 pt, circa 1 cm) è riconosciuta come segno; anche un passaggio evidenziato è un segno (3c): un gruppo di tratti di evidenziatore che si toccano o si sovrappongono in verticale diventa un segno quando è alto almeno una riga (15 pt) e largo almeno 60 pt (circa tre parole brevi), soglie incluse; se il suo centro orizzontale cade nel 36% centrale della pagina il segno è "al centro" (così lo chiama l'elenco dei segni; ha la sua tacca sulla barra come gli altri e non ha nota a margine), altrimenti a sinistra o a destra secondo il centro; un gruppo più piccolo resta una nota (FR-101). Con gli spessori predefiniti (FR-46) una sola passata orizzontale su una riga basta, con entrambe le punte. L'evidenziatore non conta mai come linea a margine né come nota a margine. I segni sono ricavati dai tratti a ogni apertura e modifica: non si scrive nulla di nuovo nel PDF | Must |
 | FR-101 | I segni compaiono come tacche sulla barra di scorrimento (UI-07); in un altro colore (rosso) compaiono anche le note scritte a mano: ogni gruppo di tratti che non sono linee laterali (scritte, disegni, sottolineature, note nel margine), dove i tratti distano meno di 4 righe in verticale. Punti e tocchi isolati non contano. Per ora elenco dei segni e Alt+Su/Giù restano solo per i segni | Must |
 | FR-102 | Salto al segno precedente/successivo (pulsanti nel menu, scorciatoie Alt+Su e Alt+Giù), che registra la posizione nello storico del tasto Indietro (FR-09); agli estremi non salta e avvisa "Nessun altro segno" | Must |
 | FR-103 | Elenco dei segni nel pannello laterale sinistro (UI-04; si apre con swipe dal bordo, dal menu o con Ctrl+M): miniatura del passaggio con le note scritte accanto, numero di pagina; un tocco porta al passaggio | Should |
@@ -281,7 +291,7 @@ Le annotazioni Ink standard del PDF hanno spessore costante e non possono rappre
 
 All'apertura, se i dati privati sono presenti e coerenti, l'app ricostruisce i tratti modificabili; altrimenti mostra le annotazioni come oggetti di sola lettura.
 
-Gli evidenziatori seguono la stessa strategia, con opacità e modalità di fusione "Multiply" nell'aspetto dell'annotazione.
+Gli evidenziatori seguono la stessa strategia: l'aspetto è il contorno della punta (tonda o a scalpello) riempito con il colore dell'evidenziatore, e l'annotazione ha opacità 0,35 (`/CA`), applicata dall'aspetto attraverso lo stato grafico che PDFium aggiunge. La modalità di fusione "Multiply" non è disponibile con l'API pubblica di PDFium (FR-40, approssimato). I dati privati ricordano che il tratto è un evidenziatore, con colore, opacità e punta, così che l'app lo riapra come tale.
 
 ## 8. Requisiti non funzionali
 
@@ -305,7 +315,7 @@ I valori sono misurati su una Surface Pro di fascia media (Intel Core i5 o Snapd
 | NFR-23 | Compatibilità | Funziona anche senza penna, con mouse e tastiera | Should |
 | NFR-30 | Accessibilità | Contrasto testi e icone conforme a WCAG AA in entrambi i temi | Should |
 | NFR-31 | Accessibilità | Tutti i comandi hanno etichetta per gli screen reader e sono raggiungibili da tastiera | Should |
-| NFR-32 | Accessibilità | Rispetto dell'impostazione di sistema che riduce animazioni e trasparenze. Eccezione voluta: le evidenziazioni della ricerca (FR-105) restano semitrasparenti anche con gli effetti di trasparenza disattivati, perché un colore pieno coprirebbe il testo evidenziato (sono un colore di evidenziazione, non un effetto di trasparenza) | Must |
+| NFR-32 | Accessibilità | Rispetto dell'impostazione di sistema che riduce animazioni e trasparenze. Eccezione voluta: le evidenziazioni della ricerca (FR-105) restano semitrasparenti anche con gli effetti di trasparenza disattivati, perché un colore pieno coprirebbe il testo evidenziato (sono un colore di evidenziazione, non un effetto di trasparenza); lo stesso vale per le evidenziazioni dell'evidenziatore (FR-40) | Must |
 | NFR-40 | Privacy | Nessuna connessione di rete; nessun dato inviato all'esterno | Must |
 | NFR-50 | Manutenibilità | Codice, commenti e nomi in inglese; test automatici per modello dati, undo/redo e salvataggio/riapertura | Must |
 

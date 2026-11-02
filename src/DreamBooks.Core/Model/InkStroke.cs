@@ -2,7 +2,7 @@ namespace DreamBooks.Core.Model;
 
 public sealed class InkStroke
 {
-    public InkStroke(Guid id, InkTool tool, InkColor color, double baseWidthPt, IReadOnlyList<InkPoint> points)
+    public InkStroke(Guid id, InkTool tool, InkColor color, double baseWidthPt, IReadOnlyList<InkPoint> points, ChiselTip? chisel = null)
     {
         ArgumentNullException.ThrowIfNull(points);
         if (points.Count == 0)
@@ -17,6 +17,7 @@ public sealed class InkStroke
         Color = color;
         BaseWidthPt = baseWidthPt;
         Points = points.ToArray();
+        Chisel = chisel;
     }
 
     public Guid Id { get; }
@@ -29,6 +30,9 @@ public sealed class InkStroke
 
     public IReadOnlyList<InkPoint> Points { get; }
 
+    /// <summary>Chisel nib (FR-46); null for round tips and pen strokes.</summary>
+    public ChiselTip? Chisel { get; }
+
     public InkStroke WithPoints(IReadOnlyList<InkPoint> points)
-        => new(Guid.NewGuid(), Tool, Color, BaseWidthPt, points);
+        => new(Guid.NewGuid(), Tool, Color, BaseWidthPt, points, Chisel);
 }

@@ -1,7 +1,7 @@
 namespace DreamBooks.Core.Marks;
 
 /// <summary>
-/// A handwritten note (FR-101): a group of pen or highlighter strokes on one page that are not margin lines, close
+/// A handwritten note (FR-101): a group of pen or highlighter strokes on one page that are not marks, close
 /// together vertically (handwriting, shapes, underlines, margin text). Extent is in page points as displayed (top-left
 /// origin, y down). Notes are derived data and never stored in the PDF. Equality is by value, including the stroke
 /// ids in order; the ids are copied and read-only.

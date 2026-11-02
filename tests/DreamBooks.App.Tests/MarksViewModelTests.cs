@@ -63,6 +63,22 @@ public sealed class MarksViewModelTests : IDisposable
     }
 
     [Fact]
+    public void Row_names_say_the_margin_or_the_centre_for_a_highlight()
+    {
+        var (_, marks, index) = Standalone();
+        index.SetPage(1, [
+            Mark(1, 50, 200),
+            new Mark(1, MarkSide.Right, 300, 400, [Guid.NewGuid()]),
+            new Mark(1, MarkSide.Centre, 500, 516, [Guid.NewGuid()]),
+        ]);
+        _scheduler.Advance(MarksViewModel.RefreshInterval);
+
+        Assert.Equal(
+            ["Segno a pagina 2, margine sinistro", "Segno a pagina 2, margine destro", "Segno a pagina 2, al centro"],
+            marks.Items.Select(i => i.AutomationName));
+    }
+
+    [Fact]
     public void Index_changes_are_throttled_to_one_rebuild_per_interval()
     {
         var (_, marks, index) = Standalone();

@@ -63,6 +63,75 @@ public sealed class ViewSmokeTests : IDisposable
     }
 
     [Fact]
+    public void Main_window_has_the_highlighter_tool_and_its_options_named_and_keyboard_reachable() // NFR-31
+    {
+        WpfTestThread.Run(() =>
+        {
+            var window = new MainWindow();
+            try
+            {
+                LayOut((FrameworkElement)window.Content, 1000, 2000);
+                var vm = (MainViewModel)window.DataContext;
+                var named = Descendants((DependencyObject)window.Content)
+                    .OfType<Control>()
+                    .Where(c => !string.IsNullOrEmpty(AutomationProperties.GetName(c)))
+                    .ToList();
+                Control Named(string name) => Assert.Single(named, c => AutomationProperties.GetName(c) == name);
+
+                foreach (var swatch in vm.Tools.Highlighter.Swatches)
+                {
+                    var button = Assert.IsType<Button>(Named(swatch.Name));
+                    Assert.Same(vm.Tools.Highlighter.SelectColorCommand, button.Command);
+                    Assert.Equal(swatch.Color, button.CommandParameter);
+                    Assert.True(button.Focusable && button.IsTabStop);
+                    Assert.True(button.MinHeight >= 40 && button.MinWidth >= 40);
+                }
+
+                var tool = Assert.IsType<RadioButton>(Named(Strings.ToolHighlighter));
+                tool.IsChecked = true;
+                Assert.Equal(AppTool.Highlighter, vm.Tools.ActiveTool);
+
+                var chisel = Assert.IsType<RadioButton>(Named(Strings.HighlighterTipChisel));
+                chisel.IsChecked = true;
+                Assert.True(vm.Tools.Highlighter.IsChisel);
+                Assert.IsType<RadioButton>(Named(Strings.HighlighterTipRound));
+
+                var angle = Assert.IsType<Slider>(Named(Strings.HighlighterAngle));
+                Assert.Equal(0, angle.Minimum);
+                Assert.Equal(180, angle.Maximum);
+                Assert.Equal(1, angle.SmallChange); // one degree per arrow key (M5)
+                angle.Value = 45;
+                Slider.IncreaseSmall.Execute(null, angle);
+                Assert.Equal(46, vm.Tools.Highlighter.ChiselAngleDeg);
+                angle.Value = 90;
+                Assert.Equal(90, vm.Tools.Highlighter.ChiselAngleDeg);
+
+                var straight = Assert.IsType<CheckBox>(Named(Strings.HighlighterStraightLine));
+                Assert.True(straight.MinHeight >= 40);
+                straight.IsChecked = true;
+                Assert.True(vm.Tools.Highlighter.IsStraightLine);
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            yield return child;
+            foreach (var nested in Descendants(child))
+            {
+                yield return nested;
+            }
+        }
+    }
+
+    [Fact]
     public void Main_window_has_the_save_buttons_the_saving_indicator_and_the_title_binding()
     {
         WpfTestThread.Run(() =>

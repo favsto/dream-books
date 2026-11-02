@@ -344,7 +344,12 @@ public sealed class MarksViewModel : ObservableObject
                 CultureInfo.CurrentCulture,
                 Strings.MarkRowNameFormat,
                 mark.PageIndex + 1,
-                mark.Side == MarkSide.Left ? Strings.MarkSideLeft : Strings.MarkSideRight));
+                mark.Side switch
+                {
+                    MarkSide.Left => Strings.MarkSideLeft,
+                    MarkSide.Right => Strings.MarkSideRight,
+                    _ => Strings.MarkSideCentre,
+                }));
 
     private void Step(bool forward)
     {

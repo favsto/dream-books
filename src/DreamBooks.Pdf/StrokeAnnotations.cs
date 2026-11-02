@@ -34,7 +34,15 @@ internal static class StrokeAnnotations
     private const int _maxInkListPoints = 100;
     private const double _rectPadding = 1;
 
-    /// <summary>Adds <paramref name="stroke"/> to the page as one ink annotation.</summary>
+    /// <summary>The appearance operator that selects the ExtGState PDFium's SetAP adds for /CA (opacity spike).</summary>
+    private const string _selectOpacityState = "/GS gs\n";
+
+    /// <summary>
+    /// Adds <paramref name="stroke"/> to the page as one ink annotation. A highlighter (FR-40) is written
+    /// transparent by route A of <see cref="HighlighterWriteRoute"/>: /CA from its colour alpha and an
+    /// appearance filled along its constant-width or chisel outline (FR-42, FR-46) that first selects the
+    /// /GS state. Pen strokes stay opaque, written exactly as before.
+    /// </summary>
     public static void Write(nint page, PageGeometry geometry, InkStroke stroke)
     {
         EnsurePdfiumThread();
@@ -47,7 +55,8 @@ internal static class StrokeAnnotations
 
         // Everything that can fail in managed code is computed before the annotation exists.
         string payload = StrokeJson.Serialize(stroke);
-        (string appearance, PdfiumNative.FS_RECTF rect) = BuildAppearance(geometry, stroke);
+        byte alpha = stroke.Tool == InkTool.Highlighter ? stroke.Color.A : (byte)255;
+        (string appearance, PdfiumNative.FS_RECTF rect) = BuildAppearance(geometry, stroke, alpha);
         PdfiumNative.FS_POINTF[] centreline = BuildCentreline(geometry, stroke);
         string date = DateTime.UtcNow.ToString("'D:'yyyyMMddHHmmss'Z'", CultureInfo.InvariantCulture);
 
@@ -61,10 +70,11 @@ internal static class StrokeAnnotations
         try
         {
             // Call order matters (spike notes): Rect before SetAP, Color and Border before SetAP
-            // (SetColor fails once an AP exists, SetBorder deletes it), SetAP last.
+            // (SetColor fails once an AP exists, SetBorder deletes it), SetAP last. An alpha below 255 writes
+            // /CA, and SetAP then adds the /GS ExtGState that a highlighter's appearance selects.
             Check(SetRect(annot, rect), "SetRect");
             Check(PdfiumNative.FPDFAnnot_SetColor(
-                annot, PdfiumNative.FPDFANNOT_COLORTYPE_Color, stroke.Color.R, stroke.Color.G, stroke.Color.B, 255) != 0,
+                annot, PdfiumNative.FPDFANNOT_COLORTYPE_Color, stroke.Color.R, stroke.Color.G, stroke.Color.B, alpha) != 0,
                 "SetColor");
             Check(PdfiumNative.FPDFAnnot_SetBorder(annot, 0, 0, (float)stroke.BaseWidthPt) != 0, "SetBorder");
             Check(AddInkStroke(annot, centreline), "AddInkStroke");
@@ -194,14 +204,14 @@ internal static class StrokeAnnotations
 
     /// <summary>
     /// The exact payload strings of the readable app annotations on the page, in annotation order,
-    /// with their parsed Ids, plus the unreadable and foreign counts, in one pass that parses each
+    /// with their parsed strokes, plus the unreadable and foreign counts, in one pass that parses each
     /// payload once. Used to build and check a saved copy (NFR-10).
     /// </summary>
-    internal static IReadOnlyList<(Guid Id, string Payload)> ReadAppPayloads(
+    internal static IReadOnlyList<(InkStroke Stroke, string Payload)> ReadAppPayloads(
         nint page, out int unreadableCount, out int foreignCount)
     {
         EnsurePdfiumThread();
-        var payloads = new List<(Guid, string)>();
+        var payloads = new List<(InkStroke, string)>();
         unreadableCount = 0;
         foreignCount = 0;
         int count = PdfiumNative.FPDFPage_GetAnnotCount(page);
@@ -219,7 +229,7 @@ internal static class StrokeAnnotations
                 switch (Classify(annot))
                 {
                     case (AnnotKind.App, InkStroke stroke, string payload):
-                        payloads.Add((stroke.Id, payload));
+                        payloads.Add((stroke, payload));
                         break;
                     case (AnnotKind.Unreadable, _, _):
                         unreadableCount++;
@@ -308,13 +318,23 @@ internal static class StrokeAnnotations
             : (AnnotKind.Unreadable, null, payload);
     }
 
-    /// <summary>The filled contour in user space, coloured, and a rect that covers it.</summary>
-    private static (string Content, PdfiumNative.FS_RECTF Rect) BuildAppearance(PageGeometry geometry, InkStroke stroke)
+    /// <summary>
+    /// The filled contour in user space, coloured, and a rect that covers it. A translucent stroke
+    /// (<paramref name="alpha"/> below 255) first selects the /GS state, or PDFium paints it opaque.
+    /// </summary>
+    private static (string Content, PdfiumNative.FS_RECTF Rect) BuildAppearance(
+        PageGeometry geometry, InkStroke stroke, byte alpha)
     {
-        IReadOnlyList<IReadOnlyList<PointD>> figures =
-            StrokeGeometry.BuildOutline(stroke, _appearanceCurve, _appearanceSmoothing);
+        IReadOnlyList<IReadOnlyList<PointD>> figures = stroke.Tool == InkTool.Highlighter
+            ? [HighlighterGeometry.Outline(stroke)]
+            : StrokeGeometry.BuildOutline(stroke, _appearanceCurve, _appearanceSmoothing);
 
         var content = new StringBuilder();
+        if (alpha < 255)
+        {
+            content.Append(_selectOpacityState);
+        }
+
         content.Append(Num(stroke.Color.R / 255.0)).Append(' ')
             .Append(Num(stroke.Color.G / 255.0)).Append(' ')
             .Append(Num(stroke.Color.B / 255.0)).Append(" rg\n");

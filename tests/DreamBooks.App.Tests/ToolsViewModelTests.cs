@@ -33,6 +33,70 @@ public class ToolsViewModelTests
     }
 
     [Fact]
+    public void Selecting_the_highlighter_changes_the_effective_tool_and_keeps_the_back_end_erase() // FR-30
+    {
+        var tools = new ToolsViewModel();
+        var changed = new List<string?>();
+        tools.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        tools.ActiveTool = AppTool.Highlighter;
+
+        Assert.Equal(AppTool.Highlighter, tools.EffectiveTool);
+        Assert.True(tools.IsDrawingTool);
+        Assert.Contains(nameof(ToolsViewModel.EffectiveTool), changed);
+        Assert.Contains(nameof(ToolsViewModel.IsDrawingTool), changed);
+
+        tools.BeginInvertedEraser();
+        Assert.Equal(AppTool.Eraser, tools.EffectiveTool);
+        Assert.False(tools.IsDrawingTool);
+
+        tools.EndInvertedEraser();
+        Assert.Equal(AppTool.Highlighter, tools.EffectiveTool);
+        Assert.Equal(AppTool.Highlighter, tools.ActiveTool);
+    }
+
+    [Fact]
+    public void Pen_and_highlighter_draw_the_eraser_does_not()
+    {
+        Assert.True(new ToolsViewModel { ActiveTool = AppTool.Pen }.IsDrawingTool);
+        Assert.True(new ToolsViewModel { ActiveTool = AppTool.Highlighter }.IsDrawingTool);
+        Assert.False(new ToolsViewModel { ActiveTool = AppTool.Eraser }.IsDrawingTool);
+    }
+
+    [Fact]
+    public void The_highlighter_is_a_toggle_next_to_the_pen()
+    {
+        var tools = new ToolsViewModel();
+
+        tools.ToggleHighlighterCommand.Execute(null);
+        Assert.Equal(AppTool.Highlighter, tools.ActiveTool);
+
+        tools.ToggleHighlighterCommand.Execute(null);
+        Assert.Equal(AppTool.Pen, tools.ActiveTool);
+
+        tools.ActiveTool = AppTool.Eraser;
+        tools.ToggleHighlighterCommand.Execute(null);
+        Assert.Equal(AppTool.Highlighter, tools.ActiveTool);
+    }
+
+    [Fact]
+    public void The_live_stroke_takes_the_colour_and_width_of_the_active_tool()
+    {
+        var tools = new ToolsViewModel();
+        Assert.Equal(tools.Color, tools.ActiveInkColor);
+        Assert.Equal(tools.BaseWidthPt, tools.ActiveInkWidthPt);
+
+        tools.ActiveTool = AppTool.Highlighter;
+        tools.Highlighter.SelectColorCommand.Execute(HighlighterPresets.Pink);
+        Assert.Equal(HighlighterPresets.Pink, tools.ActiveInkColor);
+        Assert.Equal(HighlighterPresets.Alpha, tools.ActiveInkColor.A);
+        Assert.Equal(HighlighterSettings.Default.RoundWidthPt, tools.ActiveInkWidthPt);
+
+        tools.Highlighter.IsChisel = true;
+        Assert.Equal(HighlighterSettings.Default.ChiselLengthPt, tools.ActiveInkWidthPt);
+    }
+
+    [Fact]
     public void Base_width_is_clamped_and_converted()
     {
         var tools = new ToolsViewModel();

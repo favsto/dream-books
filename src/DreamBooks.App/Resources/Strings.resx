@@ -121,9 +121,10 @@
   <data name="MarksListLabel" xml:space="preserve"><value>Elenco dei segni</value></data>
   <data name="MarksScanning" xml:space="preserve"><value>Ricerca dei segni in corso…</value></data>
   <data name="MarksCountNameFormat" xml:space="preserve"><value>Numero di segni: {0}</value></data>
-  <data name="MarkRowNameFormat" xml:space="preserve"><value>Segno a pagina {0}, margine {1}</value></data>
-  <data name="MarkSideLeft" xml:space="preserve"><value>sinistro</value></data>
-  <data name="MarkSideRight" xml:space="preserve"><value>destro</value></data>
+  <data name="MarkRowNameFormat" xml:space="preserve"><value>Segno a pagina {0}, {1}</value></data>
+  <data name="MarkSideLeft" xml:space="preserve"><value>margine sinistro</value></data>
+  <data name="MarkSideRight" xml:space="preserve"><value>margine destro</value></data>
+  <data name="MarkSideCentre" xml:space="preserve"><value>al centro</value></data>
   <data name="Search" xml:space="preserve"><value>Cerca</value></data>
   <data name="SearchField" xml:space="preserve"><value>Cerca nel documento</value></data>
   <data name="SearchHint" xml:space="preserve"><value>Scrivi il testo da cercare (Ctrl+F). Invio: risultato successivo, Maiusc+Invio: precedente, Esc: annulla</value></data>
@@ -153,4 +154,16 @@
   <data name="PageRowCurrent" xml:space="preserve"><value>pagina corrente</value></data>
   <data name="PageRowHasMarks" xml:space="preserve"><value>con segni</value></data>
   <data name="PageRowHasNotes" xml:space="preserve"><value>con note</value></data>
+  <data name="ToolHighlighter" xml:space="preserve"><value>Evidenziatore</value></data>
+  <data name="HighlighterOptions" xml:space="preserve"><value>Opzioni evidenziatore</value></data>
+  <data name="HighlighterTipRound" xml:space="preserve"><value>Punta tonda</value></data>
+  <data name="HighlighterTipChisel" xml:space="preserve"><value>Punta a scalpello</value></data>
+  <data name="HighlighterAngle" xml:space="preserve"><value>Angolo</value></data>
+  <data name="HighlighterStraightLine" xml:space="preserve"><value>Linea dritta</value></data>
+  <data name="HighlighterYellow" xml:space="preserve"><value>Giallo</value></data>
+  <data name="HighlighterGreen" xml:space="preserve"><value>Verde</value></data>
+  <data name="HighlighterLightBlue" xml:space="preserve"><value>Azzurro</value></data>
+  <data name="HighlighterPink" xml:space="preserve"><value>Rosa</value></data>
+  <data name="HighlighterOrange" xml:space="preserve"><value>Arancio</value></data>
+  <data name="HighlighterPurple" xml:space="preserve"><value>Viola</value></data>
 </root>

@@ -52,7 +52,12 @@ implementation, review). Project-specific additions:
   PagesListView with PageThumbnail rows, `ViewModels/PagesViewModel`,
   PageThumbnailCache and PageInkCache; thumbnails go through the
   coordinator's low-priority queue (RenderThumbnailAsync, RunWhenIdleAsync).
-- `src/DreamBooks.Core/` — domain model, ink math, UndoManager,
+  Ink: `Ink/` RetainedStrokeLayer (shared base) with CustomInkLayer (pen)
+  and HighlighterLayer (under the pen ink); highlighter options in
+  `ViewModels/HighlighterOptionsViewModel` (in ToolsViewModel).
+- `src/DreamBooks.Core/` — domain model, ink math (highlighters: Model
+  HighlighterPresets and ChiselTip, Ink HighlighterSettings and
+  HighlighterGeometry: constant width, chisel, straight line), UndoManager,
   DocumentSession (lazy pages, dirty tracking, PageStrokesChanged), stroke
   JSON schema, journal (recorder, replayer), `Layout/` (DocumentLayout,
   ViewPosition, PositionHistory), `Rendering/` (RenderScheduler: priorities,
@@ -61,8 +66,10 @@ implementation, review). Project-specific additions:
   saved) and `Search/` (TextFolding, SearchIndex, SearchScanner and the
   result types: derived data, never saved). No references to WPF or PDFium.
 - `src/DreamBooks.Pdf/` — PDFium (PdfRenderer on its own thread, stroke
-  annotations, PdfDocumentSaver and FileReplacer: verified full rewrite,
-  MarkPageSource: the mark scan's uncached stroke reads, PdfTextSearcher and
+  annotations: StrokeAnnotations also writes highlighters transparent, the
+  route chosen in HighlighterWriteRoute; PdfDocumentSaver and FileReplacer:
+  verified full rewrite, MarkPageSource: the mark scan's uncached stroke
+  reads, PdfTextSearcher and
   `Interop/PdfiumText`: text search, one job per page) and
   the app's files under LocalAppData: RecoveryStore (journals,
   `DreamBooks\recovery`) and ViewPositionStore (last position per document,

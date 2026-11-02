@@ -173,6 +173,29 @@ public sealed class DocumentViewTests : IDisposable
     }
 
     [Fact]
+    public async Task With_the_highlighter_the_pen_commits_a_highlighter_stroke_through_the_same_path() // FR-41, FR-42
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            Settle(view);
+            LoadEditors(view);
+            vm.Tools.ActiveTool = AppTool.Highlighter;
+            var surface = view.SurfaceFor(vm.Viewport.CurrentPage)!;
+
+            surface.BeginPenStroke(stylusId: 1, hasPressure: true);
+            vm.Tools.ActiveTool = AppTool.Pen; // the tool of a live stroke is the one it started with
+            surface.AppendPenPoints([new(20, 20, 0.2f), new(200, 22, 0.9f)], timestamp: 10);
+            surface.FinishPenStroke();
+
+            var stroke = Assert.Single(surface.Editor!.Page.Strokes);
+            Assert.Equal(InkTool.Highlighter, stroke.Tool);
+            Assert.Equal(DreamBooks.Core.Model.HighlighterPresets.Alpha, stroke.Color.A);
+            Assert.Equal(DreamBooks.Core.Ink.HighlighterSettings.Default.RoundWidthPt, stroke.BaseWidthPt);
+            Assert.False(vm.ZoomVm.IsLocked);
+        });
+    }
+
+    [Fact]
     public async Task Erase_gesture_starts_on_the_page_under_the_eraser_only()
     {
         await WithViewAsync((vm, view) =>
@@ -1109,6 +1132,61 @@ public sealed class DocumentViewTests : IDisposable
         });
     }
 
+    [Fact]
+    public async Task Opening_a_shorter_document_after_a_long_one_shows_only_its_pages() // FR-05, NFR-11
+    {
+        var dialogs = new FakeFileDialogService { NextPath = WriteFakeFile("long.pdf") };
+        var vm = new MainViewModel(dialogs, scheduler: _scheduler);
+        new FakePageSource(Enumerable.Repeat((_widthPt, _heightPt), 1076).ToArray()).InstallOn(vm);
+        await vm.OpenPdfCommand.ExecuteAsync(null);
+
+        WpfTestThread.Run(() =>
+        {
+            var view = NewSlowLoadingView(vm);
+            ScrollTo(view, view.Pages.PageRect(1070).Top);
+            Assert.True(vm.Viewport.RetainedRange.First > 1000);
+
+            dialogs.NextPath = WriteFakeFile("short.pdf");
+            new FakePageSource(Enumerable.Repeat((_widthPt, _heightPt), 3).ToArray()).InstallOn(vm);
+            Wait(vm.OpenPdfCommand.ExecuteAsync(null)); // threw IndexOutOfRangeException from the stale retained range
+            Settle(view);
+
+            Assert.Equal(3, vm.Viewport.PageCount);
+            Assert.Equal([0, 1, 2], view.ActiveSurfaces.Keys.Order());
+            Assert.All(view.Pages.Children.Cast<UIElement>(), c => Assert.InRange(VirtualPagePanel.GetPageIndex(c), 0, 2));
+        });
+    }
+
+    [Fact]
+    public async Task Opening_the_same_document_twice_keeps_working()
+    {
+        var path = WriteFakeFile("same.pdf");
+        var dialogs = new FakeFileDialogService { NextPath = path };
+        var vm = new MainViewModel(dialogs, scheduler: _scheduler);
+        new FakePageSource(Enumerable.Repeat((_widthPt, _heightPt), _pageCount).ToArray()).InstallOn(vm);
+        await vm.OpenPdfCommand.ExecuteAsync(null);
+
+        WpfTestThread.Run(() =>
+        {
+            var view = NewSlowLoadingView(vm);
+            ScrollTo(view, view.Pages.PageRect(25).Top);
+            var before = vm.Viewport.Position;
+
+            for (var i = 0; i < 2; i++)
+            {
+                new FakePageSource(Enumerable.Repeat((_widthPt, _heightPt), _pageCount).ToArray()).InstallOn(vm);
+                Wait(vm.OpenPdfCommand.ExecuteAsync(null));
+                Settle(view);
+
+                Assert.Null(vm.ErrorMessage);
+                Assert.Equal(before.PageIndex, vm.Viewport.Position.PageIndex); // reopening keeps the place
+                var (first, last) = vm.Viewport.RetainedRange;
+                Assert.Equal(Enumerable.Range(first, last - first + 1), view.ActiveSurfaces.Keys.Order());
+                Assert.All(view.ActiveSurfaces.Keys, k => Assert.InRange(k, 0, _pageCount - 1));
+            }
+        });
+    }
+
     private static readonly TimeSpan _frame = TimeSpan.FromMilliseconds(1000.0 / 60);
 
     private static double OffsetY(MainViewModel vm)
@@ -1205,9 +1283,9 @@ public sealed class DocumentViewTests : IDisposable
         }
     }
 
-    private string WriteFakeFile()
+    private string WriteFakeFile(string name = "fake.pdf")
     {
-        var path = Path.Combine(_dir, "fake.pdf");
+        var path = Path.Combine(_dir, name);
         File.WriteAllBytes(path, [1, 2, 3]);
         return path;
     }
