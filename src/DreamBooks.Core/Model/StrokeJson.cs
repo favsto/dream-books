@@ -52,6 +52,14 @@ public static class StrokeJson
             }
 
             w.WriteEndArray();
+            if (stroke.Chisel is { } chisel)
+            {
+                w.WriteStartObject("chisel");
+                w.WriteNumber("angle", chisel.AngleDeg);
+                w.WriteNumber("ratio", chisel.Ratio);
+                w.WriteEndObject();
+
+            }
             w.WriteEndObject();
         }
 
@@ -161,12 +169,13 @@ public static class StrokeJson
         InkColor? color = null;
         double? width = null;
         JsonElement? pts = null;
+        ChiselTip? chisel = null;
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var prop in root.EnumerateObject())
         {
             var name = prop.Name;
-            if (name is "v" or "id" or "tool" or "color" or "w" or "pts" && !seen.Add(name))
+            if (name is "v" or "id" or "tool" or "color" or "w" or "pts" or "chisel" && !seen.Add(name))
             {
                 return null;
             }
@@ -220,6 +229,14 @@ public static class StrokeJson
 
                     pts = prop.Value;
                     break;
+                case "chisel":
+                    chisel = ReadChisel(prop.Value);
+                    if (chisel is null)
+                    {
+                        return null;
+                    }
+
+                    break;
             }
         }
 
@@ -244,7 +261,38 @@ public static class StrokeJson
             }
         }
 
-        return new InkStroke(id.Value, tool.Value, color.Value, width.Value, points);
+        return new InkStroke(id.Value, tool.Value, color.Value, width.Value, points, chisel);
+    }
+
+    private static ChiselTip? ReadChisel(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        double? angle = null, ratio = null;
+        foreach (var prop in element.EnumerateObject())
+        {
+            switch (prop.Name)
+            {
+                case "angle":
+                    if (angle is not null || !TryReadDouble(prop.Value, out var a)) { return null; }
+                    angle = a;
+                    break;
+                case "ratio":
+                    if (ratio is not null || !TryReadDouble(prop.Value, out var r)) { return null; }
+                    ratio = r;
+                    break;
+            }
+        }
+
+        if (angle is not { } ang || ratio is not { } rat || ang is < 0 or > 180 || rat is < 0 or > 1)
+        {
+            return null;
+        }
+
+        return new ChiselTip(ang, rat);
     }
 
     private static InkColor? ParseColor(JsonElement element)
