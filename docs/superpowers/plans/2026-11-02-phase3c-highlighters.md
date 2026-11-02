@@ -15,7 +15,7 @@
 - Core never references WPF/PDFium; PDFium only on the PDFium thread; the UI thread handles input and drawing (NFR-04); no new content is written into the PDF other than the highlighter annotations; the save verification of phases 2/3a is unchanged.
 - The stroke JSON gains only optional fields; unknown keys stay ignored (test it); no schema version bump unless a reader rejects unknown keys (task 1 checks).
 - Highlighter alpha: `HighlighterAlpha` = 89 (0.35 of 255) on every preset; the six presets (FR-41): yellow `#FFE14D`, green `#7BD88F`, light blue `#7CC4FF`, pink `#FF9BC4`, orange `#FFB366`, purple `#C8A2FF` (RGB; the alpha is applied on top).
-- Constant width for highlighters (FR-42): no pressure mapping; `BaseWidthPt` is the nib length for chisel and the full width for round tips; the default round width is 6 pt, the chisel nib length 8 pt.
+- Constant width for highlighters (FR-42): no pressure mapping; `BaseWidthPt` is the nib length for chisel and the full width for round tips; the default round width is 16 pt, the chisel nib length 14 pt.
 - Pen and eraser rules unchanged (FR-30, FR-34): the pen draws, the back end erases whatever the tool, fingers never draw, the highlight layer is not hit-testable.
 - User-visible text only in `Strings.resx` (+ `Strings.Designer.cs`, drift test); values/colours/durations in `Theme.xaml`; NFR-32 respected (the highlight itself stays translucent by design; the note is in requirements).
 - Nullable on; file-scoped namespaces; one public type per file; `_` prefix for private static readonly/const; warnings are errors; TDD in Core and Pdf; view models unit-tested; never run the WPF app; do not stage `.claude/settings.json`; commit trailer `Co-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>` (or the model that does the work); `dotnet build` 0 warnings, `dotnet test` green, `dotnet format --verify-no-changes` clean at the end of every task.
@@ -108,7 +108,7 @@ Width measurement helper in the test: measure the outline's extent perpendicular
 
 **Files:**
 - Modify: `src/DreamBooks.Core/Ink/PageEditor.cs` (create strokes with the tool, colour and chisel of the active highlighter settings; straighten at pen-up when the straight-line setting is on, as an undoable command), `src/DreamBooks.Core/Ink/StrokeClipper.cs` and the `WithPoints`-style rebuilds of `InkStroke` (carry `Tool`, `Color`, `Chisel` through every rebuild: partial eraser, straightening, smoothing)
-- Create: `src/DreamBooks.Core/Ink/HighlighterSettings.cs` (`public sealed record HighlighterSettings(InkColor Color, bool Chisel, double ChiselAngleDeg, bool StraightLine, double RoundWidthPt, double ChiselLengthPt)` with defaults: yellow, round, 45°, straight off, 6 pt, 8 pt; `ChiselRatio` 0.25 as a constant)
+- Create: `src/DreamBooks.Core/Ink/HighlighterSettings.cs` (`public sealed record HighlighterSettings(InkColor Color, bool Chisel, double ChiselAngleDeg, bool StraightLine, double RoundWidthPt, double ChiselLengthPt)` with defaults: yellow, round, 45°, straight off, 16 pt, 14 pt; `ChiselRatio` 0.25 as a constant)
 - Test: `tests/DreamBooks.Core.Tests/Ink/HighlighterStrokeTests.cs`
 
 **Interfaces:**

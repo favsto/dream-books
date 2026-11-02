@@ -38,7 +38,7 @@ The spike renders both routes with PDFium and, where a second reader is availabl
 
 ## 3. Model and file format
 
-- `InkStroke` already has `Tool` (`Pen`/`Highlighter`), `Color`, `BaseWidthPt` and points. Highlighter strokes use **constant width** (FR-42): `BaseWidthPt` is set from the tool setting and the pressure curve is bypassed.
+- `InkStroke` already has `Tool` (`Pen`/`Highlighter`), `Color`, `BaseWidthPt` and points. Highlighter strokes use **constant width** (FR-42): `BaseWidthPt` is set from the tool setting and the pressure curve is bypassed. Defaults: round tip 16 pt wide, chisel nib 14 pt long (ratio 0.25, 45°), so one round pass over a text line (15 pt) is a mark (section 6). A chisel pass shows at most its nib length (14 pt, nib perpendicular to the motion), so it reaches a line only with some vertical drift or a second pass.
 - **Chisel [my call]:** a per-stroke optional `ChiselAngleDeg` (0–180) and `ChiselRatio` (tip thickness / length, default 0.25) written in the stroke's JSON as optional fields. Schema v1 readers that do not know the fields ignore them (the reader must be checked by a test: unknown keys ignored). **No schema version bump** unless a reader rejects unknown keys; if so, bump to v2 and keep reading v1.
 - Colours: six presets as `InkColor` constants (`FR-41`), plus alpha for the highlighter's opacity **[my call]**: 0.35 for every preset, so light colours stay light and overlaps stay readable.
 - **Opacity in the PDF:** the annotation's colour alpha (`FPDFAnnot_SetColor` alpha) is set from the stroke's alpha. Round trip test: save, reopen, the colour and alpha are read back (through the private payload, not the PDF colour alone).

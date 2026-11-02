@@ -26,7 +26,7 @@ public class HighlighterStrokeTests
         [P(20, 100, t: 0), P(60, 101, t: 10), P(100, 99.5, t: 20), P(140, 100.5, t: 30), P(180, 101, t: 40)];
 
     [Fact]
-    public void Default_settings_are_yellow_round_45_degrees_straight_off_6_and_8_points()
+    public void Default_settings_are_yellow_round_45_degrees_straight_off_16_and_14_points()
     {
         var settings = HighlighterSettings.Default;
 
@@ -34,8 +34,8 @@ public class HighlighterStrokeTests
         Assert.False(settings.Chisel);
         Assert.Equal(45, settings.ChiselAngleDeg);
         Assert.False(settings.StraightLine);
-        Assert.Equal(6, settings.RoundWidthPt);
-        Assert.Equal(8, settings.ChiselLengthPt);
+        Assert.Equal(16, settings.RoundWidthPt);
+        Assert.Equal(14, settings.ChiselLengthPt);
         Assert.Equal(0.25, HighlighterSettings.ChiselRatio);
     }
 
@@ -59,7 +59,7 @@ public class HighlighterStrokeTests
         Assert.Equal(InkTool.Highlighter, stroke.Tool);
         Assert.Equal(HighlighterPresets.Green, stroke.Color);
         Assert.Equal(89, stroke.Color.A);
-        Assert.Equal(6, stroke.BaseWidthPt);
+        Assert.Equal(HighlighterSettings.Default.RoundWidthPt, stroke.BaseWidthPt);
         Assert.Null(stroke.Chisel);
     }
 
@@ -74,7 +74,7 @@ public class HighlighterStrokeTests
         var stroke = Assert.Single(page.Strokes);
         Assert.Equal(InkTool.Highlighter, stroke.Tool);
         Assert.Equal(HighlighterPresets.Pink, stroke.Color);
-        Assert.Equal(8, stroke.BaseWidthPt);
+        Assert.Equal(HighlighterSettings.Default.ChiselLengthPt, stroke.BaseWidthPt);
         Assert.Equal(new ChiselTip(30, 0.25), stroke.Chisel);
     }
 
@@ -254,7 +254,7 @@ public class HighlighterStrokeTests
         {
             Assert.Equal(InkTool.Highlighter, s.Tool);
             Assert.Equal(HighlighterPresets.Purple, s.Color);
-            Assert.Equal(8, s.BaseWidthPt);
+            Assert.Equal(HighlighterSettings.Default.ChiselLengthPt, s.BaseWidthPt);
             Assert.Equal(new ChiselTip(120, 0.25), s.Chisel);
         });
     }

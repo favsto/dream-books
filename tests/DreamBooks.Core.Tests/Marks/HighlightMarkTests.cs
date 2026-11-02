@@ -1,3 +1,4 @@
+using DreamBooks.Core.Ink;
 using DreamBooks.Core.Marks;
 using DreamBooks.Core.Model;
 
@@ -158,6 +159,48 @@ public class HighlightMarkTests
         // At 0 degrees the nib lies flat: the ink is only r * L = 5 pt tall, a note.
         var flat = new InkStroke(Guid.NewGuid(), InkTool.Highlighter, HighlighterPresets.Yellow, 20, points, new ChiselTip(0, 0.25));
         Assert.Empty(Page(flat).Marks);
+    }
+
+    private static InkStroke DefaultPass(double angleDeg, bool chisel, double drop = 0)
+    {
+        var settings = HighlighterSettings.Default with { Chisel = chisel, ChiselAngleDeg = angleDeg };
+        return new InkStroke(
+            Guid.NewGuid(),
+            InkTool.Highlighter,
+            settings.StrokeColor,
+            settings.WidthPt,
+            [new InkPoint(240, 307, 0.5f, null, null, null, 0), new InkPoint(360, 307 + drop, 0.5f, null, null, null, 1)],
+            settings.Tip);
+    }
+
+    [Fact]
+    public void One_pass_of_the_default_round_tip_over_a_line_is_a_mark()
+    {
+        var mark = Assert.Single(Page(DefaultPass(45, chisel: false)).Marks);
+        Assert.Equal(16, mark.BottomPt - mark.TopPt, 6);
+        Assert.Equal(MarkSide.Centre, mark.Side);
+    }
+
+    [Fact]
+    public void One_pass_of_the_default_chisel_shows_at_most_its_nib_length()
+    {
+        // Upright nib (90 degrees) across a horizontal pass: the full 14 pt nib, under one line, so a note;
+        // a pass that drifts down by a point or more, as a hand-drawn one does, reaches the line and is a mark.
+        Assert.Equal(14, HighlighterSettings.Default.ChiselLengthPt);
+        Assert.Empty(Page(DefaultPass(90, chisel: true)).Marks);
+        Assert.Single(Page(DefaultPass(90, chisel: true, drop: 1)).Marks);
+
+        // At the default 45 degrees the nib shows 14 * (0.25 + 0.75 sin 45) = 10.9 pt: a note.
+        Assert.Empty(Page(DefaultPass(45, chisel: true)).Marks);
+    }
+
+    [Fact]
+    public void A_highlight_thinner_than_a_line_with_a_custom_tip_is_still_a_note()
+    {
+        var thin = Highlight(240, 360, 300, 312);
+        var (marks, notes) = Page(thin);
+        Assert.Empty(marks);
+        Assert.Equal([thin.Id], Assert.Single(notes).StrokeIds);
     }
 
     [Fact]

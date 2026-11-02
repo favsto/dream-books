@@ -17,8 +17,11 @@ public sealed record HighlighterSettings(
     /// <summary>Chisel tip thickness / length (FR-46).</summary>
     public const double ChiselRatio = 0.25;
 
-    /// <summary>Yellow, round tip, 45° chisel angle, straight line off, 6 pt round, 8 pt chisel.</summary>
-    public static HighlighterSettings Default { get; } = new(HighlighterPresets.Yellow, false, 45, false, 6, 8);
+    /// <summary>
+    /// Yellow, round tip, 45° chisel angle, straight line off, 16 pt round, 14 pt chisel: wider than a text line
+    /// (15 pt) for the round tip, so one pass over a line is a mark (FR-100).
+    /// </summary>
+    public static HighlighterSettings Default { get; } = new(HighlighterPresets.Yellow, false, 45, false, 16, 14);
 
     /// <summary>The constant stroke width: the chisel length or the round width (FR-42).</summary>
     public double WidthPt => Chisel ? ChiselLengthPt : RoundWidthPt;
