@@ -326,7 +326,7 @@ public sealed class PdfDocumentSaver : IDocumentWriter
         try
         {
             var geometry = PageGeometry.From(page);
-            IReadOnlyList<(Guid Id, string Payload)> payloads =
+            IReadOnlyList<(InkStroke Stroke, string Payload)> payloads =
                 StrokeAnnotations.ReadAppPayloads(page, out int unreadable, out int foreign);
 
             // An added stroke replaces every existing copy with its Id (ruling 14): its Id is
@@ -336,12 +336,32 @@ public sealed class PdfDocumentSaver : IDocumentWriter
             toRemove.UnionWith(addedIds);
 
             string[] added = [.. change.Added.Select(StrokeJson.Serialize)];
-            List<string> expected = [.. payloads.Where(p => !toRemove.Contains(p.Id)).Select(p => p.Payload), .. added];
+            List<string> expected =
+                [.. payloads.Where(p => !toRemove.Contains(p.Stroke.Id)).Select(p => p.Payload), .. added];
             expected.Sort(StringComparer.Ordinal);
             var gone = new HashSet<Guid>(change.RemovedIds.Where(id => !addedIds.Contains(id)));
 
-            StrokeAnnotations.RemoveByIds(page, toRemove); // Ids absent from the page are ignored
-            foreach (InkStroke stroke in change.Added)
+            // Highlighters lie under the pen ink (spec 3c section 5): new highlighters are written before
+            // the pens, and the pens already on the page move after them, rewritten with their payloads
+            // verbatim, so the multiset of payloads checked below is unchanged.
+            (InkStroke Stroke, string Payload)[] moved = change.Added.Any(s => s.Tool == InkTool.Highlighter)
+                ? [.. payloads.Where(p => p.Stroke.Tool != InkTool.Highlighter && !toRemove.Contains(p.Stroke.Id))]
+                : [];
+            var removeNow = new HashSet<Guid>(toRemove);
+            removeNow.UnionWith(moved.Select(p => p.Stroke.Id));
+
+            StrokeAnnotations.RemoveByIds(page, removeNow); // Ids absent from the page are ignored
+            foreach (InkStroke stroke in change.Added.Where(s => s.Tool == InkTool.Highlighter))
+            {
+                StrokeAnnotations.Write(page, geometry, stroke);
+            }
+
+            foreach ((InkStroke stroke, string payload) in moved)
+            {
+                StrokeAnnotations.Write(page, geometry, stroke, payload);
+            }
+
+            foreach (InkStroke stroke in change.Added.Where(s => s.Tool != InkTool.Highlighter))
             {
                 StrokeAnnotations.Write(page, geometry, stroke);
             }
@@ -408,7 +428,7 @@ public sealed class PdfDocumentSaver : IDocumentWriter
         try
         {
             // Read afresh from the copy, never from what was written.
-            IReadOnlyList<(Guid Id, string Payload)> payloads =
+            IReadOnlyList<(InkStroke Stroke, string Payload)> payloads =
                 StrokeAnnotations.ReadAppPayloads(page, out int unreadable, out int foreign);
 
             if (foreign != expected.ForeignCount)
@@ -421,15 +441,15 @@ public sealed class PdfDocumentSaver : IDocumentWriter
                 throw new SaveVerificationException(Inv($"unreadable strokes on page {label}"));
             }
 
-            if (payloads.Any(p => expected.GoneIds.Contains(p.Id)))
+            if (payloads.Any(p => expected.GoneIds.Contains(p.Stroke.Id)))
             {
                 throw new SaveVerificationException(Inv($"erased stroke still on page {label}"));
             }
 
             var idCounts = new Dictionary<Guid, int>();
-            foreach ((Guid id, _) in payloads)
+            foreach ((InkStroke stroke, _) in payloads)
             {
-                idCounts[id] = idCounts.GetValueOrDefault(id) + 1;
+                idCounts[stroke.Id] = idCounts.GetValueOrDefault(stroke.Id) + 1;
             }
 
             if (expected.AddedIds.Any(id => idCounts.GetValueOrDefault(id) != 1))
