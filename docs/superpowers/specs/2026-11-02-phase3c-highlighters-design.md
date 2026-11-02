@@ -55,7 +55,7 @@ Conventions: page points, y down (as stored). Angles are measured in page space 
 
 - A **highlighter tool** in the toolbar (`AppTool.Highlighter`), next to the pen: a toggle, same rules as the pen (pen draws it, finger never draws, back end of the pen erases, eraser unchanged).
 - A small **options panel** (from the toolbar): six colour swatches (FR-41), round/chisel switch, chisel angle slider (0–180°, default 45°, FR-46), straight-line switch (FR-44). Italian text from resx; 40 px targets; keyboard reachable; values in Theme.xaml.
-- Highlighter strokes are drawn **under** pen strokes on screen and in the saved order (the same z-order as the PDF annotation order: highlighter annotations are written before pen ones on the same page).
+- Highlighter strokes are drawn **under** pen strokes on screen and in the saved order (the same z-order as the PDF annotation order: new highlighter annotations are written before new pen ones in the same save; existing annotations are never rewritten, see section 8).
 - Eraser: the back end and the eraser tool erase highlighters like pen strokes (whole stroke; partial mode as today).
 - The highlight layer is not hit-testable and the pen rules of 3a/3b hold.
 
@@ -79,6 +79,10 @@ Conventions: page points, y down (as stored). Angles are measured in page space 
 - Text under a highlight is slightly tinted, not multiplied (FR-40 approximated).
 - Barrel rotation not used (FR-48 deferred, hardware).
 - Text-anchored highlight (FR-45) deferred.
+- Annotation order in other readers: saving never rewrites existing annotations (NFR-10), so a highlighter added
+  after a pen stroke was saved is appended after it and, in other readers, can paint over that pen ink (slightly
+  tinted). Within one save, new highlighters are written before new pens. On screen the highlighter is always under
+  the pen.
 
 ## 9. Requirement changes (same commit)
 

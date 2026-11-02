@@ -45,26 +45,16 @@ internal static class StrokeAnnotations
     /// </summary>
     public static void Write(nint page, PageGeometry geometry, InkStroke stroke)
     {
-        ArgumentNullException.ThrowIfNull(stroke);
-        Write(page, geometry, stroke, StrokeJson.Serialize(stroke));
-    }
-
-    /// <summary>
-    /// <see cref="Write(nint, PageGeometry, InkStroke)"/> with the payload stored verbatim: used to move an
-    /// existing annotation, whose stored payload must survive byte for byte (NFR-10).
-    /// </summary>
-    internal static void Write(nint page, PageGeometry geometry, InkStroke stroke, string payload)
-    {
         EnsurePdfiumThread();
         ArgumentNullException.ThrowIfNull(geometry);
         ArgumentNullException.ThrowIfNull(stroke);
-        ArgumentNullException.ThrowIfNull(payload);
         if (page == 0)
         {
             throw new ArgumentException("The page handle is null.", nameof(page));
         }
 
         // Everything that can fail in managed code is computed before the annotation exists.
+        string payload = StrokeJson.Serialize(stroke);
         byte alpha = stroke.Tool == InkTool.Highlighter ? stroke.Color.A : (byte)255;
         (string appearance, PdfiumNative.FS_RECTF rect) = BuildAppearance(geometry, stroke, alpha);
         PdfiumNative.FS_POINTF[] centreline = BuildCentreline(geometry, stroke);

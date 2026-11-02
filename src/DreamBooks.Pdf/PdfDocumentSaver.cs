@@ -341,27 +341,11 @@ public sealed class PdfDocumentSaver : IDocumentWriter
             expected.Sort(StringComparer.Ordinal);
             var gone = new HashSet<Guid>(change.RemovedIds.Where(id => !addedIds.Contains(id)));
 
-            // Highlighters lie under the pen ink (spec 3c section 5): new highlighters are written before
-            // the pens, and the pens already on the page move after them, rewritten with their payloads
-            // verbatim, so the multiset of payloads checked below is unchanged.
-            (InkStroke Stroke, string Payload)[] moved = change.Added.Any(s => s.Tool == InkTool.Highlighter)
-                ? [.. payloads.Where(p => p.Stroke.Tool != InkTool.Highlighter && !toRemove.Contains(p.Stroke.Id))]
-                : [];
-            var removeNow = new HashSet<Guid>(toRemove);
-            removeNow.UnionWith(moved.Select(p => p.Stroke.Id));
-
-            StrokeAnnotations.RemoveByIds(page, removeNow); // Ids absent from the page are ignored
-            foreach (InkStroke stroke in change.Added.Where(s => s.Tool == InkTool.Highlighter))
-            {
-                StrokeAnnotations.Write(page, geometry, stroke);
-            }
-
-            foreach ((InkStroke stroke, string payload) in moved)
-            {
-                StrokeAnnotations.Write(page, geometry, stroke, payload);
-            }
-
-            foreach (InkStroke stroke in change.Added.Where(s => s.Tool != InkTool.Highlighter))
+            // Within one save, new highlighters are written before new pens (under the pen ink, spec 3c
+            // section 5). Existing annotations are never rewritten (NFR-10): a highlighter added later is
+            // appended after older pens (known limit, spec section 8).
+            StrokeAnnotations.RemoveByIds(page, toRemove); // Ids absent from the page are ignored
+            foreach (InkStroke stroke in change.Added.OrderBy(s => s.Tool == InkTool.Highlighter ? 0 : 1))
             {
                 StrokeAnnotations.Write(page, geometry, stroke);
             }

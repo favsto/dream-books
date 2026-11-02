@@ -103,20 +103,37 @@ public sealed partial class HighlighterAnnotationTests : IDisposable
     }
 
     [Fact]
-    public async Task Highlighters_added_to_a_page_with_saved_pen_strokes_go_under_them_and_the_pens_are_unchanged() // FR-40, NFR-10
+    public async Task Adding_a_highlighter_never_rewrites_the_saved_pen_annotations() // NFR-10, FR-40
     {
         string source = SamplePdf();
         InkStroke firstPen = Pen(500);
         InkStroke secondPen = Pen(600);
         string withPens = await SaveAsync(source, new PageChange(0, [], [firstPen, secondPen]));
         IReadOnlyList<AppAnnotation> before = await ReadAppAnnotationsAsync(withPens);
+        await Task.Delay(1100); // /M has one-second resolution: a rewrite would change it
 
         InkStroke round = RoundHighlighter(300);
         string saved = await SaveAsync(withPens, new PageChange(0, [], [round]));
 
-        Assert.Equal([round.Id, firstPen.Id, secondPen.Id], (await ReadPageAsync(saved)).Strokes.Select(s => s.Id));
+        // Existing annotations stay where and as they are; the new highlighter is appended (known limit:
+        // in other readers it can paint over the older pen ink).
+        Assert.Equal([firstPen.Id, secondPen.Id, round.Id], (await ReadPageAsync(saved)).Strokes.Select(s => s.Id));
         IReadOnlyList<AppAnnotation> after = await ReadAppAnnotationsAsync(saved);
-        Assert.Equal(before.Select(a => (a.Payload, a.Appearance)), after.Skip(1).Select(a => (a.Payload, a.Appearance)));
+        Assert.Equal(before, after.Take(2));
+    }
+
+    [Fact]
+    public async Task A_new_highlighter_on_a_page_without_pens_is_the_first_app_annotation() // FR-40
+    {
+        string source = SamplePdf();
+        InkStroke round = RoundHighlighter(300);
+        InkStroke pen = Pen(500);
+
+        string withHighlighter = await SaveAsync(source, new PageChange(0, [], [round]));
+        string saved = await SaveAsync(withHighlighter, new PageChange(0, [], [pen]));
+
+        Assert.Equal(round.Id, (await ReadPageAsync(withHighlighter)).Strokes.Single().Id);
+        Assert.Equal([round.Id, pen.Id], (await ReadPageAsync(saved)).Strokes.Select(s => s.Id));
     }
 
     [Fact]
@@ -272,7 +289,8 @@ public sealed partial class HighlighterAnnotationTests : IDisposable
                     }
 
                     float? ca = NativeGetNumberValue(annot, "CA", out float value) != 0 ? value : null;
-                    result.Add(new AppAnnotation(payload, PdfiumAnnotations.GetAppearance(annot), ca));
+                    result.Add(new AppAnnotation(
+                        payload, PdfiumAnnotations.GetAppearance(annot), ca, PdfiumAnnotations.GetString(annot, "M")));
                 }
                 finally
                 {
@@ -321,5 +339,5 @@ public sealed partial class HighlighterAnnotationTests : IDisposable
     [GeneratedRegex(@"(-?[0-9.]+) (-?[0-9.]+) [ml]\n")]
     private static partial Regex VertexPattern();
 
-    private sealed record AppAnnotation(string Payload, string Appearance, float? Ca);
+    private sealed record AppAnnotation(string Payload, string Appearance, float? Ca, string? Modified);
 }
