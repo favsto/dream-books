@@ -620,6 +620,16 @@ public sealed class EdgePanelTests : IDisposable
             MarkScanIdleGap = TimeSpan.Zero,
         };
         await vm.OpenPdfCommand.ExecuteAsync(null);
+
+        // Without a view the mark scan starts at open. It must end before the window binds the view: its fake renders
+        // never complete, and a scan still running then parks for good behind them (a race that failed under load).
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (vm.MarkScannerForTest is { IsCompleted: false } && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.True(vm.MarkScannerForTest is null or { IsCompleted: true }, "the mark scan did not finish before the window");
         try
         {
             WpfTestThread.Run(() =>
