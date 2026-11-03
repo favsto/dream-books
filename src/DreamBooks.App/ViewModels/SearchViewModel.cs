@@ -81,6 +81,7 @@ public sealed class SearchViewModel : ObservableObject
     private string? _failedPagesText;
     private PendingStep? _pendingStep;
     private bool _jumping;
+    private bool _isOpen;
 
     /// <param name="viewport">The view the commands move.</param>
     /// <param name="scheduler">The debounce, the refresh throttle and the status timer (see <see cref="IDelayScheduler"/>).</param>
@@ -114,6 +115,17 @@ public sealed class SearchViewModel : ObservableObject
     /// <summary>The search was cleared from its field (Esc, the clear button): the keyboard goes back to the document.</summary>
     internal event EventHandler? FocusDocumentRequested;
 
+    /// <summary>
+    /// True while the search pill is shown (top centre, FR-13): opened by <see cref="Open"/> (Ctrl+F) and by any query
+    /// typed, closed by <see cref="ClearCommand"/> (Esc, its close button) and by another document. Emptying the field
+    /// by hand keeps it open.
+    /// </summary>
+    public bool IsOpen
+    {
+        get => _isOpen;
+        private set => SetProperty(ref _isOpen, value);
+    }
+
     /// <summary>What to search; applied <see cref="QueryDelay"/> after the last change, at once when emptied.</summary>
     public string QueryText
     {
@@ -124,6 +136,11 @@ public sealed class SearchViewModel : ObservableObject
             if (!SetProperty(ref _queryText, text))
             {
                 return;
+            }
+
+            if (text.Length > 0)
+            {
+                IsOpen = true; // typed elsewhere (or restored): the results always come with their pill
             }
 
             _pendingQuery?.Dispose();
@@ -237,7 +254,10 @@ public sealed class SearchViewModel : ObservableObject
     /// <summary>Goes to the previous result (Shift+F3, Shift+Enter in the field), wrapping at the start.</summary>
     public IRelayCommand PreviousCommand { get; }
 
-    /// <summary>Empties the field and removes the results (Esc); the keyboard goes back to the document.</summary>
+    /// <summary>
+    /// Empties the field, removes the results and closes the pill (Esc, its close button); the keyboard goes back to the
+    /// document.
+    /// </summary>
     public IRelayCommand ClearCommand { get; }
 
     /// <summary>The hits of the search shown now (rail ticks), or null without a search.</summary>
@@ -353,7 +373,11 @@ public sealed class SearchViewModel : ObservableObject
 
         Attach(null);
         AfterQueryChange();
+        IsOpen = false;
     }
+
+    /// <summary>Shows the search pill (Ctrl+F); the view then gives its field the keyboard.</summary>
+    public void Open() => IsOpen = true;
 
     private bool ScanRunsOrPending => _index is not null && (_scanPending || _scanner is { IsCompleted: false });
 
@@ -368,6 +392,7 @@ public sealed class SearchViewModel : ObservableObject
     private void Clear()
     {
         QueryText = string.Empty;
+        IsOpen = false;
         FocusDocumentRequested?.Invoke(this, EventArgs.Empty);
     }
 

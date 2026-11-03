@@ -395,6 +395,39 @@ public sealed class SearchViewModelTests : IDisposable
     }
 
     [Fact]
+    public void The_search_pill_opens_on_request_or_with_a_query_and_closes_when_the_search_is_cleared()
+    {
+        var search = new SearchViewModel(new DocumentViewportViewModel(new ZoomViewModel(), _scheduler), _scheduler);
+        var changes = new List<string?>();
+        search.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
+        Assert.False(search.IsOpen);
+
+        // Ctrl+F (or the menu's entry): open, with an empty field.
+        search.Open();
+        Assert.True(search.IsOpen);
+        Assert.Contains(nameof(SearchViewModel.IsOpen), changes);
+
+        // Emptying the field by hand keeps it open; Esc or the close button (the clear command) closes it.
+        search.QueryText = "sole";
+        search.QueryText = string.Empty;
+        Assert.True(search.IsOpen);
+        search.ClearCommand.Execute(null);
+        Assert.False(search.IsOpen);
+
+        // A query typed elsewhere (the old panel's field) opens it, so the results always have their buttons.
+        search.QueryText = "luna";
+        Assert.True(search.IsOpen);
+        search.ClearCommand.Execute(null);
+        Assert.False(search.IsOpen);
+        Assert.Equal(string.Empty, search.QueryText);
+
+        // Another document closes it with the search.
+        search.Open();
+        search.ResetForDocument();
+        Assert.False(search.IsOpen);
+    }
+
+    [Fact]
     public async Task Pages_that_could_not_be_searched_are_noted_beside_the_count()
     {
         var source = new FakeSearchPageSource(10);
