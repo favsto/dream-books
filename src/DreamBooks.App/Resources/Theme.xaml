@@ -14,8 +14,9 @@
     <sys:Double x:Key="TitleBarHeight">48</sys:Double>
     <Thickness x:Key="TitleBarClearance">0,48,0,0</Thickness>
     <!-- The title bar's two pills (UI-06): the file name and the window buttons, tinted like the other floating surfaces.
-         The buttons are 44 x 40 DIP (the width is WPF UI's, MainWindow sets the 40 high); the pill lies behind them. -->
+         The buttons are 44 DIP wide (WPF UI's) and as high as the bar; their pill lies behind them, flush with the right edge. -->
     <Thickness x:Key="TitleBarPillMargin">8,4,8,0</Thickness>
+    <Thickness x:Key="TitleBarButtonsPillMargin">0,4,0,0</Thickness>
     <sys:Double x:Key="TitleBarPillHeight">40</sys:Double>
     <sys:Double x:Key="TitleBarButtonsPillWidth">132</sys:Double>
     <Thickness x:Key="TitleBarNamePadding">14,0,14,0</Thickness>

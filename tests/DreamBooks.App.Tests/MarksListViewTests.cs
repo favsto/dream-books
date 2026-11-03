@@ -213,6 +213,33 @@ public sealed class MarksListViewTests : IDisposable
         });
     }
 
+
+    [Fact]
+    public void A_row_behind_a_collapsed_panel_renders_no_page_until_it_is_shown()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var mark = Mark(0, 100, 260);
+            var calls = 0;
+            var pages = new PageThumbnailCache((_, _) => { calls++; return Task.FromResult<BitmapSource?>(null); }, (_, _) => Task.FromResult<PageInk?>(null));
+            var cache = new MarkThumbnailCache((_, _) => Task.FromResult<MarkInk?>(null));
+            var host = new Border { Visibility = Visibility.Collapsed };
+            var thumb = new MarkInkThumbnail { Width = 120, Height = 60 };
+            host.Child = thumb;
+            MarkInkThumbnail.SetCache(thumb, cache);
+            MarkInkThumbnail.SetPageBitmaps(thumb, pages);
+            thumb.Mark = mark;
+            pages.ClearBitmaps();
+            pages.Clear();
+            WpfTestThread.Drain();
+            Assert.Equal(0, calls);
+
+            host.Visibility = Visibility.Visible;
+            thumb.Mark = mark with { TopPt = 101 }; // a new request, now visible
+            WpfTestThread.Drain();
+            Assert.True(calls > 0);
+        });
+    }
     [Fact]
     public void List_virtualises_a_thousand_marks()
     {

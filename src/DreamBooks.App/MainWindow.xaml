@@ -115,7 +115,7 @@
         </views:FloatingSurface>
         <views:FloatingSurface x:Name="TitleButtonsPill" Panel.ZIndex="0" HorizontalAlignment="Right" VerticalAlignment="Top"
                                Width="{StaticResource TitleBarButtonsPillWidth}" Height="{StaticResource TitleBarPillHeight}"
-                               Margin="{StaticResource TitleBarPillMargin}" IsHitTestVisible="False"
+                               Margin="{StaticResource TitleBarButtonsPillMargin}" IsHitTestVisible="False"
                                CornerRadius="{StaticResource PillCornerRadius}" />
         <ui:TitleBar x:Name="AppTitleBar" VerticalAlignment="Top" Panel.ZIndex="1"
                      Foreground="{DynamicResource GlyphBrush}" ButtonsForeground="{DynamicResource GlyphBrush}"

@@ -163,14 +163,13 @@ public partial class MainWindow : FluentWindow
     }
 
     /// <summary>
-    /// Gives the three window buttons of the title bar their Italian names and the 40 DIP height of the touch target,
+    /// Gives the three window buttons of the title bar their Italian names and the full height of the bar (a target at least 40 DIP, running to the window's top edge),
     /// lined up with the pill behind them (UI-06, NFR-31). WPF UI names them PART_MinimizeButton, PART_MaximizeButton and
     /// PART_CloseButton.
     /// </summary>
     internal void StyleWindowButtons()
     {
-        var height = (double)FindResource("TouchTarget");
-        var gap = (Thickness)FindResource("TitleBarPillMargin");
+        var height = (double)FindResource("TitleBarHeight");
         foreach (var button in TitleBarPenInput.Buttons(AppTitleBar))
         {
             var name = button.Name switch
@@ -188,7 +187,7 @@ public partial class MainWindow : FluentWindow
             System.Windows.Automation.AutomationProperties.SetName(button, name);
             button.Height = height;
             button.VerticalAlignment = VerticalAlignment.Top;
-            button.Margin = new Thickness(0, gap.Top, button.Name == "PART_CloseButton" ? gap.Right : 0, 0); // the pill ends before the edge
+            button.Margin = new Thickness(0); // the targets run to the top and right edges of the window (the corner convention)
         }
     }
 
@@ -732,8 +731,8 @@ public partial class MainWindow : FluentWindow
 
         // The dismissing press that lands on another floating control (the toolbar, the navigation buttons, the chip, the
         // menu button) has closed what was open and then goes on to that control: the first press acts (device test of
-        // 4a). The left-edge panel's sheet keeps its own rule (a press on it closes it and is taken).
-        return panel || !IsOnFloatingControl(position);
+        // 4a). The pen on the left-edge panel's sheet keeps its own rule (it closes it and is taken, no stroke).
+        return (panel && kind == PointerKind.Pen) || !IsOnFloatingControl(position);
     }
 
     /// <summary>True when the topmost element at <paramref name="position"/> (page host coordinates) is part of a floating surface.</summary>

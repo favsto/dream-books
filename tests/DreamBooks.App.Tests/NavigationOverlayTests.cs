@@ -131,6 +131,24 @@ public sealed class NavigationOverlayTests : IDisposable
         });
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_press_on_a_floating_control_closes_the_open_edge_panel_and_still_reaches_the_control(bool finger)
+    {
+        await WithWindowAsync((_, window) =>
+        {
+            var kind = finger ? PointerKind.Finger : PointerKind.Mouse;
+            window.DocumentViewer.Rail.NotifyActivity();
+            window.MarksPanel.OpenTabCommand.Execute(MainWindow.MarksTab);
+            WpfTestThread.Drain();
+            Assert.True(window.MarksPanel.IsOpen);
+
+            Assert.False(window.RoutePagePress(Centre(window.IndicatorChip.IndicatorButton, window.PageHost), kind));
+            Assert.False(window.MarksPanel.IsOpen);
+        });
+    }
+
     [Fact]
     public async Task Go_to_page_field_accepts_valid_numbers_only_Enter_goes_and_Esc_cancels()
     {

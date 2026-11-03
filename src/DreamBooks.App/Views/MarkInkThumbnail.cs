@@ -46,6 +46,17 @@ public sealed class MarkInkThumbnail : FrameworkElement
     public MarkInkThumbnail()
     {
         Focusable = false;
+        IsVisibleChanged += (_, _) =>
+        {
+            if (IsVisible && _pageBitmap is null)
+            {
+                RequestBitmap(Mark, keepShown: true); // the panel is shown again: the page is asked now
+            }
+            else if (!IsVisible)
+            {
+                CancelBitmap();
+            }
+        };
         Loaded += (_, _) =>
         {
             Listen(Cache);
@@ -281,6 +292,11 @@ public sealed class MarkInkThumbnail : FrameworkElement
             return;
         }
 
+        if (IsHiddenAbove())
+        {
+            return; // nothing renders behind a closed panel or another tab; IsVisibleChanged asks when it is shown
+        }
+
         if (!keepShown)
         {
             SetPageBitmap(null);
@@ -289,6 +305,21 @@ public sealed class MarkInkThumbnail : FrameworkElement
         var cts = new CancellationTokenSource();
         _bitmapLoad = cts;
         _ = LoadBitmapAsync(cache, mark, cts);
+    }
+
+    /// <summary>True when an ancestor is not visible (the panel is closed or another tab shows): no render is started for it.</summary>
+    private bool IsHiddenAbove()
+    {
+        for (DependencyObject? current = this; current is not null;
+             current = current is Visual ? VisualTreeHelper.GetParent(current) ?? LogicalTreeHelper.GetParent(current) : LogicalTreeHelper.GetParent(current))
+        {
+            if (current is UIElement { Visibility: not Visibility.Visible })
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private async Task LoadBitmapAsync(PageThumbnailCache cache, Mark mark, CancellationTokenSource cts)

@@ -39,13 +39,16 @@ public sealed class TitleBarPillsTests
             var buttons = TitleBarPenInput.Buttons(window.AppTitleBar).ToList();
             Assert.Equal([Strings.TitleBarMinimize, Strings.TitleBarMaximize, Strings.TitleBarClose], buttons.Select(AutomationProperties.GetName));
             Assert.Equal(["Riduci a icona", "Ingrandisci", "Chiudi"], buttons.Select(AutomationProperties.GetName));
-            Assert.All(buttons, b => Assert.Equal(40, b.Height));
+            Assert.All(buttons, b => Assert.Equal((double)window.FindResource("TitleBarHeight"), b.Height));
+            var close = buttons[2].TransformToAncestor(root).TransformBounds(new Rect(buttons[2].RenderSize));
+            Assert.Equal(0, close.Top, 3); // the corner of the window closes it
+            Assert.Equal(root.ActualWidth, close.Right, 3);
 
             var pill = window.TitleButtonsPill.TransformToAncestor(root).TransformBounds(new Rect(window.TitleButtonsPill.RenderSize));
             foreach (var b in buttons)
             {
                 var bounds = b.TransformToAncestor(root).TransformBounds(new Rect(b.RenderSize));
-                Assert.True(pill.Contains(bounds.TopLeft) && pill.Contains(new Point(bounds.Right - 0.5, bounds.Bottom - 0.5)), $"{b.Name} {bounds} outside {pill}");
+                Assert.True(bounds.Left >= pill.Left - 0.5 && bounds.Right <= pill.Right + 0.5 && bounds.Top <= pill.Top, $"{b.Name} {bounds} outside {pill}");
             }
         });
     }
