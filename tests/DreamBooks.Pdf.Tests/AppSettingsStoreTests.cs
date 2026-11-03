@@ -312,4 +312,41 @@ public sealed class AppSettingsStoreTests : IDisposable
 
         Assert.Equal(expected, AppSettingsStore.DefaultRootDirectory());
     }
+
+    [Fact]
+    public void Loading_sweeps_the_temporary_files_an_interrupted_save_left_behind_after_an_hour()
+    {
+        Directory.CreateDirectory(_root);
+        string Temp(TimeSpan age)
+        {
+            var path = Path.Combine(_root, Guid.NewGuid().ToString("N") + ".tmp");
+            File.WriteAllText(path, "{}");
+            File.SetLastWriteTimeUtc(path, DateTime.UtcNow - age);
+            return path;
+        }
+
+        var old = Temp(TimeSpan.FromHours(2));
+        var justOverAnHour = Temp(TimeSpan.FromMinutes(61));
+        var young = Temp(TimeSpan.FromMinutes(5)); // maybe a save running right now
+        var other = Path.Combine(_root, "notes.tmp"); // not a name this store makes
+        File.WriteAllText(other, "x");
+        File.SetLastWriteTimeUtc(other, DateTime.UtcNow - TimeSpan.FromDays(1));
+        WriteRaw("""{"v":1,"theme":"Dark"}""");
+
+        var settings = NewStore().Load();
+
+        Assert.Equal(ThemeMode.Dark, settings.ThemeMode); // the file itself is untouched
+        Assert.False(File.Exists(old));
+        Assert.False(File.Exists(justOverAnHour));
+        Assert.True(File.Exists(young));
+        Assert.True(File.Exists(other));
+    }
+
+    [Fact]
+    public void Loading_with_an_unreadable_folder_still_gives_the_defaults()
+    {
+        File.WriteAllText(_root, "x"); // the folder is a file: nothing to sweep, nothing to read
+
+        Assert.Equal(AppSettings.Default, NewStore().Load());
+    }
 }

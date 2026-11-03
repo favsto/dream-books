@@ -9,7 +9,8 @@ namespace DreamBooks.Pdf;
 /// Reads and writes the app settings (FR-110): <c>&lt;root&gt;\settings.json</c>, one small ASCII JSON file with no path
 /// and no document text. Format: <c>{"v":1, "theme", "accent", ...}</c>. Loading never throws and works field by field:
 /// a missing or invalid field takes its default, the others are kept; unknown keys are ignored; a missing or unknown
-/// <c>v</c>, or a file that does not parse, gives all defaults. Saving writes a temporary file and swaps it in, and
+/// <c>v</c>, or a file that does not parse, gives all defaults. Saving writes a temporary file, flushes it to the disk and
+/// swaps it in (temporary files a crash left behind are swept at load after an hour), and
 /// reports every failure through <see cref="Failed"/> instead of throwing.
 /// </summary>
 public sealed class AppSettingsStore
@@ -17,6 +18,9 @@ public sealed class AppSettingsStore
     private const int _formatVersion = 1;
     private const string _fileName = "settings.json";
     private const string _tempExtension = ".tmp";
+
+    /// <summary>A temporary file older than this was left by a save that never finished (a crash): swept at load.</summary>
+    private static readonly TimeSpan _orphanAge = TimeSpan.FromHours(1);
 
     private readonly string _root;
 
@@ -33,9 +37,13 @@ public sealed class AppSettingsStore
     public static string DefaultRootDirectory() =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DreamBooks");
 
-    /// <summary>Never throws: anything unreadable reads as the defaults.</summary>
+    /// <summary>
+    /// Never throws: anything unreadable reads as the defaults. First sweeps the temporary files of saves that never
+    /// finished (older than an hour; a younger one may be a save running now).
+    /// </summary>
     public AppSettings Load()
     {
+        SweepOrphanedTemporaryFiles();
         byte[] bytes;
         try
         {
@@ -70,7 +78,12 @@ public sealed class AppSettingsStore
             var file = Path.Combine(_root, _fileName);
             temp = Path.Combine(_root, Guid.NewGuid().ToString("N") + _tempExtension);
             Directory.CreateDirectory(_root);
-            File.WriteAllBytes(temp, Serialize(settings));
+            using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                stream.Write(Serialize(settings));
+                stream.Flush(flushToDisk: true); // on the disk before it replaces the file: a power cut keeps one or the other
+            }
+
             Commit(temp, file);
         }
 #pragma warning disable CA1031 // Remembering the settings is best effort: every failure is reported, none thrown.
@@ -248,6 +261,26 @@ public sealed class AppSettingsStore
             {
                 Thread.Sleep(10 * (attempt + 1));
             }
+        }
+    }
+
+    private void SweepOrphanedTemporaryFiles()
+    {
+        try
+        {
+            var cutoff = DateTime.UtcNow - _orphanAge;
+            foreach (var temp in Directory.EnumerateFiles(_root, "*" + _tempExtension, SearchOption.TopDirectoryOnly))
+            {
+                // Only the names this store makes (a GUID in 32 hex digits), so nothing else in the folder is touched.
+                if (Guid.TryParseExact(Path.GetFileNameWithoutExtension(temp), "N", out _)
+                    && File.GetLastWriteTimeUtc(temp) < cutoff)
+                {
+                    TryDelete(temp);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
         }
     }
 
