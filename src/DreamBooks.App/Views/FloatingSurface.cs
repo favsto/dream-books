@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input.StylusPlugIns;
 
 namespace DreamBooks.App.Views;
 
@@ -9,7 +10,12 @@ namespace DreamBooks.App.Views;
 /// content, each with one shadow and half the tint (<c>PanelLayerBrush</c>, 65% together); with Windows transparency
 /// effects off (<see cref="IsOpaque"/>, NFR-32) both layers take the opaque panel brush. The content is the children
 /// added after the layers (in XAML: the surface's children). The surface itself has no background: only the rounded
-/// layers hit-test, so the pen and fingers outside its visible bounds reach what lies under it.
+/// layers hit-test, so the pen and fingers outside its visible bounds reach what lies under it. While it is hit-test
+/// visible it carries a stylus plug-in that does nothing (as <see cref="RailKnobGrip"/> does): WPF's real-time stylus
+/// targets the topmost element with plug-ins under the pen, so a pen press on a button or a flyout control never starts
+/// the page's wet ink under the surface. The plug-in's area is the surface's rectangle, so a pen landing just outside a
+/// rounded corner gets no wet ink for that stroke (the stroke itself is still written). Not hit-test visible (retracting,
+/// a closing or closed flyout), it drops the plug-in and the pen inks under it at once.
 /// </summary>
 public sealed class FloatingSurface : Grid
 {
@@ -21,14 +27,18 @@ public sealed class FloatingSurface : Grid
         nameof(IsOpaque), typeof(bool), typeof(FloatingSurface),
         new PropertyMetadata(false, (d, e) => ((FloatingSurface)d).ApplyMaterial()));
 
+    private readonly InertPlugIn _plugIn = new();
+
     public FloatingSurface()
     {
+        IsHitTestVisibleChanged += (_, _) => SyncPlugIn();
         DiffuseLayer = new Border();
         ContactLayer = new Border();
         Children.Add(DiffuseLayer);
         Children.Add(ContactLayer);
         ApplyCornerRadius();
         ApplyMaterial();
+        SyncPlugIn();
     }
 
     public CornerRadius CornerRadius
@@ -50,6 +60,22 @@ public sealed class FloatingSurface : Grid
     /// <summary>The layer with the contact shadow (blur 4 px).</summary>
     internal Border ContactLayer { get; }
 
+    /// <summary>True when the surface carries its inert plug-in (what keeps the page's wet ink off under it).</summary>
+    internal bool HasStylusPlugIn => StylusPlugIns.Contains(_plugIn);
+
+    private void SyncPlugIn()
+    {
+        var has = StylusPlugIns.Contains(_plugIn);
+        if (IsHitTestVisible && !has)
+        {
+            StylusPlugIns.Add(_plugIn);
+        }
+        else if (!IsHitTestVisible && has)
+        {
+            StylusPlugIns.Remove(_plugIn);
+        }
+    }
+
     private void ApplyCornerRadius()
     {
         DiffuseLayer.CornerRadius = CornerRadius;
@@ -63,5 +89,10 @@ public sealed class FloatingSurface : Grid
         ContactLayer.SetResourceReference(Border.BackgroundProperty, brush);
         DiffuseLayer.SetResourceReference(EffectProperty, "PanelDiffuseShadow");
         ContactLayer.SetResourceReference(EffectProperty, "PanelContactShadow");
+    }
+
+    /// <summary>Claims the pen for the surface on the real-time stylus thread; draws nothing.</summary>
+    private sealed class InertPlugIn : StylusPlugIn
+    {
     }
 }

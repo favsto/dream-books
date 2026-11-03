@@ -128,7 +128,7 @@ public sealed class ToolbarViewTests
     }
 
     [Fact]
-    public void The_flyout_closes_on_Esc_a_tap_outside_and_a_pen_press_without_writing()
+    public void The_flyout_closes_on_Esc_and_a_press_outside_and_the_pen_uses_its_controls()
     {
         WithWindow((window, toolbar, vm) =>
         {
@@ -154,20 +154,33 @@ public sealed class ToolbarViewTests
             Assert.False(window.RoutePagePress(outside, PointerKind.Pen));
             Assert.Equal(OptionsPanel.None, vm.Toolbar.OpenPanel);
 
-            // On the flyout: a finger or the mouse use its controls; the pen closes it and is taken, so no stroke.
-            Invoke(toolbar.PenButton);
-            toolbar.UpdateLayout();
-            var onFlyout = Centre(toolbar.SurfaceOf(OptionsPanel.Pen), window.PageHost);
-            Assert.False(window.RoutePagePress(onFlyout, PointerKind.Finger));
-            Assert.False(window.RoutePagePress(onFlyout, PointerKind.Mouse));
-            Assert.Equal(OptionsPanel.Pen, vm.Toolbar.OpenPanel);
-            Assert.True(ScrollRailTests.IsWithin(ScrollRailTests.HitAt(window.PageHost, onFlyout), toolbar.SurfaceOf(OptionsPanel.Pen)));
-            Assert.True(window.RoutePagePress(onFlyout, PointerKind.Pen));
-            Assert.Equal(OptionsPanel.None, vm.Toolbar.OpenPanel);
-            Assert.Null(vm.Session); // no document, no stroke: the press never reached a page
+            // On the flyout every pointer uses its controls (UI-02): nothing is taken, the flyout stays open, the press
+            // lands on the control, and the surface carries the inert plug-in, so no wet ink starts on the page under it.
+            var flyout = (PenOptionsFlyout)OpenFlyout(toolbar, OptionsPanel.Pen);
+            var surface = toolbar.SurfaceOf(OptionsPanel.Pen);
+            Assert.True(surface.HasStylusPlugIn);
+            var red = flyout.Swatches.PresetButtons[3];
+            var onRed = Centre(red, window.PageHost);
+            foreach (var kind in new[] { PointerKind.Pen, PointerKind.Finger, PointerKind.Mouse })
+            {
+                Assert.False(window.RoutePagePress(onRed, kind), $"the {kind} press on a swatch was taken");
+                Assert.Equal(OptionsPanel.Pen, vm.Toolbar.OpenPanel);
+            }
 
-            // Closed at once for input: the closing flyout no longer takes the pen or a finger.
-            Assert.False(ScrollRailTests.IsWithin(ScrollRailTests.HitAt(window.PageHost, onFlyout), toolbar.SurfaceOf(OptionsPanel.Pen)));
+            Assert.True(ScrollRailTests.IsWithin(ScrollRailTests.HitAt(window.PageHost, onRed), red));
+            var onSlider = Centre(flyout.WidthSlider, window.PageHost);
+            Assert.False(window.RoutePagePress(onSlider, PointerKind.Pen));
+            Assert.True(ScrollRailTests.IsWithin(ScrollRailTests.HitAt(window.PageHost, onSlider), flyout.WidthSlider));
+
+            // The press reaches the control: its command runs (the click the pen's promoted mouse events make).
+            Invoke(red);
+            Assert.Equal(DreamBooks.App.Ink.Palette.Red, vm.Tools.Color);
+            Assert.Equal(OptionsPanel.Pen, vm.Toolbar.OpenPanel);
+
+            // Closed: at once it no longer takes any pointer, and the plug-in is gone (the pen inks there).
+            vm.Toolbar.ClosePanel();
+            Assert.False(surface.HasStylusPlugIn);
+            Assert.False(ScrollRailTests.IsWithin(ScrollRailTests.HitAt(window.PageHost, onRed), surface));
 
             // On the pill the buttons work, for the pen too.
             Invoke(toolbar.PenButton);
@@ -277,7 +290,9 @@ public sealed class ToolbarViewTests
             (window, toolbar, vm) =>
             {
                 var onPill = Centre(toolbar.PenButton, window.PageHost);
+                Assert.True(toolbar.Pill.HasStylusPlugIn); // no wet ink under the pill when the pen presses a button
                 toolbar.ApplyPhase(ToolbarPhase.Retracting);
+                Assert.False(toolbar.Pill.HasStylusPlugIn); // the pen inks under it at once
                 Assert.Equal(TimeSpan.FromMilliseconds(200), toolbar.LastRetractAnimationDuration);
                 Assert.True(toolbar.Pill.HasAnimatedProperties);
                 Assert.False(ScrollRailTests.IsWithin(ScrollRailTests.HitAt(window.PageHost, onPill), toolbar));
@@ -289,6 +304,7 @@ public sealed class ToolbarViewTests
 
                 toolbar.ApplyPhase(ToolbarPhase.Visible);
                 Assert.True(ScrollRailTests.IsWithin(ScrollRailTests.HitAt(window.PageHost, onPill), toolbar.PenButton));
+                Assert.True(toolbar.Pill.HasStylusPlugIn);
                 Assert.Equal(ToolbarPhase.Visible, vm.Toolbar.Phase);
             },
             animations: true);
@@ -352,6 +368,14 @@ public sealed class ToolbarViewTests
             foreach (var panel in new[] { OptionsPanel.Pen, OptionsPanel.Highlighter, OptionsPanel.Eraser })
             {
                 var flyout = OpenFlyout(toolbar, panel);
+                var swatches = (flyout as PenOptionsFlyout)?.Swatches ?? (flyout as HighlighterOptionsFlyout)?.Swatches;
+                if (swatches is not null)
+                {
+                    Invoke(swatches.AddButton); // the picker's commands too
+                    Assert.True(swatches.IsPickerOpen);
+                    flyout.UpdateLayout();
+                }
+
                 flyout.UpdateLayout();
                 Assert.False(string.IsNullOrEmpty(AutomationProperties.GetName(flyout)));
                 var commands = Descendants(flyout)
@@ -364,6 +388,10 @@ public sealed class ToolbarViewTests
                 Assert.All(commands, c => Assert.False(
                     string.IsNullOrEmpty(AutomationProperties.GetName(c)),
                     $"a {c.GetType().Name} in the {panel} flyout has no automation name"));
+
+                // Each name is said once in a flyout (Narrator must tell the commands apart).
+                var duplicates = commands.GroupBy(AutomationProperties.GetName).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
+                Assert.True(duplicates.Count == 0, $"the {panel} flyout repeats: {string.Join(", ", duplicates)}");
                 toolbar.ViewModel!.ClosePanel();
             }
         });
@@ -387,6 +415,70 @@ public sealed class ToolbarViewTests
             flyout.WholeRadio.IsChecked = true;
             Assert.Equal(Core.Ink.EraserMode.WholeStroke, vm.Tools.EraserMode);
         });
+    }
+
+    [Fact]
+    public void In_a_short_window_the_flyout_scrolls_instead_of_reaching_under_the_title_bar()
+    {
+        WithWindow(
+            (window, toolbar, _) =>
+            {
+                var flyout = (PenOptionsFlyout)OpenFlyout(toolbar, OptionsPanel.Pen);
+                Invoke(flyout.Swatches.AddButton); // the picker makes the panel about 600 DIP tall
+                ScrollRailTests.LayOut((FrameworkElement)window.Content, _width, 400);
+                var titleBar = ((Thickness)window.FindResource("TitleBarClearance")).Top;
+                var surface = Bounds(toolbar.SurfaceOf(OptionsPanel.Pen), window.PageHost);
+                Assert.True(surface.Top >= titleBar - 0.5, $"the flyout starts at {surface.Top}, under the title bar");
+                Assert.True(surface.Bottom <= Bounds(toolbar.Pill, window.PageHost).Top);
+                Assert.True(flyout.Scroller.ScrollableHeight > 0, "the flyout does not scroll");
+
+                // Everything is reachable by scrolling: the swatches at the top, the curve at the bottom.
+                flyout.Scroller.ScrollToEnd();
+                window.UpdateLayout();
+                Assert.Equal(flyout.Scroller.ScrollableHeight, flyout.Scroller.VerticalOffset, 1);
+
+                // Tall enough again: no scrolling.
+                ScrollRailTests.LayOut((FrameworkElement)window.Content, _width, 1400);
+                Assert.Equal(0, flyout.Scroller.ScrollableHeight, 1);
+            },
+            height: 400);
+    }
+
+    [Fact]
+    public void A_toolbar_taken_out_of_its_window_can_be_collected()
+    {
+        WeakReference toolbar = null!;
+        WpfTestThread.Run(() => toolbar = UseAndRemoveToolbar());
+        for (var i = 0; i < 5 && toolbar.IsAlive; i++)
+        {
+            WpfTestThread.Run(() => { }); // lets the dispatcher run what the close queued
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+        }
+
+        Assert.False(toolbar.IsAlive, "a ToolbarView taken out of its window is still referenced");
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static WeakReference UseAndRemoveToolbar()
+    {
+        // A real toolbar view model, a host, a flyout and its picker opened and closed: nothing static may keep the view
+        // (bindings to objects without change notification, such as the button records, would: they are one-time).
+        // The whole MainWindow is not used: it is kept alive after Close for reasons that predate the toolbar.
+        var tools = new ToolsViewModel();
+        var undo = new CommunityToolkit.Mvvm.Input.RelayCommand(() => { });
+        var redo = new CommunityToolkit.Mvvm.Input.RelayCommand(() => { });
+        var viewModel = new ToolbarViewModel(tools, undo, redo, () => null, new ManualScheduler(), () => TimeSpan.Zero);
+        var host = new System.Windows.Controls.Grid();
+        var view = new ToolbarView { DataContext = viewModel, AnimationsEnabled = () => false };
+        host.Children.Add(view);
+        ScrollRailTests.LayOut(host, _width, _height);
+        var flyout = (PenOptionsFlyout)OpenFlyout(view, OptionsPanel.Pen);
+        Invoke(flyout.Swatches.AddButton);
+        viewModel.ClosePanel();
+        host.Children.Remove(view);
+        return new WeakReference(view);
     }
 
     /// <summary>Opens a flyout as the user does: activates its tool if needed, then taps it again.</summary>
@@ -472,7 +564,8 @@ public sealed class ToolbarViewTests
     }
 
     /// <summary>A window laid out at 1200 x 800 DIPs, its toolbar with animations on or off.</summary>
-    private static void WithWindow(Action<MainWindow, ToolbarView, MainViewModel> test, bool animations = false)
+    private static void WithWindow(
+        Action<MainWindow, ToolbarView, MainViewModel> test, bool animations = false, double height = _height)
     {
         WpfTestThread.Run(() =>
         {
@@ -483,9 +576,18 @@ public sealed class ToolbarViewTests
                 toolbar.AnimationsEnabled = () => animations;
                 toolbar.TransparencyEnabled = () => true;
                 toolbar.ApplyMotionSetting();
-                ScrollRailTests.LayOut((FrameworkElement)window.Content, _width, _height);
+                ScrollRailTests.LayOut((FrameworkElement)window.Content, _width, height);
                 window.MarksPanel.AnimationsEnabled = () => false;
-                test(window, toolbar, (MainViewModel)window.DataContext);
+                var vm = (MainViewModel)window.DataContext;
+
+                // A clean start, so a failure says what was left over instead of failing an assertion further down.
+                Assert.True(vm.Session is null, "a document is open at the start");
+                Assert.True(vm.Toolbar.ActiveTool == ToolbarTool.Pen, $"the active tool at the start is {vm.Toolbar.ActiveTool}");
+                Assert.True(vm.Toolbar.OpenPanel == OptionsPanel.None, $"the {vm.Toolbar.OpenPanel} panel is open at the start");
+                Assert.True(vm.Toolbar.Phase == ToolbarPhase.Visible, $"the toolbar is {vm.Toolbar.Phase} at the start");
+                Assert.True(!vm.UndoCommand.CanExecute(null) && !vm.RedoCommand.CanExecute(null), "undo or redo is available at the start");
+                Assert.True(toolbar.Pill.Visibility == Visibility.Visible && toolbar.Pill.IsHitTestVisible, "the pill is not shown at the start");
+                test(window, toolbar, vm);
             }
             finally
             {

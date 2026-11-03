@@ -27,9 +27,12 @@ namespace DreamBooks.App.Views;
 /// </list>
 /// NFR-32: every animation is instant when Windows animations are off (and the view model's retract too); with
 /// transparency effects off the surfaces are opaque.
-/// Pen rule (FR-30): only the pill and the open flyout hit-test. <see cref="RoutePress"/> closes an open flyout on a
-/// press outside it (fingers and the mouse are taken, the pen inks) and on a pen press on it (taken: no stroke); the
-/// pen never presses a flyout's controls.
+/// Pen rule (FR-30, UI-02): only the pill and the open flyout hit-test, and both carry an inert stylus plug-in (no wet
+/// ink under them, <see cref="FloatingSurface"/>). On them the pen presses the controls like a finger or the mouse (the
+/// pen's back end too). <see cref="RoutePress"/> closes an open flyout on a press outside it (fingers and the mouse
+/// are taken, the pen inks). This differs on purpose from the left-edge panel, where a pen press on the sheet closes it.
+/// A flyout is never taller than the space between the title bar and the pill (<see cref="MeasureOverride"/>): its
+/// content scrolls.
 /// </summary>
 public partial class ToolbarView : UserControl
 {
@@ -46,15 +49,14 @@ public partial class ToolbarView : UserControl
         foreach (var flyout in Flyouts())
         {
             flyout.RenderTransform = new ScaleTransform(1, 1);
-            flyout.PreviewStylusDown += OnFlyoutStylusDown;
-            flyout.PreviewMouseDown += OnFlyoutMouseButton;
-            flyout.PreviewMouseUp += OnFlyoutMouseButton;
-            flyout.PreviewTouchDown += OnFlyoutTouchDown;
-            Stylus.SetIsPressAndHoldEnabled(flyout, false);
+            Stylus.SetIsPressAndHoldEnabled(flyout, false); // inherited: no right-click or promotion delay on a long press
             _flyoutVersions[flyout] = 0;
         }
 
         Separators = [Separator1, Separator2];
+
+        // A flyout scrolled by a finger to its end must not move the whole window (the system's boundary feedback).
+        FlyoutHost.AddHandler(ManipulationBoundaryFeedbackEvent, new EventHandler<ManipulationBoundaryFeedbackEventArgs>((_, e) => e.Handled = true));
         DataContextChanged += (_, e) => Attach(e.NewValue as ToolbarViewModel);
         ButtonRow.SizeChanged += (_, _) => MoveIndicator(animate: _indicatorPlaced && AnimationsEnabled());
         Loaded += (_, _) =>
@@ -129,9 +131,9 @@ public partial class ToolbarView : UserControl
 
     /// <summary>
     /// A press at <paramref name="position"/> (this view's coordinates) anywhere over the document. Returns true when it
-    /// is taken. Without an open flyout: never taken. On the open flyout: a finger or the mouse is left to its controls;
-    /// the pen closes it and is taken (nothing is written). On the pill: left to the buttons (the pen too). Elsewhere:
-    /// the flyout closes; a finger or the mouse is taken (a light dismiss), the pen is not (it inks).
+    /// is taken. Without an open flyout: never taken. On the open flyout or on the pill: left to their controls, for every
+    /// pointer (the pen presses them too). Elsewhere: the flyout closes; a finger or the mouse is taken (a light
+    /// dismiss), the pen is not (it inks).
     /// </summary>
     internal bool RoutePress(Point position, PointerKind kind)
     {
@@ -140,18 +142,7 @@ public partial class ToolbarView : UserControl
             return false;
         }
 
-        if (Contains(SurfaceOf(vm.OpenPanel), position))
-        {
-            if (kind != PointerKind.Pen)
-            {
-                return false;
-            }
-
-            vm.ClosePanel();
-            return true;
-        }
-
-        if (Pill.IsHitTestVisible && Contains(Pill, position))
+        if (Contains(SurfaceOf(vm.OpenPanel), position) || (Pill.IsHitTestVisible && Contains(Pill, position)))
         {
             return false;
         }
@@ -202,8 +193,6 @@ public partial class ToolbarView : UserControl
                 break;
         }
     }
-
-    private static bool IsPen(StylusDevice? stylus) => stylus?.TabletDevice?.Type == TabletDeviceType.Stylus;
 
     private IEnumerable<FrameworkElement> Flyouts()
     {
@@ -486,30 +475,30 @@ public partial class ToolbarView : UserControl
             ApplyMotionSetting();
         }); // raised on another thread
 
-    /// <summary>The pen on a flyout: it closes and nothing is written or pressed (FR-30).</summary>
-    private void OnFlyoutStylusDown(object sender, StylusDownEventArgs e)
+    /// <summary>
+    /// Bounds the flyouts to the space above the pill and below the title bar (<c>TitleBarClearance</c>) of the slot the
+    /// toolbar has (the document's height): a taller flyout scrolls instead of reaching under the title bar, where its
+    /// top would be out of reach in a short window.
+    /// </summary>
+    protected override Size MeasureOverride(Size constraint)
     {
-        if (IsPen(e.StylusDevice))
-        {
-            _viewModel?.ClosePanel();
-            e.Handled = true;
-        }
+        FlyoutHost.MaxHeight = FlyoutHeightLimit(constraint.Height);
+        return base.MeasureOverride(constraint);
     }
 
-    /// <summary>Mouse presses promoted from the pen never reach a flyout's controls either.</summary>
-    private void OnFlyoutMouseButton(object sender, MouseButtonEventArgs e)
+    /// <summary>The flyouts' maximum height in a slot <paramref name="slotHeight"/> tall.</summary>
+    internal double FlyoutHeightLimit(double slotHeight)
     {
-        if (IsPen(e.StylusDevice))
+        if (double.IsInfinity(slotHeight) || double.IsNaN(slotHeight))
         {
-            e.Handled = true;
+            return double.PositiveInfinity;
         }
-    }
 
-    private void OnFlyoutTouchDown(object? sender, TouchEventArgs e)
-    {
-        if (IsPen(Stylus.CurrentStylusDevice))
-        {
-            e.Handled = true; // the pen's touch events: not the controls' either
-        }
+        static double Vertical(Thickness t) => t.Top + t.Bottom;
+        var title = TryFindResource("TitleBarClearance") is Thickness clearance ? clearance.Top : 0;
+        var button = TryFindResource("TouchTarget") as double? ?? 0;
+        var padding = TryFindResource("ToolbarPadding") is Thickness p ? Vertical(p) : 0;
+        var pill = button + padding + Vertical(Pill.Margin);
+        return Math.Max(0, slotHeight - title - pill - Vertical(FlyoutHost.Margin));
     }
 }

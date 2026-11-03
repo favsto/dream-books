@@ -212,7 +212,9 @@ public partial class MainWindow : FluentWindow
     {
         ContentRendered -= OnFirstContentRendered;
 
-        // After every ContentRendered handler, WPF UI's title bar hook among them.
+        // After every ContentRendered handler, WPF UI's title bar hook among them: WPF UI 4.3.0 adds its hook once, in
+        // TitleBar.OnWindowContentRendered, and HwndSource calls the hooks added last first. Check this again when
+        // WPF UI is updated: if it adds its hook later or again, ours would no longer run first.
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
             (System.Windows.Interop.HwndSource.FromVisual(this) as System.Windows.Interop.HwndSource)?.AddHook(OnTitleBarHitTest));
     }
@@ -580,8 +582,9 @@ public partial class MainWindow : FluentWindow
     /// <summary>
     /// A press at <paramref name="position"/> (page host coordinates) over the document: the open left-edge panel and
     /// the open toolbar flyout each decide (<see cref="EdgePanel.RoutePress"/>, <see cref="ToolbarView.RoutePress"/>);
-    /// true when either takes it. Outside them both close; fingers and the mouse are taken, the pen inks. The pen on
-    /// either closes it and is taken (no stroke). Separate so tests can drive it.
+    /// true when either takes it. Outside them both close; fingers and the mouse are taken, the pen inks. On the
+    /// left-edge panel's sheet the pen closes it and is taken (no stroke); on the flyout (and the toolbar) the pen
+    /// presses the controls like a finger, on purpose (UI-02). Separate so tests can drive it.
     /// </summary>
     internal bool RoutePagePress(Point position, PointerKind kind)
     {
@@ -590,7 +593,10 @@ public partial class MainWindow : FluentWindow
         return panel || flyout;
     }
 
-    /// <summary>The pen's press: outside the open panel or flyout it closes it and inks; on it, it closes it and is taken.</summary>
+    /// <summary>
+    /// The pen's press: outside the open panel or flyout it closes it and inks; on the panel's sheet it closes it and is
+    /// taken; on the flyout it is left to the flyout's controls.
+    /// </summary>
     private void OnPageHostStylusDown(object sender, StylusDownEventArgs e)
     {
         if (e.StylusDevice.TabletDevice?.Type == TabletDeviceType.Stylus

@@ -116,6 +116,8 @@ La toolbar contiene, da sinistra a destra: Penna, Evidenziatore, Gomma, Selezion
 - Il pannello dell'evidenziatore mostra: 6 colori (giallo, verde, azzurro, rosa, arancio, viola), punta tonda o a scalpello, angolo dello scalpello (0–180°), modalità "linea dritta". Gli spessori sono fissi (FR-46). Nel blocco 3c lo strumento e le sue opzioni stanno nel pannello degli strumenti; la toolbar finale arriva con la fase 4.
 - Il pannello della gomma mostra: cancella tratto intero / cancella parte del tratto, dimensione, "Cancella tutto nella pagina".
 - Ogni strumento ricorda colore e spessore scelti tra una sessione e l'altra.
+- Il selettore colore libero (blocco 4a) è un piccolo selettore costruito nell'app: quadrato saturazione/luminosità, tonalità e codice esadecimale. Quello di WPF UI non è utilizzabile (non è pubblico nella versione 4.3).
+- La penna usa i controlli della toolbar e dei pannelli opzioni come il dito e il mouse (anche il retro della penna, che sul pannello preme il controllo); una pressione della penna fuori dal pannello aperto lo chiude e scrive sulla pagina. È una differenza voluta rispetto al pannello laterale (UI-04), dove la penna sul pannello lo chiude senza scrivere. Sotto la toolbar e i pannelli l'inchiostro della pagina non parte mai, nemmeno per un istante. In una finestra bassa il pannello opzioni scorre e non finisce mai sotto la barra del titolo.
 
 ### Visibilità automatica
 
@@ -125,6 +127,8 @@ La toolbar contiene, da sinistra a destra: Penna, Evidenziatore, Gomma, Selezion
 | Penna sollevata da 600 ms | Riappare | Restano chiusi |
 | Tocco con un dito su area vuota | Mostra / nasconde | Si chiudono |
 | Modalità "Toolbar fissa" attiva | Sempre visibile | Invariato |
+
+"In scrittura" vale per il tratto o la cancellazione in corso sulla pagina: conta anche il disegno col mouse (NFR-23) e la cancellazione col retro della penna.
 
 ### Schermata iniziale
 
