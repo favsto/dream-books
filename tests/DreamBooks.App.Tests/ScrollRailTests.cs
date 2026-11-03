@@ -600,7 +600,7 @@ public sealed class ScrollRailTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -709,7 +709,7 @@ public sealed class ScrollRailTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -946,7 +946,7 @@ public sealed class ScrollRailTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -1079,7 +1079,7 @@ public sealed class ScrollRailTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -1163,6 +1163,10 @@ public sealed class ScrollRailTests : IDisposable
             {
                 var view = new DocumentView { BitmapRenderer = new FakeBitmapRenderer() };
                 view.Rail.AnimationsOverride = false; // the bubble's fades are instant here; tested on their own
+
+                // The rail's time stands still: these tests are about what shows the rail, not the 1.5 s idle fade
+                // (RailVisibilityState's own tests), which a busy shared test thread could otherwise reach mid-test.
+                view.Rail.Clock = static () => TimeSpan.FromSeconds(10);
                 view.DataContext = vm;
                 LayOut(view, 1000, 800);
                 test(vm, view);

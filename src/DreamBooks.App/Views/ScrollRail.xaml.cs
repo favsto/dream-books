@@ -71,7 +71,8 @@ public partial class ScrollRail : UserControl
     public ScrollRail()
     {
         InitializeComponent();
-        _state = new RailVisibilityState(() => _clock.Elapsed, default);
+        Clock = () => _clock.Elapsed;
+        _state = new RailVisibilityState(() => Clock(), default);
         _idleTimer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher);
         _idleTimer.Tick += (_, _) =>
         {
@@ -110,6 +111,12 @@ public partial class ScrollRail : UserControl
             SetRendering(false);
         };
     }
+
+    /// <summary>
+    /// The time the rail's visibility (fade in, 1.5 s idle, fade out) is measured in: a stopwatch; tests that are not
+    /// about the timing stop it, so a slow test thread never sees the rail fade out under its assertions.
+    /// </summary>
+    internal Func<TimeSpan> Clock { get; set; }
 
     /// <summary>The document position the rail shows and moves; set by <see cref="DocumentView"/>.</summary>
     internal DocumentViewportViewModel? Model
