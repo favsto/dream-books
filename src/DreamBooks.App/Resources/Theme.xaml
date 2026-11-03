@@ -198,6 +198,8 @@
     <Thickness x:Key="FlyoutMargin">0,0,0,8</Thickness>
     <sys:Double x:Key="FlyoutHeaderSize">12</sys:Double>
     <Thickness x:Key="FlyoutHeaderMargin">0,8,0,4</Thickness>
+    <!-- The first header of a flyout: no gap above it, the panel padding is enough. -->
+    <Thickness x:Key="FlyoutFirstHeaderMargin">0,0,0,4</Thickness>
     <!-- Colour swatches: a 28 DIP disc in a 40 DIP target, a ring around the chosen colour; a long press (0.6 s, moving
          less than 8 DIP) on a custom colour removes it. -->
     <sys:Double x:Key="SwatchSize">28</sys:Double>
@@ -212,6 +214,9 @@
     <sys:Double x:Key="ColorPickerHueHeight">12</sys:Double>
     <sys:Double x:Key="ColorPickerThumbSize">14</sys:Double>
     <sys:Double x:Key="ColorPickerPreviewSize">28</sys:Double>
+    <!-- The hex field's gap before the buttons, and the gap between Conferma colore and Annulla operazione. -->
+    <Thickness x:Key="ColorPickerHexMargin">0,0,8,0</Thickness>
+    <Thickness x:Key="ColorPickerButtonMargin">4,0,0,0</Thickness>
     <LinearGradientBrush x:Key="ColorPickerWhiteGradient" StartPoint="0,0" EndPoint="1,0">
         <GradientStop Color="#FFFFFFFF" Offset="0" />
         <GradientStop Color="#00FFFFFF" Offset="1" />

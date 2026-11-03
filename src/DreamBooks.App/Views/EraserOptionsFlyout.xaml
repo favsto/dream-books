@@ -18,7 +18,7 @@
         <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                       PanningMode="None" Focusable="False">
         <StackPanel Margin="{StaticResource FlyoutPadding}" KeyboardNavigation.TabNavigation="Cycle">
-            <TextBlock Text="{x:Static res:Strings.EraserMode}" Style="{StaticResource FlyoutHeader}" Margin="0,0,0,4" />
+            <TextBlock Text="{x:Static res:Strings.EraserMode}" Style="{StaticResource FlyoutHeader}" Margin="{StaticResource FlyoutFirstHeaderMargin}" />
             <StackPanel Orientation="Horizontal">
                 <RadioButton x:Name="WholeRadio" Content="{x:Static res:Strings.EraseWhole}"
                              AutomationProperties.Name="{x:Static res:Strings.EraseWhole}"

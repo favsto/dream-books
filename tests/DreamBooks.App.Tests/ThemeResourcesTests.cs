@@ -58,7 +58,7 @@ public sealed class ThemeResourcesTests
         "MenuItemPadding", "MenuShortcutMargin", "MenuSeparatorMargin", "MenuSeparatorHeight", "MenuItemStyle",
         "MenuShortcutText", "SaveProgressLineHeight", "SaveProgressBarFraction", "SaveProgressCycleDuration",
         "SaveProgressBarBrush", "TopOverlaysMargin", "NoticeBarMargin", "NoticeBarPadding", "NoticeBarMaxWidth",
-        "NoticeTextMargin",
+        "NoticeTextMargin", "FlyoutFirstHeaderMargin", "ColorPickerHexMargin", "ColorPickerButtonMargin",
     ];
 
     [Theory]
@@ -86,6 +86,24 @@ public sealed class ThemeResourcesTests
             Assert.False(resources.Contains("PanelTintBrush"), "PanelTintBrush is back");
         });
     }
+
+    [Fact]
+    public void The_views_take_their_margins_from_the_theme()
+    {
+        // Values live in the theme dictionaries (wpf-ui rules); "0" only resets a style's margin.
+        var views = Path.Combine(RepositoryRoot(), "src", "DreamBooks.App", "Views");
+        var files = Directory.GetFiles(views, "*.xaml").Append(Path.Combine(views, "..", "MainWindow.xaml"));
+        var literal = new System.Text.RegularExpressions.Regex("""(?:Margin|Padding)="(?!0")[-0-9.,\s]+" """.TrimEnd());
+        var found = files
+            .SelectMany(file => File.ReadLines(file).Select((line, index) => (file, line, index)))
+            .Where(entry => literal.IsMatch(entry.line))
+            .Select(entry => $"{Path.GetFileName(entry.file)}:{entry.index + 1}: {entry.line.Trim()}")
+            .ToList();
+        Assert.True(found.Count == 0, string.Join(Environment.NewLine, found));
+    }
+
+    private static string RepositoryRoot([System.Runtime.CompilerServices.CallerFilePath] string path = "") =>
+        Path.GetFullPath(Path.Combine(Path.GetDirectoryName(path)!, "..", ".."));
 
     [Fact]
     public void The_toolbar_fade_in_the_theme_is_the_retract_the_visibility_state_waits_for()

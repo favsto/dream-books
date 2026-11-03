@@ -33,12 +33,12 @@
                 AutomationProperties.Name="{x:Static res:Strings.ColorPickerHue}" />
         <DockPanel Margin="{StaticResource Gap}">
             <Ellipse DockPanel.Dock="Left" Width="{StaticResource ColorPickerPreviewSize}" Height="{StaticResource ColorPickerPreviewSize}"
-                     VerticalAlignment="Center" Margin="0,0,8,0"
+                     VerticalAlignment="Center" Margin="{StaticResource ColorPickerHexMargin}"
                      Stroke="{DynamicResource SwatchOutlineBrush}" StrokeThickness="{StaticResource SwatchOutlineThickness}"
                      Fill="{Binding Color, Converter={StaticResource ColorBrush}}" />
-            <Button x:Name="CancelButton" DockPanel.Dock="Right" Content="{x:Static res:Strings.Cancel}" Margin="4,0,0,0"
+            <Button x:Name="CancelButton" DockPanel.Dock="Right" Content="{x:Static res:Strings.Cancel}" Margin="{StaticResource ColorPickerButtonMargin}"
                     Click="OnCancelClick" AutomationProperties.Name="{x:Static res:Strings.Cancel}" />
-            <Button x:Name="ConfirmButton" DockPanel.Dock="Right" Content="{x:Static res:Strings.ColorPickerConfirm}" Margin="4,0,0,0"
+            <Button x:Name="ConfirmButton" DockPanel.Dock="Right" Content="{x:Static res:Strings.ColorPickerConfirm}" Margin="{StaticResource ColorPickerButtonMargin}"
                     Click="OnConfirmClick" IsEnabled="{Binding IsHexValid}"
                     AutomationProperties.Name="{x:Static res:Strings.ColorPickerConfirm}" />
             <TextBox x:Name="HexField" Text="{Binding Hex, UpdateSourceTrigger=PropertyChanged}"
