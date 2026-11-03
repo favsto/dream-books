@@ -125,6 +125,7 @@ public partial class MainWindow : FluentWindow
                 : Task.FromResult<PageInk?>(null));
         thumbnails.SetPaused(true); // until the Pages tab is shown
         PagesList.Thumbnails = thumbnails;
+        MarksList.PageBitmaps = thumbnails; // the marks rows draw the page under their ink from the same queue and cache
         DocumentViewer.ThumbnailScaleChanged += (_, _) => thumbnails.ClearBitmaps(); // rendered for the old scale
         DocumentViewer.ThumbnailRetryRequested += (_, _) => thumbnails.RetryMissing(); // the file is back after a save
 

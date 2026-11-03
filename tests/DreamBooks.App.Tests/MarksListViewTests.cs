@@ -168,6 +168,52 @@ public sealed class MarksListViewTests : IDisposable
     }
 
     [Fact]
+    public void Thumbnail_draws_the_page_bitmap_under_the_ink_when_it_is_ready()
+    {
+        // Device test of 4a: the marks panel showed the ink alone, not the page under it (FR-103, UI-04).
+        WpfTestThread.Run(() =>
+        {
+            var mark = Mark(0, 100, 260);
+            var line = Line(mark.StrokeIds[0], x: 30, top: 100, bottom: 260);
+            var bitmapRelease = new TaskCompletionSource<BitmapSource?>();
+            var pages = new PageThumbnailCache((_, _) => bitmapRelease.Task, (_, _) => Task.FromResult<PageInk?>(null));
+            var cache = new MarkThumbnailCache((_, _) =>
+                Task.FromResult<MarkInk?>(new MarkInk(mark, 612, [line], PressureCurve.Firm, SmoothingLevel.Strong)));
+            var thumb = new MarkInkThumbnail { Width = 120, Height = 60 };
+            MarkInkThumbnail.SetCache(thumb, cache);
+            MarkInkThumbnail.SetPageBitmaps(thumb, pages);
+            thumb.Mark = mark;
+            ScrollRailTests.LayOut(thumb, 120, 60);
+
+            // The ink arrives first: ink alone, the paper elsewhere (no flicker when the page arrives).
+            WpfTestThread.PumpUntil(() => thumb.HasInk);
+            Assert.False(thumb.HasPageBitmap);
+            Assert.Equal(0, DarkPixels(Render(thumb), new Int32Rect(40, 2, 78, 56)));
+
+            // The page bitmap (a mid-grey page, 612 x 792 pt at 0.1 px per pt) arrives: it fills the band under the ink.
+            var pixels = new byte[61 * 79];
+            Array.Fill(pixels, (byte)120);
+            var page = BitmapSource.Create(61, 79, 96, 96, PixelFormats.Gray8, null, pixels, 61);
+            page.Freeze();
+            bitmapRelease.SetResult(page);
+            WpfTestThread.PumpUntil(() => thumb.HasPageBitmap);
+            thumb.UpdateLayout();
+            WpfTestThread.Drain(); // the invalidated visual is drawn again
+            var drawn = Render(thumb);
+            var dark = DarkPixels(drawn, new Int32Rect(40, 2, 78, 56));
+            Assert.True(dark > 78 * 56 / 2, $"the page shows in the row ({dark} dark pixels)");
+            Assert.True(DarkPixels(drawn, new Int32Rect(2, 2, 22, 56)) >= 10, "the margin line is still drawn on top");
+
+            // A second row of the same page draws it at once, from the shared cache.
+            var again = new MarkInkThumbnail { Width = 120, Height = 60 };
+            MarkInkThumbnail.SetCache(again, cache);
+            MarkInkThumbnail.SetPageBitmaps(again, pages);
+            again.Mark = mark;
+            Assert.True(again.HasPageBitmap);
+        });
+    }
+
+    [Fact]
     public void List_virtualises_a_thousand_marks()
     {
         WpfTestThread.Run(() =>

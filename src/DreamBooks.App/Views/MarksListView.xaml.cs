@@ -41,6 +41,13 @@ public partial class MarksListView : UserControl
         }
     }
 
+    /// <summary>The page bitmaps drawn under the rows' ink: the Pages tab's cache, so the render queue is shared (FR-103, UI-04).</summary>
+    internal PageThumbnailCache? PageBitmaps
+    {
+        get => (PageThumbnailCache?)GetValue(MarkInkThumbnail.PageBitmapsProperty);
+        set => MarkInkThumbnail.SetPageBitmaps(this, value);
+    }
+
     /// <summary>A press on the list (list coordinates): where a tap on a row starts.</summary>
     internal void PressRow(Point position) => _pressAt = position;
 

@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using DreamBooks.Core.Marks;
 
 namespace DreamBooks.App.Views;
@@ -28,6 +29,16 @@ public sealed class MarkInkThumbnail : FrameworkElement
         typeof(MarkInkThumbnail),
         new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.Inherits, OnSourceChanged));
 
+    /// <summary>The page bitmaps (the Pages tab's cache, low-priority queue), set once on the list and inherited by its rows.</summary>
+    internal static readonly DependencyProperty PageBitmapsProperty = DependencyProperty.RegisterAttached(
+        "PageBitmaps",
+        typeof(PageThumbnailCache),
+        typeof(MarkInkThumbnail),
+        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.Inherits, OnSourceChanged));
+
+    private CancellationTokenSource? _bitmapLoad;
+    private PageThumbnailCache? _bitmapsListeningTo;
+    private BitmapSource? _pageBitmap;
     private CancellationTokenSource? _load;
     private MarkThumbnailCache? _listeningTo;
     private MarkThumbnail? _thumbnail;
@@ -38,6 +49,7 @@ public sealed class MarkInkThumbnail : FrameworkElement
         Loaded += (_, _) =>
         {
             Listen(Cache);
+            ListenBitmaps(PageBitmaps);
             if (_load is null)
             {
                 // Loaded again (an unload cancelled its read and stopped it listening): ask again, keeping what is
@@ -49,6 +61,7 @@ public sealed class MarkInkThumbnail : FrameworkElement
         {
             Cancel();
             Listen(null);
+            ListenBitmaps(null);
         };
     }
 
@@ -65,6 +78,13 @@ public sealed class MarkInkThumbnail : FrameworkElement
     internal int StrokeCount => _thumbnail?.Strokes.Count ?? 0;
 
     internal MarkThumbnailCache? Cache => (MarkThumbnailCache?)GetValue(CacheProperty);
+
+    /// <summary>True once the page bitmap behind the ink is drawn.</summary>
+    internal bool HasPageBitmap => _pageBitmap is not null;
+
+    internal PageThumbnailCache? PageBitmaps => (PageThumbnailCache?)GetValue(PageBitmapsProperty);
+
+    internal static void SetPageBitmaps(DependencyObject element, PageThumbnailCache? cache) => element.SetValue(PageBitmapsProperty, cache);
 
     internal static void SetCache(DependencyObject element, MarkThumbnailCache? cache) => element.SetValue(CacheProperty, cache);
 
@@ -94,6 +114,12 @@ public sealed class MarkInkThumbnail : FrameworkElement
 
         drawingContext.PushClip(new RectangleGeometry(new Rect(size)));
         drawingContext.PushTransform(new MatrixTransform(scale, 0, 0, scale, offsetX, offsetY));
+        if (_pageBitmap is { PixelWidth: > 0, PixelHeight: > 0 } page)
+        {
+            // The page under the ink, in the same page-point space: its width is the band's, its height follows the bitmap.
+            drawingContext.DrawImage(page, new Rect(0, 0, band.Width, band.Width * page.PixelHeight / page.PixelWidth));
+        }
+
         InkDrawings.Draw(drawingContext, thumbnail.Strokes, scale, minimumDip); // thin ink stays visible
         drawingContext.Pop();
         drawingContext.Pop();
@@ -105,6 +131,11 @@ public sealed class MarkInkThumbnail : FrameworkElement
     {
         if (d is MarkInkThumbnail thumbnail)
         {
+            if (e.Property == PageBitmapsProperty)
+            {
+                thumbnail.ListenBitmaps(thumbnail.PageBitmaps);
+            }
+
             if (e.Property == CacheProperty)
             {
                 thumbnail.Listen(thumbnail.Cache);
@@ -151,6 +182,7 @@ public sealed class MarkInkThumbnail : FrameworkElement
     {
         Cancel();
         var mark = Mark;
+        RequestBitmap(mark, keepShown);
         var cache = Cache;
         if (mark is null || cache is null)
         {
@@ -203,8 +235,104 @@ public sealed class MarkInkThumbnail : FrameworkElement
         }
     }
 
+    private void ListenBitmaps(PageThumbnailCache? cache)
+    {
+        if (ReferenceEquals(cache, _bitmapsListeningTo))
+        {
+            return;
+        }
+
+        if (_bitmapsListeningTo is { } old)
+        {
+            old.Cleared -= OnBitmapsReset;
+            old.BitmapsCleared -= OnBitmapsReset;
+            old.RetryRequested -= OnBitmapsReset;
+        }
+
+        _bitmapsListeningTo = cache;
+        if (cache is not null)
+        {
+            cache.Cleared += OnBitmapsReset;
+            cache.BitmapsCleared += OnBitmapsReset;
+            cache.RetryRequested += OnBitmapsReset;
+        }
+    }
+
+    /// <summary>Another document, another screen scale, or the file is back: the page is asked again, keeping the one shown.</summary>
+    private void OnBitmapsReset(object? sender, EventArgs e) => RequestBitmap(Mark, keepShown: true);
+
+    /// <summary>
+    /// The page behind the mark: at once from the cache, otherwise rendered through the Pages tab's low-priority queue
+    /// while the ink shows alone. Rendered or not, the row never waits for it.
+    /// </summary>
+    private void RequestBitmap(Mark? mark, bool keepShown)
+    {
+        CancelBitmap();
+        var cache = PageBitmaps;
+        if (mark is null || cache is null)
+        {
+            SetPageBitmap(null);
+            return;
+        }
+
+        if (cache.TryGetBitmap(mark.PageIndex, out var cached))
+        {
+            SetPageBitmap(cached);
+            return;
+        }
+
+        if (!keepShown)
+        {
+            SetPageBitmap(null);
+        }
+
+        var cts = new CancellationTokenSource();
+        _bitmapLoad = cts;
+        _ = LoadBitmapAsync(cache, mark, cts);
+    }
+
+    private async Task LoadBitmapAsync(PageThumbnailCache cache, Mark mark, CancellationTokenSource cts)
+    {
+        try
+        {
+            var bitmap = await cache.GetBitmapAsync(mark.PageIndex, cts.Token); // never throws
+            if (ReferenceEquals(_bitmapLoad, cts) && Equals(Mark, mark) && bitmap is not null)
+            {
+                SetPageBitmap(bitmap);
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_bitmapLoad, cts))
+            {
+                _bitmapLoad = null;
+            }
+
+            cts.Dispose();
+        }
+    }
+
+    private void CancelBitmap()
+    {
+        if (_bitmapLoad is { } load)
+        {
+            _bitmapLoad = null;
+            load.Cancel();
+        }
+    }
+
+    private void SetPageBitmap(BitmapSource? bitmap)
+    {
+        if (!ReferenceEquals(_pageBitmap, bitmap))
+        {
+            _pageBitmap = bitmap;
+            InvalidateVisual();
+        }
+    }
+
     private void Cancel()
     {
+        CancelBitmap();
         if (_load is { } load)
         {
             _load = null;
