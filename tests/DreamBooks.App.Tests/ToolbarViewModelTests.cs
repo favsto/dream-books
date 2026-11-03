@@ -70,7 +70,9 @@ public class ToolbarViewModelTests
     public void A_second_tap_on_the_active_tool_opens_its_panel_and_a_third_closes_it(ToolbarTool tool, OptionsPanel panel)
     {
         var toolbar = Create();
-        toolbar.TapTool(tool);
+        _tools.ActiveTool = tool == ToolbarTool.Pen ? AppTool.Eraser : AppTool.Pen; // start from another tool
+        toolbar.TapTool(tool); // first tap: activates
+        Assert.Equal(OptionsPanel.None, toolbar.OpenPanel);
 
         toolbar.TapTool(tool);
         Assert.Equal(panel, toolbar.OpenPanel);
@@ -79,6 +81,16 @@ public class ToolbarViewModelTests
         toolbar.TapTool(tool);
         Assert.Equal(OptionsPanel.None, toolbar.OpenPanel);
         Assert.Equal(tool, toolbar.ActiveTool);
+    }
+
+    [Fact]
+    public void The_first_tap_on_the_pen_active_at_startup_opens_its_panel() // UI-02: the pen is already the active tool
+    {
+        var toolbar = Create();
+
+        toolbar.TapTool(ToolbarTool.Pen);
+
+        Assert.Equal(OptionsPanel.Pen, toolbar.OpenPanel);
     }
 
     [Fact]

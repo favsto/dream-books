@@ -108,11 +108,14 @@ public sealed class MainViewModelToolbarTests : IDisposable
             vm.Toolbar.Eraser.ClearPageCommand.Execute(null);
             vm.Toolbar.Eraser.ConfirmClearPageCommand.Execute(null);
             Assert.Empty(editor.Page.Strokes);
-            Assert.True(vm.IsDirty);
+            Assert.False(vm.IsDirty); // dirty means "differs from the file": the file has no strokes either
+            Assert.True(vm.Undo.CanUndo); // the clear is an undo step of its own
             Assert.False(vm.Toolbar.Eraser.ClearPageCommand.CanExecute(null));
 
             await vm.UndoCommand.ExecuteAsync(null);
             Assert.Single(editor.Page.Strokes);
+            Assert.True(vm.IsDirty);
+            Assert.True(vm.Toolbar.Eraser.ClearPageCommand.CanExecute(null));
         }
         finally
         {
