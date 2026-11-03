@@ -88,6 +88,7 @@ public partial class MainWindow : FluentWindow
         Closed += (_, _) => SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         PreviewKeyDown += OnPreviewKeyDown;
         DocumentViewer.LeftEdgeSwiped += (_, _) => MarksPanel.Open(); // a finger swipe from the left edge (UI-04)
+        DocumentViewer.SingleTapped += (_, position) => OnDocumentSingleTap(position);
 
         // Ctrl+M opens and closes the marks list (FR-103; free in 3a), Ctrl+Shift+P the page thumbnails (UI-04; Ctrl+P is
         // left to printing, the shortcut every Windows reader expects for it). Each switches to its tab when the other is
@@ -594,6 +595,43 @@ public partial class MainWindow : FluentWindow
         _dismissTouchId = null;
         release();
         return true;
+    }
+
+    /// <summary>
+    /// A finger's single tap on the document (<see cref="DocumentView.SingleTapped"/>, viewport coordinates): on an empty
+    /// area it shows or hides the toolbar and closes its option panel (section 4); on a floating element it does
+    /// nothing. A press that closed a panel from outside never gets here (it is taken), nor does the pen.
+    /// </summary>
+    internal void OnDocumentSingleTap(Point viewportPoint)
+    {
+        var point = DocumentViewer.Viewport.TranslatePoint(viewportPoint, PageHost);
+        if (InputTargetAt(PageHost, point) is not { } hit || !IsWithin(hit, DocumentViewer))
+        {
+            return; // on a floating element (toolbar, chip, buttons, menu, notices), or outside the document
+        }
+
+        CurrentViewModel.Toolbar.FingerTapOnEmptyArea();
+    }
+
+    /// <summary>
+    /// The visual input would reach at <paramref name="point"/>: a hit test that skips what input routing skips
+    /// (elements that are not hit-testable or not visible, with their children).
+    /// </summary>
+    private static DependencyObject? InputTargetAt(Visual root, Point point)
+    {
+        DependencyObject? hit = null;
+        VisualTreeHelper.HitTest(
+            root,
+            candidate => candidate is UIElement { IsHitTestVisible: false } or UIElement { Visibility: not Visibility.Visible }
+                ? HitTestFilterBehavior.ContinueSkipSelfAndChildren
+                : HitTestFilterBehavior.Continue,
+            result =>
+            {
+                hit = result.VisualHit;
+                return HitTestResultBehavior.Stop;
+            },
+            new PointHitTestParameters(point));
+        return hit;
     }
 
     /// <summary>The marks' status says something: announced as a live region, and shown with the buttons and the rail.</summary>

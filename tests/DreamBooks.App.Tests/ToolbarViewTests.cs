@@ -563,6 +563,58 @@ public sealed class ToolbarViewTests
         }
     }
 
+    [Fact]
+    public void A_finger_tap_on_an_empty_area_shows_and_hides_the_toolbar_and_a_double_tap_does_not()
+    {
+        WithWindow((window, toolbar, vm) =>
+        {
+            var taps = new ManualScheduler();
+            var view = window.DocumentViewer;
+            view.TapScheduler = taps;
+            var empty = new Point(300, 300); // viewport coordinates, nothing floating there
+
+            // A single tap hides the toolbar, the next one shows it again (section 4).
+            view.RegisterTap(empty, timestamp: 1000);
+            Assert.Equal(ToolbarPhase.Visible, vm.Toolbar.Phase); // still waiting for a possible second tap
+            taps.Advance(DocumentView.DoubleTapTimeMs);
+            Assert.Equal(ToolbarPhase.Hidden, vm.Toolbar.Phase);
+            Assert.False(toolbar.Pill.IsHitTestVisible);
+
+            view.RegisterTap(empty, timestamp: 5000);
+            taps.Advance(DocumentView.DoubleTapTimeMs);
+            Assert.Equal(ToolbarPhase.Visible, vm.Toolbar.Phase);
+
+            // A double tap is the zoom (FR-07): the toolbar stays as it is.
+            view.RegisterTap(empty, timestamp: 9000);
+            view.RegisterTap(empty, timestamp: 9100);
+            taps.Advance(1000);
+            Assert.Equal(ToolbarPhase.Visible, vm.Toolbar.Phase);
+
+            // A tap with an option panel open closes it and hides the toolbar.
+            Invoke(toolbar.PenButton);
+            Assert.Equal(OptionsPanel.Pen, vm.Toolbar.OpenPanel);
+            view.RegisterTap(empty, timestamp: 20000);
+            taps.Advance(DocumentView.DoubleTapTimeMs);
+            Assert.Equal(OptionsPanel.None, vm.Toolbar.OpenPanel);
+            Assert.Equal(ToolbarPhase.Hidden, vm.Toolbar.Phase);
+            view.RegisterTap(empty, timestamp: 25000);
+            taps.Advance(DocumentView.DoubleTapTimeMs);
+            Assert.Equal(ToolbarPhase.Visible, vm.Toolbar.Phase);
+
+            // A point on a floating element (here the pill) is not an empty area.
+            var onPill = toolbar.PenButton.TranslatePoint(new Point(20, 20), view.Viewport);
+            view.RegisterTap(onPill, timestamp: 30000);
+            taps.Advance(DocumentView.DoubleTapTimeMs);
+            Assert.Equal(ToolbarPhase.Visible, vm.Toolbar.Phase);
+
+            // "Toolbar fixed" keeps it.
+            vm.Toolbar.IsToolbarFixed = true;
+            view.RegisterTap(empty, timestamp: 40000);
+            taps.Advance(DocumentView.DoubleTapTimeMs);
+            Assert.Equal(ToolbarPhase.Visible, vm.Toolbar.Phase);
+        });
+    }
+
     /// <summary>A window laid out at 1200 x 800 DIPs, its toolbar with animations on or off.</summary>
     private static void WithWindow(
         Action<MainWindow, ToolbarView, MainViewModel> test, bool animations = false, double height = _height)

@@ -88,6 +88,9 @@ public partial class DocumentView : UserControl
     private Vector _panRemainder;
     private (Point Position, int Time)? _tapStart;
     private (Point Position, int Time)? _lastTap;
+    private IDisposable? _pendingSingleTap;
+    private bool _touchStoppedGlide;
+    private bool _tapStoppedGlide;
     private int? _railTouchId;
     private StylusDevice? _railStylus;
     private TouchDevice? _edgeTouch;
@@ -121,6 +124,7 @@ public partial class DocumentView : UserControl
         {
             StopGlide();
             _editorTimer.Stop();
+            CancelPendingSingleTap();
 
             // Renders stop and the cache (up to its budget) is released; the surfaces keep what they show. A view that
             // is loaded again starts a new coordinator (Loaded), whose previews never replace those bitmaps.
@@ -207,8 +211,15 @@ public partial class DocumentView : UserControl
     /// A one-finger tap at a viewport point (DIPs). The second of two taps within <see cref="DoubleTapTimeMs"/> and
     /// <see cref="DoubleTapDistanceDip"/> toggles fit width and 200% around it (FR-07). Separate so tests can drive it.
     /// </summary>
-    internal void RegisterTap(Point position, int timestamp)
+    /// <remarks>
+    /// A tap that is not the second of a double tap waits <see cref="DoubleTapTimeMs"/> (through
+    /// <see cref="TapScheduler"/>) and is then a single tap (<see cref="SingleTapped"/>, the window shows or hides the
+    /// toolbar, section 4), unless a finger came down again meanwhile (<see cref="CancelPendingSingleTap"/>) or
+    /// <paramref name="stoppedGlide"/> (the tap only stopped a glide). A double tap is never also a single tap.
+    /// </remarks>
+    internal void RegisterTap(Point position, int timestamp, bool stoppedGlide = false)
     {
+        CancelPendingSingleTap();
         if (_lastTap is { } last
             && unchecked(timestamp - last.Time) is >= 0 and <= DoubleTapTimeMs
             && (position - last.Position).Length <= DoubleTapDistanceDip)
@@ -224,7 +235,35 @@ public partial class DocumentView : UserControl
         }
 
         _lastTap = (position, timestamp);
+        if (!stoppedGlide)
+        {
+            _pendingSingleTap = TapScheduler.Schedule(TimeSpan.FromMilliseconds(DoubleTapTimeMs), () =>
+            {
+                _pendingSingleTap = null;
+                if (!AnyInking())
+                {
+                    SingleTapped?.Invoke(this, position);
+                }
+            });
+        }
     }
+
+    /// <summary>A finger came down: the tap waiting to become a single tap is dropped (it may still start a double tap).</summary>
+    internal void CancelPendingSingleTap()
+    {
+        _pendingSingleTap?.Dispose();
+        _pendingSingleTap = null;
+    }
+
+    /// <summary>
+    /// A one-finger tap on the document that did not move, was not half of a double tap and did not just stop a glide,
+    /// at its viewport point (DIPs); raised <see cref="DoubleTapTimeMs"/> after the lift. Only fingers tap: the pen and
+    /// the rail's presses never get here.
+    /// </summary>
+    internal event EventHandler<Point>? SingleTapped;
+
+    /// <summary>Waits for a tap to become a single tap (the dispatcher's timer; tests drive it by hand).</summary>
+    internal IDelayScheduler TapScheduler { get; set; } = new DispatcherDelayScheduler();
 
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
     {
@@ -1296,6 +1335,7 @@ public partial class DocumentView : UserControl
     /// <summary>A finger press: in the shown rail's strip it is the rail's (never panned).</summary>
     private void OnHostTouchDown(object? sender, TouchEventArgs e)
     {
+        _touchStoppedGlide = IsGliding; // such a tap only stops the glide: it never shows or hides the toolbar
         StopGlide(); // a finger (or the pen's tip) touching down stops a glide, wherever it lands
         var kind = IsPenInput() ? PointerKind.Pen : PointerKind.Finger;
         if (kind == PointerKind.Pen || Rail.IsPressed)
@@ -1427,8 +1467,10 @@ public partial class DocumentView : UserControl
             return; // only fingers tap; the pen never zooms
         }
 
+        CancelPendingSingleTap(); // a finger came down again: the earlier tap was not alone
         _touches.Add(e.TouchDevice.Id);
         _tapStart = _touches.Count == 1 ? (e.GetTouchPoint(Viewport).Position, e.Timestamp) : null;
+        _tapStoppedGlide = _touches.Count == 1 && _touchStoppedGlide;
         if (_touches.Count > 1)
         {
             _lastTap = null; // a pinch is never half of a double tap
@@ -1447,7 +1489,7 @@ public partial class DocumentView : UserControl
         var position = e.GetTouchPoint(Viewport).Position;
         if (unchecked(e.Timestamp - start.Time) <= DoubleTapTimeMs && (position - start.Position).Length <= DoubleTapDistanceDip)
         {
-            RegisterTap(position, e.Timestamp);
+            RegisterTap(position, e.Timestamp, _tapStoppedGlide);
         }
     }
 
