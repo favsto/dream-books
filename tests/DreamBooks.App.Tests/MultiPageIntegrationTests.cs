@@ -22,8 +22,10 @@ namespace DreamBooks.App.Tests;
 /// <see cref="DocumentView"/> (never shown), PDFium rendering and the real save pipeline on generated PDFs, plus a
 /// copy of a real e-book when one is available (NFR-02, NFR-05, NFR-06, FR-04, FR-26, FR-62, FR-80, FR-84).
 /// Everything runs on the shared WPF test thread; asynchronous work is awaited by pumping its dispatcher. Real
-/// documents are only read as copies and only sizes and times are reported (NFR-12).
+/// documents are only read as copies and only sizes and times are reported (NFR-12). Runs alone: the e-book test
+/// measures the process's private memory, which parallel tests building windows would inflate.
 /// </summary>
+[Collection(nameof(MarkIntegrationCollection))]
 public sealed class MultiPageIntegrationTests : IDisposable
 {
     private const string _realDocumentsFolder = @"C:\Users\Favsto\workspace\temp";
