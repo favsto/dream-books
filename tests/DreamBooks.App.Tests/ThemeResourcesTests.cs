@@ -88,6 +88,16 @@ public sealed class ThemeResourcesTests
     }
 
     [Fact]
+    public void The_toolbar_fade_in_the_theme_is_the_retract_the_visibility_state_waits_for()
+    {
+        // The view fades the pill over the theme's duration; the state machine counts the same time before "hidden"
+        // (section 3: 200 ms). Two definitions, one value.
+        WpfTestThread.Run(() => Assert.Equal(
+            ViewModels.ToolbarVisibilityState.RetractDuration,
+            (TimeSpan)Load("Theme.xaml")["ToolbarRetractDuration"]));
+    }
+
+    [Fact]
     public void The_light_and_dark_dictionaries_define_the_same_keys_and_nothing_of_the_shared_one()
     {
         WpfTestThread.Run(() =>
