@@ -39,17 +39,17 @@
                                    AutomationProperties.Name="{x:Static res:Strings.PressurePreview}" />
 
             <TextBlock Text="{x:Static res:Strings.PressureCurve}" Style="{StaticResource FlyoutHeader}" />
-            <StackPanel Orientation="Horizontal">
+            <UniformGrid Rows="1">
                 <RadioButton x:Name="CurveLinearRadio" Content="{x:Static res:Strings.CurveLinear}" AutomationProperties.Name="{x:Static res:Strings.CurveLinear}"
                              IsChecked="{Binding Tools.Curve, Converter={StaticResource EnumMatch}, ConverterParameter=Linear}" />
                 <RadioButton x:Name="CurveSoftRadio" Content="{x:Static res:Strings.CurveSoft}" AutomationProperties.Name="{x:Static res:Strings.CurveSoft}"
                              IsChecked="{Binding Tools.Curve, Converter={StaticResource EnumMatch}, ConverterParameter=Soft}" />
                 <RadioButton x:Name="CurveFirmRadio" Content="{x:Static res:Strings.CurveFirm}" AutomationProperties.Name="{x:Static res:Strings.CurveFirm}"
                              IsChecked="{Binding Tools.Curve, Converter={StaticResource EnumMatch}, ConverterParameter=Firm}" />
-            </StackPanel>
+            </UniformGrid>
 
             <TextBlock Text="{x:Static res:Strings.Smoothing}" Style="{StaticResource FlyoutHeader}" />
-            <StackPanel Orientation="Horizontal">
+            <UniformGrid Rows="1">
                 <RadioButton x:Name="SmoothingOffRadio" GroupName="PenSmoothing" Content="{x:Static res:Strings.SmoothingOff}"
                              AutomationProperties.Name="{x:Static res:Strings.SmoothingOff}"
                              IsChecked="{Binding Tools.Smoothing, Converter={StaticResource EnumMatch}, ConverterParameter=Off}" />
@@ -59,7 +59,7 @@
                 <RadioButton x:Name="SmoothingStrongRadio" GroupName="PenSmoothing" Content="{x:Static res:Strings.SmoothingStrong}"
                              AutomationProperties.Name="{x:Static res:Strings.SmoothingStrong}"
                              IsChecked="{Binding Tools.Smoothing, Converter={StaticResource EnumMatch}, ConverterParameter=Strong}" />
-            </StackPanel>
+            </UniformGrid>
         </StackPanel>
         </ScrollViewer>
     </views:FloatingSurface>

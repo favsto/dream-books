@@ -19,14 +19,14 @@
                       PanningMode="None" Focusable="False">
         <StackPanel Margin="{StaticResource FlyoutPadding}" KeyboardNavigation.TabNavigation="Cycle">
             <TextBlock Text="{x:Static res:Strings.EraserMode}" Style="{StaticResource FlyoutHeader}" Margin="{StaticResource FlyoutFirstHeaderMargin}" />
-            <StackPanel Orientation="Horizontal">
+            <UniformGrid Rows="1">
                 <RadioButton x:Name="WholeRadio" Content="{x:Static res:Strings.EraseWhole}"
                              AutomationProperties.Name="{x:Static res:Strings.EraseWhole}"
                              IsChecked="{Binding Eraser.IsWholeStroke}" />
                 <RadioButton x:Name="PartialRadio" Content="{x:Static res:Strings.ErasePartial}"
                              AutomationProperties.Name="{x:Static res:Strings.ErasePartial}"
                              IsChecked="{Binding Eraser.IsPartial}" />
-            </StackPanel>
+            </UniformGrid>
 
             <DockPanel Margin="{StaticResource FlyoutHeaderMargin}">
                 <TextBlock DockPanel.Dock="Right" Text="{Binding Eraser.SizeMm, StringFormat={}{0:0.0} mm}" VerticalAlignment="Center" />

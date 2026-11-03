@@ -448,7 +448,8 @@
     <Style TargetType="RadioButton" BasedOn="{StaticResource {x:Type RadioButton}}">
         <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
-        <Setter Property="Margin" Value="0,0,12,0" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="MinWidth" Value="0" />
     </Style>
     <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
         <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />

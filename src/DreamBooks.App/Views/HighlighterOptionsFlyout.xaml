@@ -25,14 +25,14 @@
                                  RemoveCommand="{Binding Highlighter.RemoveCustomColorCommand}" />
 
             <TextBlock Text="{x:Static res:Strings.HighlighterTip}" Style="{StaticResource FlyoutHeader}" />
-            <StackPanel Orientation="Horizontal">
+            <UniformGrid Rows="1">
                 <RadioButton x:Name="RoundRadio" Content="{x:Static res:Strings.HighlighterTipRound}"
                              AutomationProperties.Name="{x:Static res:Strings.HighlighterTipRound}"
                              IsChecked="{Binding Highlighter.IsRound}" />
                 <RadioButton x:Name="ChiselRadio" Content="{x:Static res:Strings.HighlighterTipChisel}"
                              AutomationProperties.Name="{x:Static res:Strings.HighlighterTipChisel}"
                              IsChecked="{Binding Highlighter.IsChisel}" />
-            </StackPanel>
+            </UniformGrid>
             <DockPanel Margin="{StaticResource Gap}">
                 <TextBlock DockPanel.Dock="Right" Text="{Binding Highlighter.ChiselAngleDeg, StringFormat={}{0:0}°}" VerticalAlignment="Center" />
                 <TextBlock Text="{x:Static res:Strings.HighlighterAngle}" VerticalAlignment="Center" />
