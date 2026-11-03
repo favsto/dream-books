@@ -143,7 +143,19 @@ public partial class MainWindow : FluentWindow
         // through, and the window's hook answers the non-client hit test for the pen before WPF UI's (added on the first
         // render; hooks added later run first). The parts are changed once laid out, when every part of its template (the
         // window buttons among them) is in the tree.
+        // Also when it is loaded, and when its template is applied again (a new style builds new parts at the same size,
+        // which SizeChanged would miss).
         AppTitleBar.SizeChanged += (_, _) => TitleBarPenInput.LetPenThrough(AppTitleBar);
+        AppTitleBar.Loaded += (_, _) => TitleBarPenInput.LetPenThrough(AppTitleBar);
+        var titleBarTemplate = DependencyPropertyDescriptor.FromProperty(Control.TemplateProperty, typeof(Control));
+        void OnTitleBarTemplateChanged(object? sender, EventArgs e)
+        {
+            AppTitleBar.ApplyTemplate(); // the new parts now, so they let the pen through before the next press
+            TitleBarPenInput.LetPenThrough(AppTitleBar);
+        }
+
+        titleBarTemplate.AddValueChanged(AppTitleBar, OnTitleBarTemplateChanged);
+        Closed += (_, _) => titleBarTemplate.RemoveValueChanged(AppTitleBar, OnTitleBarTemplateChanged); // a static table
         ContentRendered += OnFirstContentRendered;
     }
 

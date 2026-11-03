@@ -229,6 +229,17 @@ public sealed class MainWindowShellTests
 
                 // Below the title bar nothing changes.
                 Assert.Null(window.TitleBarHitTest(new Point(500, titleBar.ActualHeight + 20), isPen: true));
+
+                // The bar's template applied again (a new style, e.g. after a theme change) builds new parts, at the
+                // same size: they let the pen through too.
+                var template = titleBar.Template;
+                titleBar.Template = null;
+                Lay(root, 1000, 700);
+                titleBar.Template = template;
+                Lay(root, 1000, 700);
+                hit = ScrollRailTests.HitAt(root, dragArea);
+                Assert.False(ScrollRailTests.IsWithin(hit, titleBar), "the new template's parts take the pen");
+                Assert.True(ScrollRailTests.IsWithin(hit, window.DocumentViewer));
             }
             finally
             {
