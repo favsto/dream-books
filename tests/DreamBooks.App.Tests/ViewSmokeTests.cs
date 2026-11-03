@@ -57,7 +57,7 @@ public sealed class ViewSmokeTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -119,7 +119,7 @@ public sealed class ViewSmokeTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -172,7 +172,7 @@ public sealed class ViewSmokeTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }

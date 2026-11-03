@@ -268,7 +268,7 @@ public sealed class DebugPanelReplacementTests : IDisposable
                 }
                 finally
                 {
-                    window.Close();
+                    window.CloseForTests();
                 }
             });
         }

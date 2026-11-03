@@ -88,7 +88,7 @@ public sealed class EdgePanelTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -188,7 +188,7 @@ public sealed class EdgePanelTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -232,7 +232,7 @@ public sealed class EdgePanelTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -316,7 +316,7 @@ public sealed class EdgePanelTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -361,7 +361,7 @@ public sealed class EdgePanelTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -478,7 +478,7 @@ public sealed class EdgePanelTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -521,7 +521,7 @@ public sealed class EdgePanelTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -562,7 +562,7 @@ public sealed class EdgePanelTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -658,7 +658,7 @@ public sealed class EdgePanelTests : IDisposable
                 }
                 finally
                 {
-                    window.Close();
+                    window.CloseForTests();
                 }
             });
         }

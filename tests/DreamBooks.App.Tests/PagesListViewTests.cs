@@ -120,7 +120,7 @@ public sealed class PagesListViewTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -158,7 +158,7 @@ public sealed class PagesListViewTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -315,7 +315,7 @@ public sealed class PagesListViewTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
 
@@ -371,7 +371,7 @@ public sealed class PagesListViewTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -451,7 +451,7 @@ public sealed class PagesListViewTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }

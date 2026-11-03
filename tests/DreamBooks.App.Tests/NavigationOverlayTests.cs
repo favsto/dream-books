@@ -632,7 +632,7 @@ public sealed class NavigationOverlayTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -681,7 +681,7 @@ public sealed class NavigationOverlayTests : IDisposable
                 }
                 finally
                 {
-                    window.Close();
+                    window.CloseForTests();
                 }
             });
         }

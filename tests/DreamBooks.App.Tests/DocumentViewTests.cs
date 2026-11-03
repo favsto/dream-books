@@ -507,7 +507,7 @@ public sealed class DocumentViewTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }

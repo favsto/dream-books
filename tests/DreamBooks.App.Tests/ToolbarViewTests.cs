@@ -643,7 +643,7 @@ public sealed class ToolbarViewTests
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }

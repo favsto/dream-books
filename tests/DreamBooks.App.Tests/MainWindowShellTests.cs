@@ -49,7 +49,7 @@ public sealed class MainWindowShellTests
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -85,7 +85,7 @@ public sealed class MainWindowShellTests
             finally
             {
                 theme.SetMode(AppThemeMode.Light);
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -126,7 +126,7 @@ public sealed class MainWindowShellTests
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -162,7 +162,7 @@ public sealed class MainWindowShellTests
                     }
                     finally
                     {
-                        window.Close();
+                        window.CloseForTests();
                     }
                 }
 
@@ -179,7 +179,7 @@ public sealed class MainWindowShellTests
                 }
                 finally
                 {
-                    open.Close();
+                    open.CloseForTests();
                 }
             }
             finally
@@ -232,7 +232,7 @@ public sealed class MainWindowShellTests
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }

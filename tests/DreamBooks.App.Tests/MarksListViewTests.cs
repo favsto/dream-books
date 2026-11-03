@@ -233,7 +233,7 @@ public sealed class MarksListViewTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }

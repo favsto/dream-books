@@ -532,7 +532,7 @@ public sealed class MainMenuTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }

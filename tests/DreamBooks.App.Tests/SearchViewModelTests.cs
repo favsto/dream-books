@@ -850,7 +850,7 @@ public sealed class SearchViewModelTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
