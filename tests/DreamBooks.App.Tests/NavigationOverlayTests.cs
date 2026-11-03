@@ -103,6 +103,34 @@ public sealed class NavigationOverlayTests : IDisposable
         });
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_press_on_another_floating_control_closes_the_open_flyout_and_still_reaches_the_control(bool finger)
+    {
+        // Device test of 4a: "the first click on the toolbar and navigation buttons does nothing, the second acts". A
+        // light dismiss that swallowed the press made the first press only close the flyout.
+        await WithWindowAsync((vm, window) =>
+        {
+            var kind = finger ? PointerKind.Finger : PointerKind.Mouse;
+            var chip = window.IndicatorChip;
+            window.DocumentViewer.Rail.NotifyActivity();
+            window.UpdateLayout();
+            ToolbarViewTests.Invoke(window.FloatingToolbar.PenButton);
+            Assert.Equal(OptionsPanel.Pen, vm.Toolbar.OpenPanel);
+
+            var onChip = Centre(chip.IndicatorButton, window.PageHost);
+            Assert.False(window.RoutePagePress(onChip, kind), "the press reaches the chip's button");
+            Assert.Equal(OptionsPanel.None, vm.Toolbar.OpenPanel);
+
+            // On the bare page the same press still closes the flyout and is taken (the light dismiss stays).
+            ToolbarViewTests.Invoke(window.FloatingToolbar.PenButton);
+            Assert.Equal(OptionsPanel.Pen, vm.Toolbar.OpenPanel);
+            Assert.True(window.RoutePagePress(new Point(window.PageHost.ActualWidth / 3, window.PageHost.ActualHeight / 3), kind));
+            Assert.Equal(OptionsPanel.None, vm.Toolbar.OpenPanel);
+        });
+    }
+
     [Fact]
     public async Task Go_to_page_field_accepts_valid_numbers_only_Enter_goes_and_Esc_cancels()
     {

@@ -724,7 +724,33 @@ public partial class MainWindow : FluentWindow
         var flyout = FloatingToolbar.RoutePress(PageHost.TranslatePoint(position, FloatingToolbar), kind);
         var menu = MainMenu.RoutePress(PageHost.TranslatePoint(position, MainMenu), kind);
         var chip = IndicatorChip.RoutePress(PageHost.TranslatePoint(position, IndicatorChip), kind); // closes its open field
-        return panel || flyout || menu || chip;
+        if (!(panel || flyout || menu || chip))
+        {
+            return false;
+        }
+
+        // The dismissing press that lands on another floating control (the toolbar, the navigation buttons, the chip, the
+        // menu button) has closed what was open and then goes on to that control: the first press acts (device test of
+        // 4a). The left-edge panel's sheet keeps its own rule (a press on it closes it and is taken).
+        return panel || !IsOnFloatingControl(position);
+    }
+
+    /// <summary>True when the topmost element at <paramref name="position"/> (page host coordinates) is part of a floating surface.</summary>
+    private bool IsOnFloatingControl(Point position)
+    {
+        for (DependencyObject? current = VisualTreeHelper.HitTest(PageHost, position)?.VisualHit;
+             current is not null && !ReferenceEquals(current, PageHost);
+             current = current is Visual or System.Windows.Media.Media3D.Visual3D
+                 ? VisualTreeHelper.GetParent(current) ?? LogicalTreeHelper.GetParent(current)
+                 : LogicalTreeHelper.GetParent(current))
+        {
+            if (current is FloatingSurface)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
