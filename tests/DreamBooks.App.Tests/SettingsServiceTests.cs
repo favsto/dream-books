@@ -96,6 +96,45 @@ public sealed class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Theme_eraser_mode_colours_and_the_palette_survive_a_restart_into_a_new_main_view_model()
+    {
+        // The first run: the app's view model, as App and MainWindow wire it.
+        var first = NewService();
+        var themes = new List<ThemeMode>();
+        first.AttachTheme(s => themes.Add(s.ThemeMode));
+        var before = new MainViewModel(new FakeFileDialogService(), scheduler: _scheduler);
+        first.AttachTools(before.Tools);
+        first.AttachToolbar(before.Toolbar);
+        var violet = InkColor.FromRgb(0x80, 0x40, 0xC0);
+        var teal = InkColor.FromRgb(0x00, 0x80, 0x80);
+        before.Toolbar.Pen.AddCustomColorCommand.Execute(violet);
+        before.Toolbar.Highlighter.AddCustomColorCommand.Execute(teal);
+        before.Toolbar.Eraser.IsPartial = true;
+        before.Toolbar.Pen.WidthMm = 2.5;
+        first.Update(s => s with { ThemeMode = ThemeMode.Dark, ToolbarFixed = true });
+        _scheduler.Advance(SettingsService.SaveDelay);
+        await first.WhenWrittenAsync();
+
+        // The restart: a new service over the same file, a new view model.
+        var second = NewService();
+        var restartThemes = new List<ThemeMode>();
+        second.AttachTheme(s => restartThemes.Add(s.ThemeMode));
+        var after = new MainViewModel(new FakeFileDialogService(), scheduler: _scheduler);
+        second.AttachTools(after.Tools);
+        second.AttachToolbar(after.Toolbar);
+
+        Assert.Equal([ThemeMode.Dark], restartThemes);
+        Assert.True(after.Toolbar.IsToolbarFixed);
+        Assert.Equal(EraserMode.Partial, after.Tools.EraserMode); // the eraser tool and the pen's back end
+        Assert.True(after.Toolbar.Eraser.IsPartial);
+        Assert.Equal(violet, after.Tools.Color);
+        Assert.Equal(2.5, after.Tools.BaseWidthMm);
+        Assert.Equal(teal with { A = HighlighterPresets.Alpha }, after.Tools.Highlighter.Color);
+        Assert.Equal([violet, teal], after.Toolbar.Pen.CustomColors); // one palette, shared, oldest first
+        Assert.Equal([violet with { A = HighlighterPresets.Alpha }, teal with { A = HighlighterPresets.Alpha }], after.Toolbar.Highlighter.CustomColors);
+    }
+
+    [Fact]
     public async Task Saving_is_debounced_by_500_ms()
     {
         var service = NewService();
