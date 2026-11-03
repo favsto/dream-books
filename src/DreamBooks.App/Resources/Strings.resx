@@ -196,7 +196,7 @@
   <data name="ColorPickerSquare" xml:space="preserve"><value>Saturazione e luminosità</value></data>
   <data name="ColorPickerHex" xml:space="preserve"><value>Codice colore</value></data>
   <data name="ColorPickerHexHint" xml:space="preserve"><value>Sei cifre esadecimali, per esempio #1F5BD8</value></data>
-  <data name="ColorPickerAdd" xml:space="preserve"><value>Aggiungi</value></data>
+  <data name="ColorPickerConfirm" xml:space="preserve"><value>Conferma colore</value></data>
   <data name="HighlighterTip" xml:space="preserve"><value>Punta</value></data>
   <data name="SwatchChosen" xml:space="preserve"><value>scelto</value></data>
 </root>

@@ -432,8 +432,8 @@ internal static class Strings
     /// <summary>The hex field's hint (UI-02).</summary>
     public static string ColorPickerHexHint => Get(nameof(ColorPickerHexHint));
 
-    /// <summary>Adds the picked colour to the custom palette (UI-02).</summary>
-    public static string ColorPickerAdd => Get(nameof(ColorPickerAdd));
+    /// <summary>Adds the picked colour to the custom palette (UI-02); not the "+" swatch's name.</summary>
+    public static string ColorPickerConfirm => Get(nameof(ColorPickerConfirm));
 
     /// <summary>The highlighter panel's tip header (UI-02).</summary>
     public static string HighlighterTip => Get(nameof(HighlighterTip));

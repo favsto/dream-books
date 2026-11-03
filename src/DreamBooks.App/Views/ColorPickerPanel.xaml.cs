@@ -11,8 +11,9 @@ namespace DreamBooks.App.Views;
 /// <summary>
 /// The free colour picker hosted by <see cref="ColorSwatches"/> (UI-02 custom palette): its state is a
 /// <see cref="ColorPickerViewModel"/>; Add raises <see cref="Confirmed"/> with the colour, Cancel raises
-/// <see cref="Cancelled"/>. The square follows a finger or the mouse (the pen never reaches it: a pen press on a flyout
-/// closes the flyout) and the arrow keys.
+/// <see cref="Cancelled"/>. The square follows the pen, a finger or the mouse (the pen through its promoted mouse
+/// events) and the arrow keys. The hex field keeps the code as typed; it is written in the usual form (<c>#RRGGBB</c>)
+/// when the field loses the keyboard or on Enter.
 /// </summary>
 public partial class ColorPickerPanel : UserControl
 {
@@ -133,8 +134,19 @@ public partial class ColorPickerPanel : UserControl
         e.Handled = true;
     }
 
+    private void OnHexFieldLostFocus(object sender, KeyboardFocusChangedEventArgs e) => Model.CommitHex();
+
+    private void OnHexFieldKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            Model.CommitHex();
+        }
+    }
+
     private void OnConfirmClick(object sender, RoutedEventArgs e)
     {
+        Model.CommitHex();
         if (Model.IsHexValid)
         {
             Confirmed?.Invoke(this, Model.Color);

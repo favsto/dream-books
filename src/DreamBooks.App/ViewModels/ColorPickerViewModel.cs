@@ -7,8 +7,9 @@ namespace DreamBooks.App.ViewModels;
 /// <summary>
 /// The free colour picker of the pen and highlighter flyouts (UI-02 custom palette): a hue (0 to 360 degrees), a
 /// saturation and a brightness (0 to 1, the square), and the <c>#RRGGBB</c> code, kept in step. A code being typed that
-/// is not valid yet stays as typed (<see cref="IsHexValid"/> false) and the colour keeps its last valid value. Colours
-/// are opaque: the tool decides the alpha (the highlighter's stays 89).
+/// is not valid yet stays as typed (<see cref="IsHexValid"/> false) and the colour keeps its last valid value; a valid
+/// one also stays as typed (no reformatting under the caret) and gives exactly its colour, until <see cref="CommitHex"/>
+/// writes it as <c>#RRGGBB</c> (the field losing the keyboard, Enter, Add). Colours are opaque: the tool decides the alpha (the highlighter's stays 89).
 /// </summary>
 public sealed class ColorPickerViewModel : ObservableObject
 {
@@ -17,6 +18,7 @@ public sealed class ColorPickerViewModel : ObservableObject
     private double _brightness;
     private string _hex = "#000000";
     private bool _isHexValid = true;
+    private InkColor? _typed;
 
     /// <summary>The hue in degrees, wrapped into 0..360.</summary>
     public double Hue
@@ -40,12 +42,12 @@ public sealed class ColorPickerViewModel : ObservableObject
     }
 
     /// <summary>The colour chosen, opaque.</summary>
-    public InkColor Color => FromHsv(_hue, _saturation, _brightness);
+    public InkColor Color => _typed ?? FromHsv(_hue, _saturation, _brightness);
 
     /// <summary>The pure hue (full saturation and brightness): the square's background.</summary>
     public InkColor HueColor => FromHsv(_hue, 1, 1);
 
-    /// <summary>The <c>#RRGGBB</c> code; setting a valid one (the '#' optional) moves the colour to it.</summary>
+    /// <summary>The <c>#RRGGBB</c> code; setting a valid one (the '#' optional, any case) moves the colour to it.</summary>
     public string Hex
     {
         get => _hex;
@@ -55,7 +57,7 @@ public sealed class ColorPickerViewModel : ObservableObject
             if (HexColor.TryParse(value, 255, out var color))
             {
                 var (h, s, v) = ToHsv(color);
-                SetHsv(h, s, v);
+                SetHsv(h, s, v, value, color);
                 return;
             }
 
@@ -69,6 +71,15 @@ public sealed class ColorPickerViewModel : ObservableObject
     {
         get => _isHexValid;
         private set => SetProperty(ref _isHexValid, value);
+    }
+
+    /// <summary>Writes a valid typed code in the usual form, <c>#RRGGBB</c>; an invalid one stays as typed.</summary>
+    public void CommitHex()
+    {
+        if (IsHexValid && HexColor.TryNormalize(_hex, out var normalized))
+        {
+            SetProperty(ref _hex, normalized, nameof(Hex));
+        }
     }
 
     /// <summary>Starts the picker from <paramref name="color"/> (the colour in use).</summary>
@@ -140,8 +151,9 @@ public sealed class ColorPickerViewModel : ObservableObject
     private static byte Channel(double value) =>
         (byte)Math.Clamp(Math.Round(value * 255, MidpointRounding.AwayFromZero), 0, 255);
 
-    private void SetHsv(double hue, double saturation, double brightness)
+    private void SetHsv(double hue, double saturation, double brightness, string? typed = null, InkColor? typedColor = null)
     {
+        _typed = typedColor;
         var hueChanged = SetProperty(ref _hue, hue, nameof(Hue));
         SetProperty(ref _saturation, saturation, nameof(Saturation));
         SetProperty(ref _brightness, brightness, nameof(Brightness));
@@ -151,7 +163,7 @@ public sealed class ColorPickerViewModel : ObservableObject
             OnPropertyChanged(nameof(HueColor));
         }
 
-        SetProperty(ref _hex, HexColor.Format(Color), nameof(Hex));
+        SetProperty(ref _hex, typed ?? HexColor.Format(Color), nameof(Hex));
         IsHexValid = true;
     }
 }

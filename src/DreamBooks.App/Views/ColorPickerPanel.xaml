@@ -38,10 +38,11 @@
                      Fill="{Binding Color, Converter={StaticResource ColorBrush}}" />
             <Button x:Name="CancelButton" DockPanel.Dock="Right" Content="{x:Static res:Strings.Cancel}" Margin="4,0,0,0"
                     Click="OnCancelClick" AutomationProperties.Name="{x:Static res:Strings.Cancel}" />
-            <Button x:Name="ConfirmButton" DockPanel.Dock="Right" Content="{x:Static res:Strings.ColorPickerAdd}" Margin="4,0,0,0"
+            <Button x:Name="ConfirmButton" DockPanel.Dock="Right" Content="{x:Static res:Strings.ColorPickerConfirm}" Margin="4,0,0,0"
                     Click="OnConfirmClick" IsEnabled="{Binding IsHexValid}"
-                    AutomationProperties.Name="{x:Static res:Strings.AddCustomColor}" />
+                    AutomationProperties.Name="{x:Static res:Strings.ColorPickerConfirm}" />
             <TextBox x:Name="HexField" Text="{Binding Hex, UpdateSourceTrigger=PropertyChanged}"
+                     LostKeyboardFocus="OnHexFieldLostFocus" KeyDown="OnHexFieldKeyDown"
                      MinHeight="{StaticResource TouchTarget}" VerticalContentAlignment="Center"
                      ToolTip="{x:Static res:Strings.ColorPickerHexHint}"
                      AutomationProperties.Name="{x:Static res:Strings.ColorPickerHex}"

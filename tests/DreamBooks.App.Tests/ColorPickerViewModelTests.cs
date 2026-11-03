@@ -61,6 +61,36 @@ public class ColorPickerViewModelTests
     }
 
     [Fact]
+    public void A_valid_code_being_typed_is_not_rewritten_until_it_is_committed()
+    {
+        var picker = new ColorPickerViewModel();
+        picker.Reset(InkColor.FromRgb(0, 0, 0));
+        var hexChanges = new List<string>();
+        picker.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ColorPickerViewModel.Hex))
+            {
+                hexChanges.Add(picker.Hex);
+            }
+        };
+
+        picker.Hex = "1f5bd8"; // valid at the sixth character, lower case, no #
+        Assert.Equal("1f5bd8", picker.Hex); // the text under the caret stays as typed
+        Assert.True(picker.IsHexValid);
+        Assert.Equal(InkColor.FromRgb(0x1F, 0x5B, 0xD8), picker.Color); // exactly the typed colour
+        Assert.DoesNotContain("#1F5BD8", hexChanges);
+
+        picker.CommitHex(); // the field lost the keyboard, Enter, or Add
+        Assert.Equal("#1F5BD8", picker.Hex);
+        Assert.Equal(InkColor.FromRgb(0x1F, 0x5B, 0xD8), picker.Color);
+
+        picker.Hex = "#12";
+        picker.CommitHex(); // an invalid code stays as typed
+        Assert.Equal("#12", picker.Hex);
+        Assert.False(picker.IsHexValid);
+    }
+
+    [Fact]
     public void A_typed_hex_code_sets_the_colour_and_an_invalid_one_is_flagged()
     {
         var picker = new ColorPickerViewModel();
