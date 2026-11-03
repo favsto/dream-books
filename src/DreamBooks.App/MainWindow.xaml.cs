@@ -49,11 +49,22 @@ public partial class MainWindow : FluentWindow
     /// The window with the app's theme service (null in tests that do not switch themes): after each theme change the
     /// backdrop is applied again, as WPF UI's theme manager re-applies the main window's backdrop itself.
     /// </summary>
-    internal MainWindow(ThemeService? theme)
+    /// <param name="theme">The app's theme service, or null.</param>
+    /// <param name="settings">
+    /// The app settings (FR-110): the tools and the toolbar take the remembered values and every change is remembered;
+    /// null in tests that do not use the settings file.
+    /// </param>
+    internal MainWindow(ThemeService? theme, SettingsService? settings = null)
     {
         _theme = theme;
         InitializeComponent();
         DataContext = _viewModel;
+        if (settings is not null)
+        {
+            settings.AttachTools(_viewModel.Tools);
+            settings.AttachToolbar(_viewModel.Toolbar);
+        }
+
         Loaded += OnLoaded;
         ApplyBackdrop();
         if (theme is not null)
