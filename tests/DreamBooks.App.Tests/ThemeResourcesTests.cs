@@ -11,7 +11,7 @@ public sealed class ThemeResourcesTests
 {
     private static readonly string[] _keysBeforeTheSplit =
     [
-        "TouchTarget", "PanelWidth", "ProgressBarHeight", "Gap", "SectionGap", "ChiselAngleSmallChange",
+        "TouchTarget", "Gap", "SectionGap", "ChiselAngleSmallChange",
         "ChiselAngleLargeChange", "EraserCursorFill", "EraserCursorOutline", "EraserCursorOutlineThickness",
         "PageBackdropBrush", "PagePlaceholderBrush", "PageFadeInDuration", "PageFadeInFromOpacity", "RailFadeInDuration",
         "RailFadeOutDuration", "RailIdleDelay", "RailTouchWidth", "RailBarWidth", "RailKnobWidth", "RailKnobHeight",
@@ -27,8 +27,8 @@ public sealed class ThemeResourcesTests
         "IndicatorChipMargin", "FlingDecayTimeConstant", "FlingMinSpeed", "FlingMaxSpeed", "EdgePanelWidth",
         "EdgePanelOpenDuration", "EdgePanelCloseDuration", "EdgeSwipeZoneWidth", "EdgePanelCornerRadius",
         "EdgePanelPadding", "EdgePanelMargin", "EdgePanelBackgroundBrush", "EdgePanelBackgroundBrushOpaque",
-        "EdgePanelShadow", "EdgePanelTitleSize", "EdgePanelDetailMargin", "CloseGlyph", "PreviousMarkGlyph",
-        "NextMarkGlyph", "GlyphSize", "GlyphStrokeThickness", "GlyphBrush", "MarkThumbnailWidth", "MarkThumbnailHeight",
+        "EdgePanelShadow", "EdgePanelTitleSize", "EdgePanelDetailMargin", "CloseGlyph",
+        "GlyphSize", "GlyphStrokeThickness", "GlyphBrush", "MarkThumbnailWidth", "MarkThumbnailHeight",
         "MarkThumbnailMinStrokeWidth", "MarkThumbnailBorderBrush", "MarkRowPadding", "MarkRowLabelMargin",
         "GoToPageFieldWidth", "EdgePanelTabMargin", "EdgePanelTabPadding", "EdgePanelTabIndicatorThickness",
         "EdgePanelTabIndicatorBrush", "PagesThumbnailWidth", "PagesThumbnailMinStrokeWidth",
@@ -36,7 +36,7 @@ public sealed class ThemeResourcesTests
         "PagesCurrentRingThickness", "PagesCurrentRingPadding", "PagesCurrentRingCornerRadius", "PagesCurrentRingBrush",
         "PagesTickColumnWidth", "PagesTickMargin", "PagesTickGap", "PagesTickWidth", "PagesTickHeight",
         "SearchHighlightColor", "SearchCurrentHighlightColor", "SearchHighlightBrush", "SearchCurrentHighlightBrush",
-        "SearchHighlightPaddingPt", "EdgePanelTabStyle", "SectionLabel",
+        "SearchHighlightPaddingPt", "EdgePanelTabStyle",
     ];
 
     /// <summary>The new shell's tokens (section 3): window fallback, page shadow, floating panels.</summary>
@@ -51,6 +51,14 @@ public sealed class ThemeResourcesTests
         "SearchPillPadding", "SearchFieldWidth", "SearchGlyphMargin", "SearchCountMargin", "SearchCountMinWidth",
         "SearchMessageMargin", "SearchMessagePadding", "SearchMessageMaxWidth", "GlyphBack", "GlyphPrevious", "GlyphNext",
         "GlyphSearch", "GlyphClose", "GlyphZoomIn", "GlyphZoomOut",
+
+        // The main menu, the save line and the notices (UI-03, FR-89, FR-84, task 5); the debug panel's PanelWidth,
+        // ProgressBarHeight, SectionLabel and Previous/NextMarkGlyph went with it.
+        "GlyphFitWidth", "GlyphMenu", "MainMenuMargin", "MainMenuPanelMargin", "MainMenuPanelWidth", "MainMenuPanelPadding",
+        "MenuItemPadding", "MenuShortcutMargin", "MenuSeparatorMargin", "MenuSeparatorHeight", "MenuItemStyle",
+        "MenuShortcutText", "SaveProgressLineHeight", "SaveProgressBarFraction", "SaveProgressCycleDuration",
+        "SaveProgressBarBrush", "TopOverlaysMargin", "NoticeBarMargin", "NoticeBarPadding", "NoticeBarMaxWidth",
+        "NoticeTextMargin",
     ];
 
     [Theory]

@@ -288,13 +288,15 @@ public sealed class EdgePanelTests : IDisposable
                 Assert.Same(window.MarksList, panel.Body);
                 Assert.Same(vm.Marks, window.MarksList.DataContext);
 
-                // The menu entry opens it, on the marks tab (3b-2 adds the Pages tab to the same panel).
-                Assert.Same(panel.OpenTabCommand, window.OpenMarksListButton.Command);
-                Assert.Equal("0", window.OpenMarksListButton.CommandParameter);
-                Assert.Equal(Strings.OpenMarksList, AutomationProperties.GetName(window.OpenMarksListButton));
-                Assert.True(window.OpenMarksListButton.MinHeight >= 40);
-                window.OpenMarksListButton.Command.Execute(null);
+                // The main menu's entry opens it, on the marks tab (3b-2 adds the Pages tab to the same panel).
+                var entry = window.MainMenu.MarksItem;
+                Assert.Same(panel.OpenTabCommand, entry.Command);
+                Assert.Equal(MainWindow.MarksTab, entry.CommandParameter);
+                Assert.Equal(Strings.OpenMarksList, AutomationProperties.GetName(entry));
+                Assert.True(entry.MinHeight >= 40);
+                entry.Command.Execute(entry.CommandParameter);
                 Assert.True(panel.IsOpen);
+                Assert.Equal(MainWindow.MarksTab, panel.SelectedTab);
 
                 // The count is in the header.
                 Assert.Equal("Marks.Count", BindingOperations.GetBinding(panel, EdgePanel.HeaderDetailProperty)?.Path.Path);
@@ -302,12 +304,12 @@ public sealed class EdgePanelTests : IDisposable
                 // Automation names are unique among the window's commands.
                 var names = new[]
                 {
-                    AutomationProperties.GetName(window.PreviousMarkButton),
-                    AutomationProperties.GetName(window.NextMarkButton),
-                    AutomationProperties.GetName(window.OpenMarksListButton),
+                    AutomationProperties.GetName(window.NavButtons.PreviousMarkButton),
+                    AutomationProperties.GetName(window.NavButtons.NextMarkButton),
+                    AutomationProperties.GetName(window.MainMenu.MarksItem),
                     AutomationProperties.GetName(panel.CloseButton),
                     AutomationProperties.GetName(window.MarksList.List),
-                    AutomationProperties.GetName(window.BackButton),
+                    AutomationProperties.GetName(window.NavButtons.BackButton),
                 };
                 Assert.Equal(names.Length, names.Distinct().Count());
                 Assert.All(names, n => Assert.False(string.IsNullOrEmpty(n)));
@@ -331,13 +333,16 @@ public sealed class EdgePanelTests : IDisposable
                 var vm = (MainViewModel)window.DataContext;
                 var marks = vm.Marks;
 
-                Assert.Same(marks.PreviousCommand, window.PreviousMarkButton.Command);
-                Assert.Same(marks.NextCommand, window.NextMarkButton.Command);
-                Assert.Equal(Strings.PreviousMark, AutomationProperties.GetName(window.PreviousMarkButton));
-                Assert.Equal(Strings.NextMark, AutomationProperties.GetName(window.NextMarkButton));
-                foreach (var button in new[] { window.PreviousMarkButton, window.NextMarkButton })
+                // The round buttons above the indicator chip (the debug panel's are gone, phase 4a).
+                var nav = window.NavButtons;
+                Assert.Same(marks.PreviousCommand, nav.PreviousMarkButton.Command);
+                Assert.Same(marks.NextCommand, nav.NextMarkButton.Command);
+                Assert.Equal(Strings.PreviousMark, AutomationProperties.GetName(nav.PreviousMarkButton));
+                Assert.Equal(Strings.NextMark, AutomationProperties.GetName(nav.NextMarkButton));
+                foreach (var button in new[] { nav.PreviousMarkButton, nav.NextMarkButton })
                 {
-                    Assert.True(button.ActualWidth >= 40 && button.ActualHeight >= 40, "40 x 40 touch target");
+                    // Collapsed without a document: the size the style gives them.
+                    Assert.True(button.Width >= 40 && button.Height >= 40, "40 x 40 touch target");
                     Assert.True(button.Focusable && button.IsTabStop, "keyboard reachable");
                 }
 
@@ -351,8 +356,8 @@ public sealed class EdgePanelTests : IDisposable
                 Assert.Contains((Key.Down, ModifierKeys.Alt, (ICommand)marks.NextCommand), gestures);
 
                 // "No other mark" is shown next to the buttons.
-                Assert.Equal("Marks.StatusText", BindingOperations.GetBinding(window.MarkStatusText, TextBlock.TextProperty)?.Path.Path);
-                Assert.Equal(Visibility.Collapsed, window.MarkStatusText.Visibility);
+                Assert.Equal("Marks.StatusText", BindingOperations.GetBinding(nav.StatusText, TextBlock.TextProperty)?.Path.Path);
+                Assert.Equal(Visibility.Collapsed, nav.StatusSurface.Visibility);
             }
             finally
             {
@@ -509,7 +514,7 @@ public sealed class EdgePanelTests : IDisposable
                 ScrollRailTests.LayOut((FrameworkElement)window.Content, 1200, 800);
                 window.MarksPanel.AnimationsEnabled = () => false;
                 window.MarksPanel.Open();
-                Assert.False(window.RouteKey(Key.Escape, ModifierKeys.None, window.GoToPageField)); // the field's own Esc
+                Assert.False(window.RouteKey(Key.Escape, ModifierKeys.None, window.IndicatorChip.GoToPageBox)); // the field's own Esc
                 Assert.True(window.MarksPanel.IsOpen);
                 Assert.True(window.RouteKey(Key.Escape, ModifierKeys.None, window.MarksList.List));
                 Assert.False(window.MarksPanel.IsOpen);

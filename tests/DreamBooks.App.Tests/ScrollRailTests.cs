@@ -487,8 +487,9 @@ public sealed class ScrollRailTests : IDisposable
             Assert.Equal(6, viewport.CurrentPage);
             Assert.True(viewport.History.CanGoBack);
 
-            // The field itself is the indicator chip's (NavigationOverlayTests); its name differs from the panel's.
-            Assert.NotEqual(Strings.GoToPage, Strings.GoToPageIndicatorField);
+            // The field itself is the indicator chip's (NavigationOverlayTests), the only one now that the debug panel's
+            // is gone.
+            Assert.False(string.IsNullOrEmpty(Strings.GoToPageIndicatorField));
         });
     }
 
@@ -587,13 +588,14 @@ public sealed class ScrollRailTests : IDisposable
                 WpfTestThread.Drain();
                 var slider = FindDescendant<Slider>(window)!;
 
-                Assert.False(window.RouteKey(Key.PageDown, ModifierKeys.None, window.GoToPageField));
+                var back = window.NavButtons.BackButton;
+                Assert.False(window.RouteKey(Key.PageDown, ModifierKeys.None, window.IndicatorChip.GoToPageBox));
                 Assert.False(window.RouteKey(Key.End, ModifierKeys.None, slider));
-                Assert.False(window.RouteKey(Key.End, ModifierKeys.Shift, window.BackButton));
-                Assert.False(window.RouteKey(Key.Left, ModifierKeys.Alt, window.BackButton)); // left to the KeyBinding
+                Assert.False(window.RouteKey(Key.End, ModifierKeys.Shift, back));
+                Assert.False(window.RouteKey(Key.Left, ModifierKeys.Alt, back)); // left to the KeyBinding
                 Assert.Equal(0, vm.Viewport.CurrentPage);
 
-                Assert.True(window.RouteKey(Key.End, ModifierKeys.None, window.BackButton)); // focus on a panel button
+                Assert.True(window.RouteKey(Key.End, ModifierKeys.None, back)); // focus on a floating button
                 Assert.Equal(_pageCount - 1, vm.Viewport.CurrentPage);
             }
             finally
@@ -930,14 +932,17 @@ public sealed class ScrollRailTests : IDisposable
                 LayOut((FrameworkElement)window.Content, 1000, 700);
                 var vm = (MainViewModel)window.DataContext;
                 Assert.NotNull(window.DocumentViewer.Rail);
-                Assert.Same(vm.Viewport.BackCommand, window.BackButton.Command);
-                Assert.False(window.BackButton.IsEnabled); // nothing to go back to
-                Assert.Equal(Strings.Back, AutomationProperties.GetName(window.BackButton));
-                Assert.True(window.BackButton.MinHeight >= 40);
-                Assert.Equal(Strings.GoToPage, AutomationProperties.GetName(window.GoToPageField));
-                Assert.Equal(Strings.GoToPageHint, AutomationProperties.GetHelpText(window.GoToPageField));
-                Assert.True(window.GoToPageField.MinHeight >= 40);
-                Assert.Equal(Visibility.Visible, window.GoToPageField.Visibility);
+                // Back above the indicator chip, the go-to-page field in the chip (the debug panel's are gone, phase 4a).
+                var back = window.NavButtons.BackButton;
+                var field = window.IndicatorChip.GoToPageBox;
+                Assert.Same(vm.Viewport.BackCommand, back.Command);
+                Assert.False(back.IsEnabled); // nothing to go back to
+                Assert.Equal(Strings.Back, AutomationProperties.GetName(back));
+                Assert.True(back.Height >= 40);
+                Assert.Equal(Strings.GoToPageIndicatorField, AutomationProperties.GetName(field));
+                Assert.Equal(Strings.GoToPageHint, AutomationProperties.GetHelpText(field));
+                Assert.True(field.MinHeight >= 40);
+                Assert.Equal(Visibility.Collapsed, field.Visibility); // until the indicator is tapped
             }
             finally
             {

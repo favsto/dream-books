@@ -29,9 +29,10 @@ public sealed class MainWindowShellTests
                 Assert.Equal(Colors.Transparent, Assert.IsType<SolidColorBrush>(window.Background).Color); // Mica shows
                 Assert.True(window.ExtendsContentIntoTitleBar);
 
-                // The title bar shows the window title (the file name) and the window buttons...
+                // The title bar shows the file name alone, small, with the dirty mark (UI-06; the window's own title keeps
+                // the app name for the taskbar) and the window buttons...
                 var titleBar = window.AppTitleBar;
-                Assert.Equal(nameof(ViewModels.MainViewModel.WindowTitle),
+                Assert.Equal(nameof(ViewModels.MainViewModel.DocumentTitle),
                     BindingOperations.GetBinding(titleBar, TitleBar.TitleProperty)?.Path.Path);
                 Assert.Equal(nameof(ViewModels.MainViewModel.WindowTitle),
                     BindingOperations.GetBinding(window, Window.TitleProperty)?.Path.Path);

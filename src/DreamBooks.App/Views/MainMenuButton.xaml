@@ -1,0 +1,114 @@
+<UserControl x:Class="DreamBooks.App.Views.MainMenuButton"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="clr-namespace:DreamBooks.App.Resources"
+             xmlns:views="clr-namespace:DreamBooks.App.Views"
+             HorizontalAlignment="Left" VerticalAlignment="Top" Margin="{StaticResource MainMenuMargin}"
+             Focusable="False" IsTabStop="False">
+    <!-- The main menu (UI-03): a round button at the top left, below the title bar, and the panel it opens under it:
+         Apri…, Salva, Salva con nome…, File recenti and Esporta (disabled until 4b), Segni, Pagine, Cerca, Impostazioni
+         (disabled until 4b). The data context is the MainViewModel; the window gives the Segni / Pagine / Cerca entries
+         their commands (the left-edge panel's and the search pill's). An entry closes the menu and runs its command;
+         Esc, a press outside it and the button close it.
+         Pen rule (as the toolbar's flyouts): only the two surfaces hit-test and they carry the inert stylus plug-in; on
+         them the pen presses the button and the entries like a finger; a pen press outside closes the menu and inks; closed,
+         the panel takes nothing. -->
+    <StackPanel>
+        <views:FloatingSurface x:Name="ButtonSurface" CornerRadius="{StaticResource PillCornerRadius}" HorizontalAlignment="Left"
+                               Stylus.IsPressAndHoldEnabled="False">
+            <Button x:Name="MenuButton" Style="{StaticResource ToolbarButtonStyle}" Margin="0" Content="{StaticResource GlyphMenu}"
+                    Click="OnMenuButtonClick"
+                    ToolTip="{x:Static res:Strings.MainMenu}" AutomationProperties.Name="{x:Static res:Strings.MainMenu}" />
+        </views:FloatingSurface>
+
+        <!-- The host fades, scales and hides; the surface (with the stylus plug-in) is never transformed itself: WPF's
+             plug-in collection threw in its layout update (seen in the STA tests) when the element carrying the plug-in had
+             its own render transform. -->
+        <Grid x:Name="PanelHost" HorizontalAlignment="Left" Margin="{StaticResource MainMenuPanelMargin}"
+              Visibility="Collapsed" IsHitTestVisible="False" RenderTransformOrigin="0,0">
+        <views:FloatingSurface x:Name="PanelSurface" CornerRadius="{StaticResource PanelCornerRadius}"
+                               Width="{StaticResource MainMenuPanelWidth}"
+                               Stylus.IsPressAndHoldEnabled="False"
+                               AutomationProperties.Name="{x:Static res:Strings.MainMenuPanel}">
+            <StackPanel x:Name="EntryList" Margin="{StaticResource MainMenuPanelPadding}"
+                        KeyboardNavigation.TabNavigation="Cycle" KeyboardNavigation.DirectionalNavigation="Cycle">
+                <Button x:Name="OpenItem" Style="{StaticResource MenuItemStyle}" Command="{Binding OpenPdfCommand}"
+                        AutomationProperties.Name="{x:Static res:Strings.OpenPdf}"
+                        AutomationProperties.AcceleratorKey="{x:Static res:Strings.ShortcutOpen}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Right" Text="{x:Static res:Strings.ShortcutOpen}" Style="{StaticResource MenuShortcutText}" />
+                        <TextBlock Text="{x:Static res:Strings.MenuOpen}" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Button>
+                <Button x:Name="SaveItem" Style="{StaticResource MenuItemStyle}" Command="{Binding SaveCommand}"
+                        AutomationProperties.Name="{x:Static res:Strings.Save}"
+                        AutomationProperties.AcceleratorKey="{x:Static res:Strings.ShortcutSave}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Right" Text="{x:Static res:Strings.ShortcutSave}" Style="{StaticResource MenuShortcutText}" />
+                        <TextBlock Text="{x:Static res:Strings.Save}" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Button>
+                <Button x:Name="SaveAsItem" Style="{StaticResource MenuItemStyle}" Command="{Binding SaveAsCommand}"
+                        AutomationProperties.Name="{x:Static res:Strings.SaveAs}"
+                        AutomationProperties.AcceleratorKey="{x:Static res:Strings.ShortcutSaveAs}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Right" Text="{x:Static res:Strings.ShortcutSaveAs}" Style="{StaticResource MenuShortcutText}" />
+                        <TextBlock Text="{x:Static res:Strings.MenuSaveAs}" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Button>
+
+                <Border x:Name="Separator1" Height="{StaticResource MenuSeparatorHeight}" Margin="{StaticResource MenuSeparatorMargin}"
+                        Background="{DynamicResource ToolbarSeparatorBrush}" IsHitTestVisible="False" />
+
+                <Button x:Name="RecentItem" Style="{StaticResource MenuItemStyle}" IsEnabled="False"
+                        AutomationProperties.Name="{x:Static res:Strings.MenuRecentFiles}"
+                        AutomationProperties.HelpText="{x:Static res:Strings.MenuNotYetAvailable}">
+                    <TextBlock Text="{x:Static res:Strings.MenuRecentFiles}" VerticalAlignment="Center" />
+                </Button>
+                <Button x:Name="ExportItem" Style="{StaticResource MenuItemStyle}" IsEnabled="False"
+                        AutomationProperties.Name="{x:Static res:Strings.MenuExport}"
+                        AutomationProperties.HelpText="{x:Static res:Strings.MenuNotYetAvailable}">
+                    <TextBlock Text="{x:Static res:Strings.MenuExport}" VerticalAlignment="Center" />
+                </Button>
+
+                <Border x:Name="Separator2" Height="{StaticResource MenuSeparatorHeight}" Margin="{StaticResource MenuSeparatorMargin}"
+                        Background="{DynamicResource ToolbarSeparatorBrush}" IsHitTestVisible="False" />
+
+                <Button x:Name="MarksItem" Style="{StaticResource MenuItemStyle}"
+                        AutomationProperties.Name="{x:Static res:Strings.OpenMarksList}"
+                        AutomationProperties.AcceleratorKey="{x:Static res:Strings.ShortcutMarks}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Right" Text="{x:Static res:Strings.ShortcutMarks}" Style="{StaticResource MenuShortcutText}" />
+                        <TextBlock Text="{x:Static res:Strings.MarksList}" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Button>
+                <Button x:Name="PagesItem" Style="{StaticResource MenuItemStyle}"
+                        AutomationProperties.Name="{x:Static res:Strings.OpenPagesList}"
+                        AutomationProperties.AcceleratorKey="{x:Static res:Strings.ShortcutPages}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Right" Text="{x:Static res:Strings.ShortcutPages}" Style="{StaticResource MenuShortcutText}" />
+                        <TextBlock Text="{x:Static res:Strings.PagesListButton}" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Button>
+                <Button x:Name="SearchItem" Style="{StaticResource MenuItemStyle}"
+                        AutomationProperties.Name="{x:Static res:Strings.MenuSearchName}"
+                        AutomationProperties.AcceleratorKey="{x:Static res:Strings.ShortcutSearch}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Right" Text="{x:Static res:Strings.ShortcutSearch}" Style="{StaticResource MenuShortcutText}" />
+                        <TextBlock Text="{x:Static res:Strings.Search}" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Button>
+
+                <Border x:Name="Separator3" Height="{StaticResource MenuSeparatorHeight}" Margin="{StaticResource MenuSeparatorMargin}"
+                        Background="{DynamicResource ToolbarSeparatorBrush}" IsHitTestVisible="False" />
+
+                <Button x:Name="SettingsItem" Style="{StaticResource MenuItemStyle}" IsEnabled="False"
+                        AutomationProperties.Name="{x:Static res:Strings.MenuSettings}"
+                        AutomationProperties.HelpText="{x:Static res:Strings.MenuNotYetAvailable}">
+                    <TextBlock Text="{x:Static res:Strings.MenuSettings}" VerticalAlignment="Center" />
+                </Button>
+            </StackPanel>
+        </views:FloatingSurface>
+        </Grid>
+    </StackPanel>
+</UserControl>

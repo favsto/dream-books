@@ -6,8 +6,6 @@
          Theme.Light.xaml / Theme.Dark.xaml, merged after this one by App.AddThemeResources and swapped by ThemeService; reach them
          with DynamicResource. -->
     <sys:Double x:Key="TouchTarget">40</sys:Double>
-    <sys:Double x:Key="PanelWidth">280</sys:Double>
-    <sys:Double x:Key="ProgressBarHeight">4</sys:Double>
     <Thickness x:Key="Gap">0,4,0,0</Thickness>
     <Thickness x:Key="SectionGap">0,12,0,0</Thickness>
     <!-- The window's title bar (UI-06) lies over the document: 40 px (the touch target; WPF UI's default is 48),
@@ -113,10 +111,8 @@
     <!-- EdgePanelBackgroundBrush(Opaque) and EdgePanelShadow: theme dictionaries. -->
     <sys:Double x:Key="EdgePanelTitleSize">16</sys:Double>
     <Thickness x:Key="EdgePanelDetailMargin">8,0,0,0</Thickness>
-    <!-- Close glyph (an X) and the previous/next mark chevrons, drawn in a 12 x 12 box with the text colour. -->
+    <!-- Close glyph (an X), drawn in a 12 x 12 box with the text colour. -->
     <Geometry x:Key="CloseGlyph">M 1,1 L 11,11 M 11,1 L 1,11</Geometry>
-    <Geometry x:Key="PreviousMarkGlyph">M 1,9 L 6,3 L 11,9</Geometry>
-    <Geometry x:Key="NextMarkGlyph">M 1,3 L 6,9 L 11,3</Geometry>
     <sys:Double x:Key="GlyphSize">12</sys:Double>
     <sys:Double x:Key="GlyphStrokeThickness">1.5</sys:Double>
     <!-- GlyphBrush: theme dictionaries. -->
@@ -244,6 +240,35 @@
     <sys:String x:Key="GlyphClose">&#xE711;</sys:String>
     <sys:String x:Key="GlyphZoomIn">&#xE8A3;</sys:String>
     <sys:String x:Key="GlyphZoomOut">&#xE71F;</sys:String>
+    <sys:String x:Key="GlyphFitWidth">&#xE9A6;</sys:String>
+    <sys:String x:Key="GlyphMenu">&#xE700;</sys:String>
+
+    <!-- The main menu (UI-03): a round 40 px floating button at the top left, 8 DIP below the title bar and from the
+         edge, and its panel under it (12 px corners, the toolbar's material): 40 px entries with 8 px corners, the
+         shortcut on the right in the secondary text colour, thin separators. It appears like a flyout (fade and scale,
+         FlyoutOpenDuration, instant when Windows animations are off) and goes at once. -->
+    <Thickness x:Key="MainMenuMargin">8,48,0,0</Thickness>
+    <Thickness x:Key="MainMenuPanelMargin">0,8,0,0</Thickness>
+    <sys:Double x:Key="MainMenuPanelWidth">280</sys:Double>
+    <Thickness x:Key="MainMenuPanelPadding">4</Thickness>
+    <Thickness x:Key="MenuItemPadding">12,0,12,0</Thickness>
+    <Thickness x:Key="MenuShortcutMargin">24,0,0,0</Thickness>
+    <Thickness x:Key="MenuSeparatorMargin">8,4,8,4</Thickness>
+    <sys:Double x:Key="MenuSeparatorHeight">1</sys:Double>
+
+    <!-- The save progress line (FR-89) under the title bar, the window's width, while a save runs: an accent segment a
+         third of the width sliding across in 1.2 s; with Windows animations off a still, full line (NFR-32). -->
+    <sys:Double x:Key="SaveProgressLineHeight">3</sys:Double>
+    <sys:Double x:Key="SaveProgressBarFraction">0.3</sys:Double>
+    <sys:TimeSpan x:Key="SaveProgressCycleDuration">0:0:1.2</sys:TimeSpan>
+
+    <!-- The notices (FR-84, FR-86: restored changes, a file that cannot be saved, the journal warning) in a small panel
+         at the top centre, under the search pill, with a close button. -->
+    <Thickness x:Key="TopOverlaysMargin">0,48,0,0</Thickness>
+    <Thickness x:Key="NoticeBarMargin">0,8,0,0</Thickness>
+    <Thickness x:Key="NoticeBarPadding">14,4,4,4</Thickness>
+    <sys:Double x:Key="NoticeBarMaxWidth">520</sys:Double>
+    <Thickness x:Key="NoticeTextMargin">0,8,8,8</Thickness>
 
     <!-- The page indicator chip (UI-05, FR-09) at the bottom right, left of the rail's 40 px strip, and the navigation
          buttons above it (Back, previous and next mark, FR-09, FR-102): floating surfaces like the toolbar's (999 px
@@ -407,8 +432,43 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <Style x:Key="SectionLabel" TargetType="TextBlock">
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Margin" Value="{StaticResource SectionGap}" />
+    <!-- A main menu entry: a 40 DIP tall row as wide as the panel, text on the left (the content), hover and press
+         tints with 8 px corners, dimmed when disabled; keyboard focus shows the system focus rectangle. -->
+    <Style x:Key="MenuItemStyle" TargetType="Button">
+        <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="Padding" Value="{StaticResource MenuItemPadding}" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Foreground" Value="{DynamicResource GlyphBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Stylus.IsPressAndHoldEnabled" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Row" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"
+                            CornerRadius="{StaticResource InnerCornerRadius}">
+                        <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Row" Property="Background" Value="{DynamicResource ToolbarHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Row" Property="Background" Value="{DynamicResource ToolbarPressedBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="{StaticResource DisabledOpacity}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!-- The shortcut beside a menu entry ("Ctrl+O"): the secondary text colour. -->
+    <Style x:Key="MenuShortcutText" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource FlyoutHeaderBrush}" />
+        <Setter Property="Margin" Value="{StaticResource MenuShortcutMargin}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 </ResourceDictionary>

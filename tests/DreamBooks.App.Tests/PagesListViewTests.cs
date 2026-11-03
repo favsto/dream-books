@@ -110,11 +110,12 @@ public sealed class PagesListViewTests : IDisposable
                 Assert.False(panel.IsOpen);
 
                 // The menu entry opens the Pages tab.
-                Assert.Equal(Strings.OpenPagesList, AutomationProperties.GetName(window.OpenPagesListButton));
-                window.OpenPagesListButton.Command.Execute(window.OpenPagesListButton.CommandParameter);
+                var menu = window.MainMenu;
+                Assert.Equal(Strings.OpenPagesList, AutomationProperties.GetName(menu.PagesItem));
+                menu.PagesItem.Command.Execute(menu.PagesItem.CommandParameter);
                 Assert.True(panel.IsOpen);
                 Assert.Equal(1, panel.SelectedTab);
-                window.OpenMarksListButton.Command.Execute(window.OpenMarksListButton.CommandParameter);
+                menu.MarksItem.Command.Execute(menu.MarksItem.CommandParameter);
                 Assert.Equal(0, panel.SelectedTab);
             }
             finally

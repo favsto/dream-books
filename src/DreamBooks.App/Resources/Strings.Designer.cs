@@ -48,11 +48,7 @@ internal static class Strings
 
     public static string Redo => Get(nameof(Redo));
 
-    public static string Zoom => Get(nameof(Zoom));
-
     public static string FitWidth => Get(nameof(FitWidth));
-
-    public static string Panel => Get(nameof(Panel));
 
     public static string ErrorFileNotFound => Get(nameof(ErrorFileNotFound));
 
@@ -169,9 +165,7 @@ internal static class Strings
 
     public static string PageIndicatorLabel => Get(nameof(PageIndicatorLabel));
 
-    public static string GoToPage => Get(nameof(GoToPage));
-
-    /// <summary>The page field opened from the rail's indicator (the panel's field is <see cref="GoToPage"/>).</summary>
+    /// <summary>The go-to-page field of the page indicator chip (FR-09).</summary>
     public static string GoToPageIndicatorField => Get(nameof(GoToPageIndicatorField));
 
     public static string GoToPageHint => Get(nameof(GoToPageHint));
@@ -236,8 +230,6 @@ internal static class Strings
     public static string PreviousResult => Get(nameof(PreviousResult));
 
     public static string NextResult => Get(nameof(NextResult));
-
-    public static string ClearSearch => Get(nameof(ClearSearch));
 
     /// <summary>Automation name of the result count.</summary>
     public static string SearchCountLabel => Get(nameof(SearchCountLabel));
@@ -459,6 +451,47 @@ internal static class Strings
     public static string SearchPillLabel => Get(nameof(SearchPillLabel));
 
     public static string CloseSearch => Get(nameof(CloseSearch));
+
+    /// <summary>The main menu (UI-03): its round button, its panel and the entries' texts.</summary>
+    public static string MainMenu => Get(nameof(MainMenu));
+
+    public static string MainMenuPanel => Get(nameof(MainMenuPanel));
+
+    public static string MenuOpen => Get(nameof(MenuOpen));
+
+    public static string MenuSaveAs => Get(nameof(MenuSaveAs));
+
+    public static string MenuRecentFiles => Get(nameof(MenuRecentFiles));
+
+    public static string MenuExport => Get(nameof(MenuExport));
+
+    public static string MenuSearchName => Get(nameof(MenuSearchName));
+
+    public static string MenuSettings => Get(nameof(MenuSettings));
+
+    /// <summary>The help text of the entries that arrive in phase 4b.</summary>
+    public static string MenuNotYetAvailable => Get(nameof(MenuNotYetAvailable));
+
+    /// <summary>The shortcuts shown beside the menu entries (and their accelerator keys for screen readers).</summary>
+    public static string ShortcutOpen => Get(nameof(ShortcutOpen));
+
+    public static string ShortcutSave => Get(nameof(ShortcutSave));
+
+    public static string ShortcutSaveAs => Get(nameof(ShortcutSaveAs));
+
+    public static string ShortcutMarks => Get(nameof(ShortcutMarks));
+
+    public static string ShortcutPages => Get(nameof(ShortcutPages));
+
+    public static string ShortcutSearch => Get(nameof(ShortcutSearch));
+
+    /// <summary>The title bar's file name with the dirty mark (UI-06): {0} is the file name.</summary>
+    public static string DocumentTitleDirtyFormat => Get(nameof(DocumentTitleDirtyFormat));
+
+    /// <summary>The notices at the top centre (FR-84, FR-86) and their close button.</summary>
+    public static string NoticeBarLabel => Get(nameof(NoticeBarLabel));
+
+    public static string CloseNotice => Get(nameof(CloseNotice));
 
     private static string Get(string name) =>
         Manager.GetString(name, System.Globalization.CultureInfo.CurrentUICulture) ?? name;

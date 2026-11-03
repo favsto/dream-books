@@ -7,6 +7,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using CommunityToolkit.Mvvm.Input;
 using DreamBooks.App.Services;
 using DreamBooks.App.ViewModels;
 using DreamBooks.App.Views;
@@ -96,6 +97,14 @@ public partial class MainWindow : FluentWindow
         {
             CommandParameter = PagesTab,
         });
+
+        // The main menu's entries for the left-edge panel's tabs and the search (UI-03): the same commands as Ctrl+M,
+        // Ctrl+Shift+P and Ctrl+F. Open, Save and Save as bind the view model's commands in XAML.
+        MainMenu.MarksItem.Command = MarksPanel.OpenTabCommand;
+        MainMenu.MarksItem.CommandParameter = MarksTab;
+        MainMenu.PagesItem.Command = MarksPanel.OpenTabCommand;
+        MainMenu.PagesItem.CommandParameter = PagesTab;
+        MainMenu.SearchItem.Command = new RelayCommand(() => FocusSearchField(CurrentViewModel.Search));
 
         // The page thumbnails: bitmaps from the document view's coordinator (the current one), the ink as the marks list
         // and the rail read it (FR-103); both in the coordinator's low-priority queue, never ahead of a page render.
@@ -380,14 +389,20 @@ public partial class MainWindow : FluentWindow
     /// Home/End in the list) stay the panel's. Everything else (Alt+Left for Back, Alt+Up/Alt+Down for the marks, the
     /// shortcuts) is left to the key bindings.
     /// The search keys (FR-13, FR-105) come first: Ctrl+F opens the search pill and gives its field the keyboard, and
-    /// F3 / Shift+F3 go to the next / previous result from anywhere; in a search field (the pill's, or the debug
-    /// panel's) Enter / Shift+Enter do the same and Esc clears the search and closes the pill (the keyboard goes back to
-    /// the document), as does Esc elsewhere outside a text field while a search is shown or the pill is open. The
-    /// indicator chip's page field keeps its own Enter and Esc.
+    /// F3 / Shift+F3 go to the next / previous result from anywhere; in the search pill's field Enter / Shift+Enter do
+    /// the same and Esc clears the search and closes the pill (the keyboard goes back to the document), as does Esc
+    /// elsewhere outside a text field while a search is shown or the pill is open. The indicator chip's page field keeps
+    /// its own Enter and Esc. Before all of them, Esc closes the open main menu (UI-03).
     /// </summary>
     internal bool RouteKey(Key key, ModifierKeys modifiers, object? source)
     {
-        // Esc closes the open toolbar flyout first (UI-02), except in the search fields and the chip's page field, which
+        if (key == Key.Escape && modifiers == ModifierKeys.None && MainMenu.IsOpen)
+        {
+            MainMenu.Close();
+            return true;
+        }
+
+        // Esc closes the open toolbar flyout first (UI-02), except in the search field and the chip's page field, which
         // keep their own Esc.
         var viewModel = CurrentViewModel;
         if (key == Key.Escape && modifiers == ModifierKeys.None && viewModel.Toolbar.OpenPanel != OptionsPanel.None
@@ -465,8 +480,8 @@ public partial class MainWindow : FluentWindow
     /// <summary>The window's view model as bound now (tests may give the window another one).</summary>
     private MainViewModel CurrentViewModel => DataContext as MainViewModel ?? _viewModel;
 
-    /// <summary>True inside the search pill's field or the debug panel's search box (also a part of their template).</summary>
-    private bool IsInSearchField(DependencyObject element) => IsWithin(element, SearchBar.Field) || IsWithin(element, SearchField);
+    /// <summary>True inside the search pill's field (also a part of its template).</summary>
+    private bool IsInSearchField(DependencyObject element) => IsWithin(element, SearchBar.Field);
 
     private void FocusDocument()
     {
@@ -604,18 +619,20 @@ public partial class MainWindow : FluentWindow
         DocumentViewer.Rail.SetExternalHold(IndicatorChip.IsHolding || NavButtons.IsHolding);
 
     /// <summary>
-    /// A press at <paramref name="position"/> (page host coordinates) over the document: the open left-edge panel and
-    /// the open toolbar flyout each decide (<see cref="EdgePanel.RoutePress"/>, <see cref="ToolbarView.RoutePress"/>);
-    /// true when either takes it. Outside them both close; fingers and the mouse are taken, the pen inks. On the
-    /// left-edge panel's sheet the pen closes it and is taken (no stroke); on the flyout (and the toolbar) the pen
-    /// presses the controls like a finger, on purpose (UI-02). Separate so tests can drive it.
+    /// A press at <paramref name="position"/> (page host coordinates) over the document: the open left-edge panel, the
+    /// open toolbar flyout and the open main menu each decide (<see cref="EdgePanel.RoutePress"/>,
+    /// <see cref="ToolbarView.RoutePress"/>, <see cref="MainMenuButton.RoutePress"/>); true when any takes it. Outside
+    /// them they close; fingers and the mouse are taken, the pen inks. On the left-edge panel's sheet the pen closes it
+    /// and is taken (no stroke); on the flyout, the toolbar and the menu the pen presses the controls like a finger, on
+    /// purpose (UI-02, UI-03). Separate so tests can drive it.
     /// </summary>
     internal bool RoutePagePress(Point position, PointerKind kind)
     {
         var panel = MarksPanel.RoutePress(PageHost.TranslatePoint(position, MarksPanel), kind);
         var flyout = FloatingToolbar.RoutePress(PageHost.TranslatePoint(position, FloatingToolbar), kind);
+        var menu = MainMenu.RoutePress(PageHost.TranslatePoint(position, MainMenu), kind);
         IndicatorChip.RoutePress(PageHost.TranslatePoint(position, IndicatorChip)); // closes its open field; never taken
-        return panel || flyout;
+        return panel || flyout || menu;
     }
 
     /// <summary>
@@ -631,34 +648,4 @@ public partial class MainWindow : FluentWindow
         }
     }
 
-    /// <summary>The panel's go-to-page field (FR-09): Enter jumps to a valid page and clears it; Esc clears it.</summary>
-    private void OnGoToPageFieldKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter)
-        {
-            e.Handled = true;
-            if (_viewModel.Viewport.TryGoToPage(GoToPageField.Text))
-            {
-                GoToPageField.Clear();
-            }
-            else
-            {
-                GoToPageField.SelectAll(); // invalid input is ignored
-            }
-        }
-        else if (e.Key == Key.Escape)
-        {
-            e.Handled = true;
-            GoToPageField.Clear();
-        }
-    }
-
-    /// <summary>Fit width (FR-07): turns the mode on, fitting the widest page; nothing to do when it is already on.</summary>
-    private void OnFitWidthClick(object sender, RoutedEventArgs e)
-    {
-        if (!_viewModel.Viewport.IsFitWidth)
-        {
-            _viewModel.Viewport.ToggleFitWidth(null);
-        }
-    }
 }

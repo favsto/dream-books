@@ -68,4 +68,7 @@
     <SolidColorBrush x:Key="MarkThumbnailBorderBrush" Color="{StaticResource ThemeControlDarkColor}" />
     <SolidColorBrush x:Key="PagesThumbnailBorderBrush" Color="{StaticResource ThemeControlDarkColor}" />
     <SolidColorBrush x:Key="PagesCurrentRingBrush" Color="{DynamicResource SystemAccentColorPrimary}" />
+
+    <!-- The save progress line under the title bar (FR-89): the accent colour. -->
+    <SolidColorBrush x:Key="SaveProgressBarBrush" Color="{DynamicResource SystemAccentColorPrimary}" />
 </ResourceDictionary>

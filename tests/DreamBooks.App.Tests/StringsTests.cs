@@ -94,6 +94,25 @@ public class StringsTests
             Assert.True(keys.ContainsKey(key), $"Strings.resx is missing '{key}'.");
             Assert.NotNull(_stringsType.GetProperty(key, BindingFlags.Public | BindingFlags.Static));
         }
+
+        // The main menu, the title bar's name and the notices (UI-03, UI-06, FR-84, phase 4a task 5), in both files; the
+        // debug panel's own texts went with it.
+        foreach (var key in new[]
+                 {
+                     "MainMenu", "MainMenuPanel", "MenuOpen", "MenuSaveAs", "MenuRecentFiles", "MenuExport", "MenuSearchName",
+                     "MenuSettings", "MenuNotYetAvailable", "ShortcutOpen", "ShortcutSave", "ShortcutSaveAs", "ShortcutMarks",
+                     "ShortcutPages", "ShortcutSearch", "DocumentTitleDirtyFormat", "NoticeBarLabel", "CloseNotice",
+                 })
+        {
+            Assert.True(keys.ContainsKey(key), $"Strings.resx is missing '{key}'.");
+            Assert.NotNull(_stringsType.GetProperty(key, BindingFlags.Public | BindingFlags.Static));
+        }
+
+        foreach (var gone in new[] { "Panel", "Zoom", "GoToPage", "ClearSearch" }) // only the debug panel used them
+        {
+            Assert.False(keys.ContainsKey(gone), gone);
+        }
+        Assert.Equal("a.pdf *", string.Format(CultureInfo.CurrentCulture, Strings.DocumentTitleDirtyFormat, "a.pdf"));
     }
 
     [Fact]

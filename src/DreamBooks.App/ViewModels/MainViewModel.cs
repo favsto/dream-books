@@ -251,6 +251,16 @@ public sealed class MainViewModel : ObservableObject
             System.IO.Path.GetFileName(session.Path),
             Strings.AppTitle);
 
+    /// <summary>
+    /// The title bar's text (UI-06): the file name alone, with a "*" after it while there are unsaved changes; the
+    /// app name when no document is open. The window's own title (<see cref="WindowTitle"/>) keeps the app name.
+    /// </summary>
+    public string DocumentTitle => Session is not { } session
+        ? Strings.AppTitle
+        : session.IsDirty
+            ? string.Format(CultureInfo.CurrentCulture, Strings.DocumentTitleDirtyFormat, System.IO.Path.GetFileName(session.Path))
+            : System.IO.Path.GetFileName(session.Path);
+
     /// <summary>Current page, 1-based; 0 when no document is open.</summary>
     public int PageNumber
     {
@@ -1226,6 +1236,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(Renderer));
         OnPropertyChanged(nameof(IsDirty));
         OnPropertyChanged(nameof(WindowTitle));
+        OnPropertyChanged(nameof(DocumentTitle));
         SaveCommand.NotifyCanExecuteChanged();
         SaveAsCommand.NotifyCanExecuteChanged();
         PageCount = session.PageCount;
@@ -1822,6 +1833,7 @@ public sealed class MainViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(IsDirty));
                 OnPropertyChanged(nameof(WindowTitle)); // Save as changed the file name
+                OnPropertyChanged(nameof(DocumentTitle));
             }
 
             if (result.Saved is { } saved)
@@ -1981,6 +1993,7 @@ public sealed class MainViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(IsDirty));
             OnPropertyChanged(nameof(WindowTitle));
+            OnPropertyChanged(nameof(DocumentTitle));
         }
     }
 

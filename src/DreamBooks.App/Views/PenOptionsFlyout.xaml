@@ -8,7 +8,8 @@
              Focusable="False" IsTabStop="False">
     <!-- The pen's option panel (UI-02, FR-21, FR-22, FR-25), above the toolbar: colours (8 presets, the shared custom
          palette, "+" for the free picker), the three preset widths and the width slider, the stroke preview with
-         pressure, and the pressure curve. The data context is the ToolbarViewModel. -->
+         pressure, the pressure curve and the smoothing (FR-23; the debug panel had them, the settings window of 4b
+         will too). The data context is the ToolbarViewModel. -->
     <UserControl.Resources>
         <conv:EnumMatchConverter x:Key="EnumMatch" />
     </UserControl.Resources>
@@ -37,12 +38,25 @@
 
             <TextBlock Text="{x:Static res:Strings.PressureCurve}" Style="{StaticResource FlyoutHeader}" />
             <StackPanel Orientation="Horizontal">
-                <RadioButton Content="{x:Static res:Strings.CurveLinear}" AutomationProperties.Name="{x:Static res:Strings.CurveLinear}"
+                <RadioButton x:Name="CurveLinearRadio" Content="{x:Static res:Strings.CurveLinear}" AutomationProperties.Name="{x:Static res:Strings.CurveLinear}"
                              IsChecked="{Binding Tools.Curve, Converter={StaticResource EnumMatch}, ConverterParameter=Linear}" />
-                <RadioButton Content="{x:Static res:Strings.CurveSoft}" AutomationProperties.Name="{x:Static res:Strings.CurveSoft}"
+                <RadioButton x:Name="CurveSoftRadio" Content="{x:Static res:Strings.CurveSoft}" AutomationProperties.Name="{x:Static res:Strings.CurveSoft}"
                              IsChecked="{Binding Tools.Curve, Converter={StaticResource EnumMatch}, ConverterParameter=Soft}" />
-                <RadioButton Content="{x:Static res:Strings.CurveFirm}" AutomationProperties.Name="{x:Static res:Strings.CurveFirm}"
+                <RadioButton x:Name="CurveFirmRadio" Content="{x:Static res:Strings.CurveFirm}" AutomationProperties.Name="{x:Static res:Strings.CurveFirm}"
                              IsChecked="{Binding Tools.Curve, Converter={StaticResource EnumMatch}, ConverterParameter=Firm}" />
+            </StackPanel>
+
+            <TextBlock Text="{x:Static res:Strings.Smoothing}" Style="{StaticResource FlyoutHeader}" />
+            <StackPanel Orientation="Horizontal">
+                <RadioButton x:Name="SmoothingOffRadio" GroupName="PenSmoothing" Content="{x:Static res:Strings.SmoothingOff}"
+                             AutomationProperties.Name="{x:Static res:Strings.SmoothingOff}"
+                             IsChecked="{Binding Tools.Smoothing, Converter={StaticResource EnumMatch}, ConverterParameter=Off}" />
+                <RadioButton x:Name="SmoothingLightRadio" GroupName="PenSmoothing" Content="{x:Static res:Strings.SmoothingLight}"
+                             AutomationProperties.Name="{x:Static res:Strings.SmoothingLight}"
+                             IsChecked="{Binding Tools.Smoothing, Converter={StaticResource EnumMatch}, ConverterParameter=Light}" />
+                <RadioButton x:Name="SmoothingStrongRadio" GroupName="PenSmoothing" Content="{x:Static res:Strings.SmoothingStrong}"
+                             AutomationProperties.Name="{x:Static res:Strings.SmoothingStrong}"
+                             IsChecked="{Binding Tools.Smoothing, Converter={StaticResource EnumMatch}, ConverterParameter=Strong}" />
             </StackPanel>
         </StackPanel>
         </ScrollViewer>

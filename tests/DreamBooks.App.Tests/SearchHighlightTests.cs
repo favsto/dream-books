@@ -223,7 +223,7 @@ public sealed class SearchHighlightTests : IDisposable
         var manager = new ResourceManager("DreamBooks.App.Resources.Strings", typeof(Strings).Assembly);
         string[] keys =
         [
-            "Search", "SearchField", "SearchHint", "PreviousResult", "NextResult", "ClearSearch", "SearchCountLabel",
+            "Search", "SearchField", "SearchHint", "PreviousResult", "NextResult", "SearchCountLabel",
             "SearchInProgress", "SearchNoResults", "SearchOneResult", "SearchResultsFormat", "SearchPositionFormat",
             "SearchTruncatedFormat", "SearchNoTextLayer", "SearchFailed", "SearchWrappedToStart", "SearchWrappedToEnd",
         ];

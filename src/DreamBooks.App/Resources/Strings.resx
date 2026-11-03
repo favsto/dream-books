@@ -45,9 +45,7 @@
   <data name="EraserSize" xml:space="preserve"><value>Dimensione gomma</value></data>
   <data name="Undo" xml:space="preserve"><value>Annulla</value></data>
   <data name="Redo" xml:space="preserve"><value>Ripristina</value></data>
-  <data name="Zoom" xml:space="preserve"><value>Zoom</value></data>
   <data name="FitWidth" xml:space="preserve"><value>Adatta larghezza</value></data>
-  <data name="Panel" xml:space="preserve"><value>Pannello di prova</value></data>
   <data name="ErrorFileNotFound" xml:space="preserve"><value>Il file non è stato trovato.</value></data>
   <data name="ErrorInvalidFormat" xml:space="preserve"><value>Il file non è un PDF valido o è danneggiato.</value></data>
   <data name="ErrorPassword" xml:space="preserve"><value>Il PDF è protetto da password: non ancora supportato.</value></data>
@@ -105,7 +103,6 @@
   <data name="RailPreviewLabel" xml:space="preserve"><value>Anteprima della pagina</value></data>
   <data name="RailPreviewPageFormat" xml:space="preserve"><value>pag. {0}</value></data>
   <data name="PageIndicatorLabel" xml:space="preserve"><value>Pagina e zoom: tocca per andare a una pagina</value></data>
-  <data name="GoToPage" xml:space="preserve"><value>Vai alla pagina</value></data>
   <data name="GoToPageIndicatorField" xml:space="preserve"><value>Vai alla pagina dall'indicatore</value></data>
   <data name="GoToPageHint" xml:space="preserve"><value>Scrivi il numero della pagina e premi Invio (Esc per annullare)</value></data>
   <data name="Back" xml:space="preserve"><value>Indietro</value></data>
@@ -130,7 +127,6 @@
   <data name="SearchHint" xml:space="preserve"><value>Scrivi il testo da cercare (Ctrl+F). Invio: risultato successivo, Maiusc+Invio: precedente, Esc: annulla</value></data>
   <data name="PreviousResult" xml:space="preserve"><value>Risultato precedente</value></data>
   <data name="NextResult" xml:space="preserve"><value>Risultato successivo</value></data>
-  <data name="ClearSearch" xml:space="preserve"><value>Annulla la ricerca</value></data>
   <data name="SearchCountLabel" xml:space="preserve"><value>Risultati della ricerca</value></data>
   <data name="SearchInProgress" xml:space="preserve"><value>Ricerca in corso…</value></data>
   <data name="SearchNoResults" xml:space="preserve"><value>Nessun risultato</value></data>
@@ -206,4 +202,22 @@
   <data name="NavigationLabel" xml:space="preserve"><value>Navigazione</value></data>
   <data name="SearchPillLabel" xml:space="preserve"><value>Barra di ricerca</value></data>
   <data name="CloseSearch" xml:space="preserve"><value>Chiudi la ricerca</value></data>
+  <data name="MainMenu" xml:space="preserve"><value>Menu principale</value></data>
+  <data name="MainMenuPanel" xml:space="preserve"><value>Voci del menu principale</value></data>
+  <data name="MenuOpen" xml:space="preserve"><value>Apri…</value></data>
+  <data name="MenuSaveAs" xml:space="preserve"><value>Salva con nome…</value></data>
+  <data name="MenuRecentFiles" xml:space="preserve"><value>File recenti</value></data>
+  <data name="MenuExport" xml:space="preserve"><value>Esporta</value></data>
+  <data name="MenuSearchName" xml:space="preserve"><value>Apri la ricerca nel documento</value></data>
+  <data name="MenuSettings" xml:space="preserve"><value>Impostazioni</value></data>
+  <data name="MenuNotYetAvailable" xml:space="preserve"><value>Non ancora disponibile</value></data>
+  <data name="ShortcutOpen" xml:space="preserve"><value>Ctrl+O</value></data>
+  <data name="ShortcutSave" xml:space="preserve"><value>Ctrl+S</value></data>
+  <data name="ShortcutSaveAs" xml:space="preserve"><value>Ctrl+Maiusc+S</value></data>
+  <data name="ShortcutMarks" xml:space="preserve"><value>Ctrl+M</value></data>
+  <data name="ShortcutPages" xml:space="preserve"><value>Ctrl+Maiusc+P</value></data>
+  <data name="ShortcutSearch" xml:space="preserve"><value>Ctrl+F</value></data>
+  <data name="DocumentTitleDirtyFormat" xml:space="preserve"><value>{0} *</value></data>
+  <data name="NoticeBarLabel" xml:space="preserve"><value>Avvisi</value></data>
+  <data name="CloseNotice" xml:space="preserve"><value>Chiudi l'avviso</value></data>
 </root>

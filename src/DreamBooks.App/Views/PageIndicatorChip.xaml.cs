@@ -16,7 +16,8 @@ namespace DreamBooks.App.Views;
 /// jumps there (recorded for Back), anything else is ignored; Esc, a press outside it (<see cref="RoutePress"/>) or the
 /// keyboard leaving it closes it without moving.</item>
 /// <item>A long press (<c>LongPressDuration</c>, moving less than <c>LongPressSlop</c>), the mouse or the pen hovering
-/// over it, or the keyboard on it shows the zoom − / + buttons (the Ctrl − / Ctrl + commands, FR-06); a long press
+/// over it, or the keyboard on it shows the zoom − / + buttons (the Ctrl − / Ctrl + commands, FR-06) and fit width
+/// (FR-07, the debug panel's button); a long press
 /// keeps them until the chip hides.</item>
 /// <item>It shows and hides with the rail (<see cref="SetShown"/>, fading in <c>NavigationFadeDuration</c>, instant when
 /// Windows animations are off, NFR-32) and keeps the rail shown while it is used (<see cref="IsHolding"/>,
@@ -293,6 +294,7 @@ public partial class PageIndicatorChip : UserControl
         var visibility = show ? Visibility.Visible : Visibility.Collapsed;
         ZoomOutButton.Visibility = visibility;
         ZoomInButton.Visibility = visibility;
+        FitWidthButton.Visibility = visibility;
     }
 
     private void CancelHold()
