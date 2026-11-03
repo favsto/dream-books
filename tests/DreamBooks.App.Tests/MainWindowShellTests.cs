@@ -188,6 +188,54 @@ public sealed class MainWindowShellTests
         });
     }
 
+    [Fact]
+    public void A_pen_on_the_title_bar_area_inks_and_does_not_drag_the_window()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var window = new MainWindow { TransparencyEnabled = () => true, MicaSupported = () => true };
+            try
+            {
+                var root = (FrameworkElement)window.Content;
+                Lay(root, 1000, 700);
+                var titleBar = window.AppTitleBar;
+                var dragArea = new Point(500, titleBar.ActualHeight / 2); // over the file name's row, away from the buttons
+
+                // The pen: the drag area is client area (no caption drag) and the press reaches the document.
+                Assert.Equal(MainWindow.HitTestClient, window.TitleBarHitTest(dragArea, isPen: true));
+                var hit = ScrollRailTests.HitAt(root, dragArea);
+                Assert.False(ScrollRailTests.IsWithin(hit, titleBar));
+                Assert.True(ScrollRailTests.IsWithin(hit, window.DocumentViewer));
+
+                // The mouse and a finger: left to WPF UI, which drags the window from there as before.
+                Assert.Null(window.TitleBarHitTest(dragArea, isPen: false));
+
+                // The window buttons stay buttons for the pen too.
+                var buttons = ToolbarViewTests.Descendants(titleBar).OfType<System.Windows.Controls.Primitives.ButtonBase>()
+                    .Where(b => b.ActualWidth > 0)
+                    .ToList();
+                Assert.NotEmpty(buttons);
+                foreach (var button in buttons)
+                {
+                    var centre = ToolbarViewTests.Centre(button, root);
+                    Assert.Null(window.TitleBarHitTest(centre, isPen: true));
+                    Assert.True(button.IsHitTestVisible); // WPF UI finds its buttons by bounds and this flag
+                    Assert.True(ScrollRailTests.IsWithin(ScrollRailTests.HitAt(root, centre), button));
+                }
+
+                // WPF UI's caption check needs the bar itself hit-test visible: the mouse still drags the window.
+                Assert.True(titleBar.IsHitTestVisible);
+
+                // Below the title bar nothing changes.
+                Assert.Null(window.TitleBarHitTest(new Point(500, titleBar.ActualHeight + 20), isPen: true));
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
     private static Color BackdropColor(MainWindow window) =>
         ((SolidColorBrush)window.DocumentViewer.Viewport.Background).Color;
 

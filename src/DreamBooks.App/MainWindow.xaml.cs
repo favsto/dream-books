@@ -26,6 +26,11 @@ public partial class MainWindow : FluentWindow
 
     internal const int PagesTab = 1;
 
+    /// <summary>The non-client hit test answer "client" (HTCLIENT).</summary>
+    internal const int HitTestClient = 1;
+
+    private const int _wmNcHitTest = 0x0084;
+
     private readonly MainViewModel _viewModel = new(
         new FileDialogService(), new RecoveryStore(RecoveryRoot()), new ViewPositionStore(PositionsRoot()));
 
@@ -114,6 +119,12 @@ public partial class MainWindow : FluentWindow
         // Esc or the clear button emptied the search: the keyboard goes back to the document (FR-13).
         _viewModel.Search.FocusDocumentRequested += (_, _) => FocusDocument();
 
+        // The pen on the title bar writes instead of dragging the window (UI-06, FR-30): the bar's parts let the pen
+        // through, and the window's hook answers the non-client hit test for the pen before WPF UI's (added on the first
+        // render; hooks added later run first). The parts are changed once laid out, when every part of its template (the
+        // window buttons among them) is in the tree.
+        AppTitleBar.SizeChanged += (_, _) => TitleBarPenInput.LetPenThrough(AppTitleBar);
+        ContentRendered += OnFirstContentRendered;
     }
 
     /// <summary>The marks list hosted by <see cref="MarksPanel"/> (not named in XAML: the panel is a user control).</summary>
@@ -165,6 +176,74 @@ public partial class MainWindow : FluentWindow
 
         WindowBackdropType = backdrop;
         DocumentViewer.ApplyTransparency(transparent);
+    }
+
+    /// <summary>
+    /// The window's answer to the non-client hit test at <paramref name="position"/> (in the window content's
+    /// coordinates): "client" for the pen on the title bar's drag area, so the pen writes there instead of dragging the
+    /// window (UI-06, FR-30); null otherwise (the mouse and fingers, the window buttons, the rest of the window), left
+    /// to WPF UI and Windows.
+    /// </summary>
+    internal int? TitleBarHitTest(Point position, bool isPen)
+    {
+        if (!isPen || AppTitleBar.ActualWidth <= 0)
+        {
+            return null;
+        }
+
+        var bar = AppTitleBar.TransformToAncestor(ShellRoot).TransformBounds(new Rect(AppTitleBar.RenderSize));
+        if (!bar.Contains(position))
+        {
+            return null;
+        }
+
+        foreach (var button in TitleBarPenInput.Buttons(AppTitleBar))
+        {
+            if (button.TransformToAncestor(ShellRoot).TransformBounds(new Rect(button.RenderSize)).Contains(position))
+            {
+                return null; // the window buttons work for the pen too
+            }
+        }
+
+        return HitTestClient;
+    }
+
+    private void OnFirstContentRendered(object? sender, EventArgs e)
+    {
+        ContentRendered -= OnFirstContentRendered;
+
+        // After every ContentRendered handler, WPF UI's title bar hook among them.
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+            (System.Windows.Interop.HwndSource.FromVisual(this) as System.Windows.Interop.HwndSource)?.AddHook(OnTitleBarHitTest));
+    }
+
+    private IntPtr OnTitleBarHitTest(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg != _wmNcHitTest || !TitleBarPenInput.IsPenInput())
+        {
+            return IntPtr.Zero;
+        }
+
+        // The screen point in lParam: signed 16-bit x and y (negative on monitors left of or above the primary one).
+        var value = lParam.ToInt64();
+        var screen = new Point((short)(value & 0xFFFF), (short)((value >> 16) & 0xFFFF));
+        Point position;
+        try
+        {
+            position = ShellRoot.PointFromScreen(screen);
+        }
+        catch (InvalidOperationException)
+        {
+            return IntPtr.Zero; // no presentation source yet
+        }
+
+        if (TitleBarHitTest(position, isPen: true) is not { } answer)
+        {
+            return IntPtr.Zero;
+        }
+
+        handled = true;
+        return answer;
     }
 
     private void OnThemeChanged(object? sender, EventArgs e) => ApplyBackdrop();

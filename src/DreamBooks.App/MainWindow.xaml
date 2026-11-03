@@ -436,7 +436,10 @@
             </Grid>
         </DockPanel>
 
-        <!-- The title bar (UI-06): only the file name, small, and the window buttons, over the document. -->
+        <!-- The title bar (UI-06): only the file name, small, and the window buttons, over the document. WPF UI drives
+             the drag area and the window buttons through the non-client hit test. For the pen the drag area is client
+             area (TitleBarHitTest) and its parts let the pen through (TitleBarPenInput), so the pen writes on the page
+             under it; the mouse and fingers drag the window and every pointer presses the buttons as before. -->
         <ui:TitleBar x:Name="AppTitleBar" Title="{Binding WindowTitle}" VerticalAlignment="Top" Panel.ZIndex="1"
                      Height="{StaticResource TitleBarHeight}"
                      ShowHelp="False" />
