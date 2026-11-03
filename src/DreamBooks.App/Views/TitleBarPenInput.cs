@@ -24,27 +24,45 @@ internal static class TitleBarPenInput
     /// <summary>Set in the extra information of a mouse message that came from touch, not from the pen.</summary>
     private const long _touchFlag = 0x80;
 
+    /// <summary>IMDT_UNAVAILABLE of INPUT_MESSAGE_DEVICE_TYPE: Windows does not say where the message came from.</summary>
+    internal const int UnavailableDevice = 0x00;
+
     /// <summary>IMDT_PEN of INPUT_MESSAGE_DEVICE_TYPE.</summary>
-    private const int _penDeviceType = 0x08;
+    internal const int PenDevice = 0x08;
 
     /// <summary>
-    /// True when the input being processed comes from the pen: Windows says so (the message source, or the signature of
-    /// a mouse message made from the pen), or WPF has the pen in range over the window (hovering before a press).
+    /// True when the input being processed comes from the pen (<see cref="Decide"/> over what Windows and WPF say now).
     /// </summary>
     public static bool IsPenInput()
     {
-        if (NativeMethods.GetCurrentInputMessageSource(out var source) && source.DeviceType == _penDeviceType)
+        var device = NativeMethods.GetCurrentInputMessageSource(out var source) ? source.DeviceType : UnavailableDevice;
+        return Decide(
+            device,
+            NativeMethods.GetMessageExtraInfo().ToInt64(),
+            () => Stylus.CurrentStylusDevice is { InRange: true, TabletDevice.Type: TabletDeviceType.Stylus });
+    }
+
+    /// <summary>
+    /// Whether the input is the pen, from the strongest evidence down: the message source Windows reports
+    /// (<paramref name="deviceType"/>: the pen, or a known mouse, touch, touchpad or keyboard, which is not); then the
+    /// signature in the mouse message's extra information (<paramref name="extraInfo"/>: from the pen, or from touch,
+    /// which is not); only when neither says anything, whether WPF has the pen in range (<paramref name="penInRange"/>),
+    /// so a finger or the mouse dragging the title bar while the pen hovers near the screen still drags the window.
+    /// </summary>
+    internal static bool Decide(int deviceType, long extraInfo, Func<bool> penInRange)
+    {
+        ArgumentNullException.ThrowIfNull(penInRange);
+        if (deviceType != UnavailableDevice)
         {
-            return true;
+            return deviceType == PenDevice;
         }
 
-        var extra = NativeMethods.GetMessageExtraInfo().ToInt64();
-        if ((extra & _signatureMask) == _penOrTouchSignature && (extra & _touchFlag) == 0)
+        if ((extraInfo & _signatureMask) == _penOrTouchSignature)
         {
-            return true;
+            return (extraInfo & _touchFlag) == 0;
         }
 
-        return Stylus.CurrentStylusDevice is { InRange: true, TabletDevice.Type: TabletDeviceType.Stylus };
+        return penInRange();
     }
 
     /// <summary>The window buttons of <paramref name="titleBar"/> that are laid out.</summary>
