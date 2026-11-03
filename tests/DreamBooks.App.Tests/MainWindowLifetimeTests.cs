@@ -40,7 +40,9 @@ public sealed class MainWindowLifetimeTests : IDisposable
         // One more after them, not checked: the most recently closed window (with its view model and document) is now
         // and then still reachable for a while after the test closed it, from outside every static field, the
         // dispatcher's queue and its timers (a reflection walk from all of them never reaches it), and is collected
-        // later; what matters is that closed windows never pile up.
+        // later. Not fully explained: the working hypothesis is WPF's per-thread input state (the InputManager's most
+        // recent input, keyboard focus or the mouse's element under it), held through native handles a reflection
+        // walk cannot follow. What matters is that closed windows never pile up.
         _ = await OpenUseAndCloseAsync(pages: 3);
         Collect(references);
         Assert.True(!references.Any(r => r.IsAlive), "alive: " + string.Join(",", references.Select((r, i) => r.IsAlive ? $"{i}:{r.Target?.GetType().Name}" : "")));
