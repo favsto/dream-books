@@ -444,6 +444,41 @@ public sealed class ToolbarViewTests
             height: 400);
     }
 
+    [Theory]
+    [InlineData(OptionsPanel.Pen)]
+    [InlineData(OptionsPanel.Highlighter)]
+    [InlineData(OptionsPanel.Eraser)]
+    public void Nothing_in_a_flyout_pans_so_the_square_the_sliders_and_the_swatches_get_the_press_at_once(OptionsPanel panel)
+    {
+        WithWindow(
+            (window, toolbar, _) =>
+            {
+                var flyout = OpenFlyout(toolbar, panel);
+                if (Descendants(flyout).OfType<ColorSwatches>().FirstOrDefault() is { } swatches)
+                {
+                    Invoke(swatches.AddButton); // the colour picker too
+                }
+
+                ScrollRailTests.LayOut((FrameworkElement)window.Content, _width, 400);
+
+                // A panning scroll viewer turns manipulation on: WPF then holds the press a finger (or the pen, which
+                // also raises touch) gives the colour square, a slider thumb or a swatch's long press until it knows
+                // the touch is not a pan. Short windows scroll with the scroll bar and the wheel instead.
+                var scroller = Descendants(flyout).OfType<ScrollViewer>().First();
+                Assert.Equal(PanningMode.None, scroller.PanningMode);
+                Assert.Equal(ScrollBarVisibility.Auto, scroller.VerticalScrollBarVisibility);
+                for (DependencyObject? element = flyout; element is not null; element = VisualTreeHelper.GetParent(element))
+                {
+                    Assert.False(element is UIElement { IsManipulationEnabled: true }, $"{element} pans");
+                }
+
+                Assert.All(
+                    Descendants(flyout).OfType<UIElement>(),
+                    element => Assert.False(element.IsManipulationEnabled, $"{element} in the {panel} flyout pans"));
+            },
+            height: 400);
+    }
+
     [Fact]
     public void A_toolbar_taken_out_of_its_window_can_be_collected()
     {

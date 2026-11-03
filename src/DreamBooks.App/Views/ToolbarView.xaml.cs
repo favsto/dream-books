@@ -55,7 +55,7 @@ public partial class ToolbarView : UserControl
 
         Separators = [Separator1, Separator2];
 
-        // A flyout scrolled by a finger to its end must not move the whole window (the system's boundary feedback).
+        // No boundary feedback from the flyouts moves the whole window (they do not pan; kept as a guard).
         FlyoutHost.AddHandler(ManipulationBoundaryFeedbackEvent, new EventHandler<ManipulationBoundaryFeedbackEventArgs>((_, e) => e.Handled = true));
         DataContextChanged += (_, e) => Attach(e.NewValue as ToolbarViewModel);
         ButtonRow.SizeChanged += (_, _) => MoveIndicator(animate: _indicatorPlaced && AnimationsEnabled());

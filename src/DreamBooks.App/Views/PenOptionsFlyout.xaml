@@ -14,9 +14,11 @@
         <conv:EnumMatchConverter x:Key="EnumMatch" />
     </UserControl.Resources>
     <views:FloatingSurface x:Name="Surface" Width="{StaticResource FlyoutWidth}" CornerRadius="{StaticResource PanelCornerRadius}">
-        <!-- Scrolls when the window is too short for the panel (ToolbarView bounds its height). -->
+        <!-- Scrolls when the window is too short for the panel (ToolbarView bounds its height), with the scroll bar and
+             the wheel. It never pans: a panning scroll viewer turns manipulation on, and WPF then holds back the press a
+             finger or the pen gives the colour square, a slider or a swatch's long press. -->
         <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                      PanningMode="VerticalOnly" Focusable="False">
+                      PanningMode="None" Focusable="False">
         <StackPanel Margin="{StaticResource FlyoutPadding}" KeyboardNavigation.TabNavigation="Cycle">
             <TextBlock Text="{x:Static res:Strings.Color}" Style="{StaticResource FlyoutHeader}" Margin="0,0,0,4" />
             <views:ColorSwatches x:Name="Swatches"
