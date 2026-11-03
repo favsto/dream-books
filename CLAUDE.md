@@ -55,11 +55,24 @@ implementation, review). Project-specific additions:
   Ink: `Ink/` RetainedStrokeLayer (shared base) with CustomInkLayer (pen)
   and HighlighterLayer (under the pen ink); highlighter options in
   `ViewModels/HighlighterOptionsViewModel` (in ToolsViewModel).
+  Shell (phase 4a): MainWindow is a WPF UI FluentWindow (Mica, transparent
+  title bar; `Views/TitleBarPenInput` lets the pen ink under it).
+  `Services/` ThemeService (system/light/dark, accent) and SettingsService
+  (debounced save, applied to tools, toolbar, theme). Floating views over the
+  document, all on `Views/FloatingSurface` (tint, two shadows, opaque
+  fallback): ToolbarView with Pen/Highlighter/EraserOptionsFlyout,
+  ColorSwatches and ColorPickerPanel; PageIndicatorChip, NavigationButtons,
+  SearchPill, NoticeBar, MainMenuButton, SaveProgressLine. Their state:
+  `ViewModels/` ToolbarViewModel, ToolbarVisibilityState (retract while
+  writing, finger tap), Pen/EraserOptionsViewModel, CustomPaletteViewModel,
+  ColorPickerViewModel.
 - `src/DreamBooks.Core/` — domain model, ink math (highlighters: Model
   HighlighterPresets and ChiselTip, Ink HighlighterSettings and
   HighlighterGeometry: constant width, chisel, straight line), UndoManager,
   DocumentSession (lazy pages, dirty tracking, PageStrokesChanged), stroke
-  JSON schema, journal (recorder, replayer), `Layout/` (DocumentLayout,
+  JSON schema, journal (recorder, replayer), `Settings/` (AppSettings,
+  CustomPalette, HexColor, ThemeMode, ToolbarEdge: the pure settings model),
+  `Layout/` (DocumentLayout,
   ViewPosition, PositionHistory), `Rendering/` (RenderScheduler: priorities,
   budgeted bitmap cache) and `Marks/` (MarkRecognizer, MarkIndex,
   MarkScanner, MarkTracker, RailTickLayout, MarkTarget: derived data, never
@@ -73,7 +86,9 @@ implementation, review). Project-specific additions:
   `Interop/PdfiumText`: text search, one job per page) and
   the app's files under LocalAppData: RecoveryStore (journals,
   `DreamBooks\recovery`) and ViewPositionStore (last position per document,
-  `DreamBooks\positions`, plain file I/O). References Core. PDFsharp is not
+  `DreamBooks\positions`, plain file I/O) and AppSettingsStore (the settings
+  file `DreamBooks\settings.json`, versioned, atomic, never throws).
+  References Core. PDFsharp is not
   used.
 - `tests/DreamBooks.Core.Tests/`, `tests/DreamBooks.Pdf.Tests/`,
   `tests/DreamBooks.App.Tests/` — xUnit.
@@ -86,7 +101,7 @@ Specific rules live in `.claude/rules/` and load automatically.
 | Layer | Technology | Notes |
 |---|---|---|
 | Runtime | .NET 10 (LTS), C# | Targets x64 and ARM64 (NFR-21); dev machine is x64 |
-| UI | WPF + WPF UI (Fluent styling) | Windows 11, Mica and Acrylic |
+| UI | WPF + WPF UI 4.3 (Fluent styling, MIT) | FluentWindow, Mica, theme manager; panels are a translucent tint (no in-window blur in WPF) |
 | MVVM | CommunityToolkit.Mvvm | |
 | PDF rendering | PDFium (own P/Invoke over bblanchon.PDFium.Win32) | One dedicated PDFium thread |
 | PDF writing | PDFium (same engine as rendering) | Full rewrite to a verified temp file; bookmarks (phase 3) decided later |

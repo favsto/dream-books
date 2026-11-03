@@ -66,7 +66,7 @@ Il documento è sempre protagonista: nessuna barra fissa, nessuna cornice, nessu
 | Elemento | Specifica |
 | --- | --- |
 | Sfondo finestra | Mica (Windows 11), visibile attorno alle pagine |
-| Pannelli flottanti | Acrylic: sfocatura 30 px, opacità tinta 60–70% |
+| Pannelli flottanti | Tinta traslucida del tema al 65% (due livelli sovrapposti) con l'ombra a due livelli; WPF non sa sfocare ciò che sta dietro un elemento della finestra, quindi niente sfocatura dello sfondo (blocco 4a; l'effetto Acrylic con sfocatura 30 px resta l'obiettivo se la piattaforma lo permetterà). Con "Effetti di trasparenza" disattivati in Windows i pannelli diventano opachi (NFR-32) |
 | Tema | Chiaro e scuro, segue il tema di sistema, commutabile a mano |
 | Colore accento | Colore accento di sistema, con override nelle impostazioni |
 | Sfondo attorno alle pagine | Grigio neutro scuro in tema scuro, chiaro in tema chiaro |
@@ -100,7 +100,7 @@ L'interfaccia ha un solo livello di base, il canvas del documento, e quattro ele
 | ID | Elemento | Posizione predefinita | Comportamento |
 | --- | --- | --- | --- |
 | UI-01 | Canvas documento | Tutta la finestra | Pagine in scorrimento verticale continuo, centrate |
-| UI-02 | Toolbar strumenti | Bordo inferiore, centrata | Pillola Acrylic; trascinabile su qualunque bordo; si ritira durante la scrittura |
+| UI-02 | Toolbar strumenti | Bordo inferiore, centrata | Pillola flottante (materiale dei pannelli, sezione 3); si ritira durante la scrittura. Il trascinamento su un altro bordo arriva col blocco 4b (l'impostazione esiste già nel file delle impostazioni, FR-110) |
 | UI-03 | Menu principale | Pulsante tondo in alto a sinistra, sotto la barra del titolo | Si espande in un pannello con Apri, Salva, Salva con nome, File recenti, Esporta, Segni (Ctrl+M), Pagine (Ctrl+Maiusc+P), Cerca (Ctrl+F), Impostazioni, con accanto le scorciatoie; nel blocco 4a File recenti, Esporta e Impostazioni sono visibili ma disattivati (arrivano col blocco 4b). Si chiude scegliendo una voce, con Esc o con un tocco fuori; compare come i pannelli opzioni (istantaneo se le animazioni di Windows sono disattivate). La penna preme il pulsante e le voci come un dito; fuori dal pannello aperto lo chiude e scrive sulla pagina |
 | UI-04 | Pannello segnalibri e miniature | Bordo sinistro, a scomparsa | Si apre con swipe dal bordo (sull'ultima scheda mostrata) o dal menu; schede in alto al posto del titolo (nel blocco 3b: "Segni", l'elenco dei segni (FR-103), con Ctrl+M; "Pagine", con Ctrl+Maiusc+P (Ctrl+P resta libero per la stampa): miniature verticali di circa 140 px con il numero sotto, che includono i propri tratti disegnati sopra l'immagine della pagina, la pagina corrente cerchiata, una tacca dei colori della barra di scorrimento per le pagine con segni o note; un tocco porta alla pagina e il pannello resta aperto, Indietro torna dove si era prima di aprirlo; le miniature si caricano solo quando la scheda è visibile e mai prima delle pagine che si stanno leggendo; la scheda Segnalibri arriva con i segnalibri. La penna non usa mai il pannello: sul bordo scrive, sul pannello aperto lo chiude senza scrivere) |
 | UI-05 | Indicatore pagina e zoom | In basso a destra, a sinistra della barra di scorrimento | Pillola fluttuante che mostra "12 / 48 · 125%"; compare e sparisce insieme alla barra di scorrimento (durante scroll e zoom, sparisce dopo 1,5 s; dissolvenza di 150 ms, istantanea se le animazioni di Windows sono disattivate) e resta visibile mentre la si usa (mouse sopra, campo aperto, tastiera). Un tocco apre il campo "vai a pagina" (FR-09); una pressione lunga, il passaggio del mouse (o della penna sospesa) o la tastiera mostrano i pulsanti zoom − e + e "Adatta larghezza" (FR-07). Sopra l'indicatore, piccoli pulsanti tondi da 40 px: Indietro (FR-09), segno precedente e successivo (FR-102), con accanto l'avviso "Nessun altro segno"; compaiono e spariscono con l'indicatore. La penna preme i pulsanti e scrive nel campo come un dito; intorno scrive sulla pagina; quando sono nascosti scrive ovunque (fase 4a) |
@@ -109,13 +109,14 @@ L'interfaccia ha un solo livello di base, il canvas del documento, e quattro ele
 
 ### Toolbar strumenti (UI-02)
 
-La toolbar contiene, da sinistra a destra: Penna, Evidenziatore, Gomma, Selezione (lazo), separatore, Undo, Redo, separatore, Segnalibro sulla pagina corrente.
+La toolbar contiene, da sinistra a destra: Penna, Evidenziatore, Gomma, Selezione (lazo), separatore, Undo, Redo, separatore, Segnalibro sulla pagina corrente. Selezione (lazo) e Segnalibro sono visibili ma disattivati finché non arrivano le loro fasi (lazo nella fase 5, segnalibri da decidere).
 
 - Un tocco su uno strumento lo attiva. Un secondo tocco sullo strumento già attivo apre il suo **pannello opzioni** flottante sopra la toolbar.
-- Il pannello opzioni della penna mostra: 8 colori preimpostati, selettore colore libero, 3 spessori preimpostati, slider spessore, anteprima del tratto con pressione, curva di pressione (FR-21) e levigatura (FR-23); curva e levigatura passeranno anche nella finestra impostazioni (blocco 4b).
-- Il pannello dell'evidenziatore mostra: 6 colori (giallo, verde, azzurro, rosa, arancio, viola), punta tonda o a scalpello, angolo dello scalpello (0–180°), modalità "linea dritta". Gli spessori sono fissi (FR-46). Nel blocco 3c lo strumento e le sue opzioni stanno nel pannello degli strumenti; la toolbar finale arriva con la fase 4.
-- Il pannello della gomma mostra: cancella tratto intero / cancella parte del tratto, dimensione, "Cancella tutto nella pagina".
+- Il pannello opzioni della penna mostra: 8 colori preimpostati, selettore colore libero, la tavolozza personale, 3 spessori preimpostati, slider spessore, anteprima del tratto con pressione, curva di pressione (FR-21) e levigatura (FR-23); curva e levigatura passeranno anche nella finestra impostazioni (blocco 4b).
+- Il pannello dell'evidenziatore mostra: 6 colori (giallo, verde, azzurro, rosa, arancio, viola), la stessa tavolozza personale, punta tonda o a scalpello, angolo dello scalpello (0–180°), modalità "linea dritta". Gli spessori sono fissi (FR-46). Nel blocco 3c lo strumento e le sue opzioni stanno nel pannello degli strumenti; la toolbar finale arriva con la fase 4.
+- Il pannello della gomma mostra: cancella tratto intero / cancella parte del tratto, dimensione, "Cancella tutto nella pagina" (chiede conferma e si annulla con Undo). La modalità scelta qui vale anche per il retro della penna: una sola modalità per la gomma (FR-31).
 - Ogni strumento ricorda colore e spessore scelti tra una sessione e l'altra.
+- **Tavolozza personale (blocco 4a):** fino a 12 colori scelti dall'utente, condivisi da penna ed evidenziatore. Il "+" apre il selettore colore libero e il colore scelto entra nella tavolozza (se è piena esce il più vecchio; un colore già presente non si ripete); una pressione lunga (o Canc) su un colore personale lo toglie. Per l'evidenziatore un colore personale è solo una tinta: l'opacità resta 0,35 (FR-41).
 - Il selettore colore libero (blocco 4a) è un piccolo selettore costruito nell'app: quadrato saturazione/luminosità, tonalità e codice esadecimale. Quello di WPF UI non è utilizzabile (non è pubblico nella versione 4.3).
 - La penna usa i controlli della toolbar e dei pannelli opzioni come il dito e il mouse (anche il retro della penna, che sul pannello preme il controllo); una pressione della penna fuori dal pannello aperto lo chiude e scrive sulla pagina. È una differenza voluta rispetto al pannello laterale (UI-04), dove la penna sul pannello lo chiude senza scrivere. Sotto la toolbar e i pannelli l'inchiostro della pagina non parte mai, nemmeno per un istante. In una finestra bassa il pannello opzioni scorre e non finisce mai sotto la barra del titolo.
 
@@ -129,6 +130,8 @@ La toolbar contiene, da sinistra a destra: Penna, Evidenziatore, Gomma, Selezion
 | Modalità "Toolbar fissa" attiva | Sempre visibile | Invariato |
 
 "In scrittura" vale per il tratto o la cancellazione in corso sulla pagina: conta anche il disegno col mouse (NFR-23) e la cancellazione col retro della penna.
+
+"Tocco con un dito su area vuota" (blocco 4a): un tocco singolo di un dito che non si muove, sulla pagina o sullo sfondo attorno, fuori da ogni elemento flottante. Diventa un tocco singolo 300 ms dopo il sollevamento, se non arriva un secondo tocco: il doppio tocco resta lo zoom (FR-07) e non mostra né nasconde la toolbar. Non conta il tocco che chiude un pannello aperto toccando fuori (chiude soltanto), quello che ferma lo scorrimento per inerzia, quello sulla barra di scorrimento. La penna non mostra né nasconde mai la toolbar con un tocco: scrive.
 
 ### Avvisi
 
@@ -175,7 +178,7 @@ La scrittura è la funzione centrale: deve essere immediata, fluida e fedele all
 | FR-22 | Spessore base da 0,25 a 5 mm; a pressione massima il tratto raggiunge 1,5× lo spessore base, a pressione minima 0,3× | Must |
 | FR-23 | Tratti levigati (curve di Bézier) senza perdere precisione nei dettagli piccoli | Must |
 | FR-24 | Latenza percepita minima: il tratto appare sotto la punta durante il movimento, non al sollevamento | Must |
-| FR-25 | 8 colori preimpostati modificabili + selettore colore libero | Must |
+| FR-25 | 8 colori preimpostati + selettore colore libero + tavolozza personale di fino a 12 colori, condivisa con l'evidenziatore (UI-02, blocco 4a) | Must |
 | FR-26 | Le annotazioni seguono la pagina con zoom e scroll, restando ancorate al punto del PDF | Must |
 | FR-27 | Ogni tratto appartiene a una sola pagina e viene ritagliato al suo bordo | Must |
 | FR-28 | Il pulsante laterale della penna, tenuto premuto, attiva temporaneamente lo strumento Selezione (lazo) | Should |
@@ -301,6 +304,12 @@ All'apertura, se i dati privati sono presenti e coerenti, l'app ricostruisce i t
 
 Gli evidenziatori seguono la stessa strategia: l'aspetto è il contorno della punta (tonda o a scalpello) riempito con il colore dell'evidenziatore, e l'annotazione ha opacità 0,35 (`/CA`), applicata dall'aspetto attraverso lo stato grafico che PDFium aggiunge. La modalità di fusione "Multiply" non è disponibile con l'API pubblica di PDFium (FR-40, approssimato). I dati privati ricordano che il tratto è un evidenziatore, con colore, opacità e punta, così che l'app lo riapra come tale.
 
+### Impostazioni
+
+| ID | Requisito | Priorità |
+| --- | --- | --- |
+| FR-110 | Le impostazioni dell'app sono in un file con numero di versione (`%LOCALAPPDATA%\DreamBooks\settings.json`, `"v":1`), scritto in modo atomico (file temporaneo e sostituzione) mezzo secondo dopo l'ultima modifica e all'uscita. Contiene: tema (sistema, chiaro, scuro; predefinito sistema), colore di accento personalizzato (predefinito nessuno), modalità della gomma (intero tratto o parte del tratto, predefinito intero tratto; vale per lo strumento gomma e per il retro della penna), curva di pressione (predefinita "decisa"), levigatura (predefinita "forte"), "Toolbar fissa" (predefinito no), bordo della toolbar (predefinito in basso), colore e spessore ricordati di penna, evidenziatore (colore, punta, angolo, linea dritta) e gomma (dimensione), tavolozza personale (fino a 12 colori). Non contiene mai contenuti né percorsi dei documenti. File mancante, illeggibile o di versione sconosciuta: valori predefiniti; un valore non valido torna al suo predefinito da solo; un errore di scrittura non blocca l'app e non è mai un crash. Nel blocco 4a i valori si cambiano dalla toolbar e dai suoi pannelli; la finestra delle impostazioni arriva col blocco 4b | Must |
+
 ## 8. Requisiti non funzionali
 
 I valori sono misurati su una Surface Pro di fascia media (Intel Core i5 o Snapdragon X, 16 GB RAM) con un PDF di riferimento di 300 pagine.
@@ -361,7 +370,7 @@ Lo sviluppo procede in cinque fasi; ognuna termina con una build installabile da
 1. **Prototipo inchiostro.** Una pagina PDF renderizzata, penna con pressione, gomma col dorso, undo/redo in memoria, zoom minimo (parte di FR-06) per verificare FR-26. Serve a validare la sensazione di scrittura.
 2. **Salvataggio e riapertura.** Salvataggio nel PDF con le due forme (visibile e modificabile), riapertura, diario delle modifiche non salvate e recupero dopo crash; i tratti di tutte le pagine restano quando si cambia pagina.
 3. **Documento completo**, in tre blocchi da provare uno alla volta: **3a** documento a più pagine (scorrimento continuo con rendering virtualizzato, zoom, vai a pagina, torna indietro, ripresa dall'ultima posizione, barra di scorrimento con anteprima); **3b** aiuti per ritrovare le cose, in due passi (3b-1: riconoscimento dei segni dalla linea laterale, tacche sulla barra, salto tra segni, elenco dei segni; 3b-2: pannello di miniature con i propri tratti, ricerca di testo); i segnalibri e la scrittura dell'indice del PDF sono rinviati; **3c** evidenziatori (tondo e a scalpello, salvati trasparenti nel PDF).
-4. **Interfaccia finale.** Toolbar flottante, pannelli a scomparsa, Mica/Acrylic, animazioni, temi, schermata iniziale, impostazioni.
+4. **Interfaccia finale.** Toolbar flottante, pannelli a scomparsa, Mica/Acrylic, animazioni, temi, schermata iniziale, impostazioni. In due blocchi: **4a** finestra (Mica, barra del titolo trasparente), temi chiaro e scuro, file delle impostazioni (FR-110), toolbar flottante con i pannelli opzioni e la tavolozza personale, indicatore pagina, pulsanti di navigazione, pillola di ricerca, menu principale; il pannello di debug sparisce (**in prova** sulla Surface, non ancora approvato); **4b** schermata iniziale, file recenti, finestra delle impostazioni, trascinamento della toolbar sugli altri bordi.
 5. **Rifinitura.** Selezione con lazo, prestazioni su PDF grandi, accessibilità, pacchetto MSIX.
 
 ### Criteri di accettazione della v1
