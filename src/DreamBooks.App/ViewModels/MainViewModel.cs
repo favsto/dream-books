@@ -67,6 +67,7 @@ public sealed class MainViewModel : ObservableObject
     private DocumentLock? _lock;
     private bool _startupRecoveryDone;
     private string? _journalWarning;
+    private string? _settingsWarning;
     private bool _listenerFailed;
 
     // Marks (FR-100..FR-103): a new index per document, live tracking of loaded pages, and a background scan over
@@ -305,6 +306,16 @@ public sealed class MainViewModel : ObservableObject
     {
         get => _journalWarning;
         private set => SetProperty(ref _journalWarning, value);
+    }
+
+    /// <summary>
+    /// "The settings were not saved" (FR-110) while the settings file cannot be written, null otherwise; set by the
+    /// window from the settings service, shown in the notices.
+    /// </summary>
+    public string? SettingsWarning
+    {
+        get => _settingsWarning;
+        set => SetProperty(ref _settingsWarning, value);
     }
 
     /// <summary>Crash recovery over the recovery store, or null when the view model has none.</summary>

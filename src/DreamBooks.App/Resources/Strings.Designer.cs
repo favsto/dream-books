@@ -391,6 +391,9 @@ internal static class Strings
     /// <summary>The settings file could not be written (FR-110).</summary>
     public static string WarnSettingsNotSaved => Get(nameof(WarnSettingsNotSaved));
 
+    /// <summary>The help text of the settings warning in the notices (FR-110).</summary>
+    public static string SettingsWarningLabel => Get(nameof(SettingsWarningLabel));
+
     /// <summary>The floating toolbar (UI-02).</summary>
     public static string ToolbarLabel => Get(nameof(ToolbarLabel));
 

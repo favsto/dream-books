@@ -10,7 +10,8 @@ using Microsoft.Win32;
 namespace DreamBooks.App.Views;
 
 /// <summary>
-/// The notices at the top centre (FR-84, FR-86): the view model's <c>Notice</c> and <c>JournalWarning</c>, each line
+/// The notices at the top centre (FR-84, FR-86, FR-110): the view model's <c>Notice</c>, <c>JournalWarning</c> and
+/// <c>SettingsWarning</c>, each line
 /// shown only with a text, in a floating panel with a close button. Shown while there is a notice and it was not closed;
 /// a notice that changes (or a new warning) shows it again. Each line is a live region and is announced when it changes
 /// (NFR-31). Pen rule: only the surface hit-tests and it carries the inert stylus plug-in; the pen presses the close
@@ -19,8 +20,8 @@ namespace DreamBooks.App.Views;
 public partial class NoticeBar : UserControl
 {
     private bool _listening;
-    private (string? Notice, string? Warning) _current;
-    private (string? Notice, string? Warning)? _dismissed;
+    private (string? Notice, string? Warning, string? Settings) _current;
+    private (string? Notice, string? Warning, string? Settings)? _dismissed;
 
     public NoticeBar()
     {
@@ -55,22 +56,26 @@ public partial class NoticeBar : UserControl
     /// The notices now (null or empty: none): each line shows with a text, and the panel with a line unless exactly these
     /// were closed.
     /// </summary>
-    internal void Show(string? notice, string? warning)
+    internal void Show(string? notice, string? warning, string? settings = null)
     {
         notice = string.IsNullOrEmpty(notice) ? null : notice;
         warning = string.IsNullOrEmpty(warning) ? null : warning;
-        _current = (notice, warning);
+        settings = string.IsNullOrEmpty(settings) ? null : settings;
+        _current = (notice, warning, settings);
         SyncText(NoticeText, notice); // when driven without the bindings (tests); never replaces them
         SyncText(WarningText, warning);
+        SyncText(SettingsText, settings);
 
         NoticeText.Visibility = notice is null ? Visibility.Collapsed : Visibility.Visible;
         WarningText.Visibility = warning is null ? Visibility.Collapsed : Visibility.Visible;
-        if (notice is null && warning is null)
+        SettingsText.Visibility = settings is null ? Visibility.Collapsed : Visibility.Visible;
+        var any = notice is not null || warning is not null || settings is not null;
+        if (!any)
         {
             _dismissed = null;
         }
 
-        var shown = (notice is not null || warning is not null) && _dismissed != _current;
+        var shown = any && _dismissed != _current;
         Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
         Surface.IsHitTestVisible = shown;
     }
@@ -79,7 +84,7 @@ public partial class NoticeBar : UserControl
     internal void Dismiss()
     {
         _dismissed = _current;
-        Show(_current.Notice, _current.Warning);
+        Show(_current.Notice, _current.Warning, _current.Settings);
     }
 
     /// <summary>Opaque theme brushes when Windows transparency effects are off (NFR-32), the tinted layers otherwise.</summary>
@@ -95,12 +100,12 @@ public partial class NoticeBar : UserControl
 
     private void OnTextUpdated(object? sender, DataTransferEventArgs e)
     {
-        if (NoticeText is null || WarningText is null || Surface is null)
+        if (NoticeText is null || WarningText is null || SettingsText is null || Surface is null)
         {
             return; // still being built
         }
 
-        Show(NoticeText.Text, WarningText.Text);
+        Show(NoticeText.Text, WarningText.Text, SettingsText.Text);
         if (IsShown && sender is TextBlock { Text.Length: > 0 } line)
         {
             var peer = UIElementAutomationPeer.FromElement(line) ?? UIElementAutomationPeer.CreatePeerForElement(line);

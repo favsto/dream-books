@@ -135,7 +135,7 @@ La toolbar contiene, da sinistra a destra: Penna, Evidenziatore, Gomma, Selezion
 
 ### Avvisi
 
-Gli avvisi del documento (modifiche ripristinate dal diario, PDF che non si può salvare, annotazioni di altri programmi non modificabili, diario disattivato: FR-84, FR-86) e l'avviso "le modifiche non salvate non vengono registrate" compaiono in alto al centro, sotto la barra di ricerca, in un piccolo pannello flottante con il pulsante Chiudi; chiuso, resta chiuso finché l'avviso non cambia. L'Assistente vocale li legge quando compaiono. La penna preme Chiudi e intorno scrive sulla pagina (blocco 4a).
+Gli avvisi del documento (modifiche ripristinate dal diario, PDF che non si può salvare, annotazioni di altri programmi non modificabili, diario disattivato: FR-84, FR-86) , l'avviso "le modifiche non salvate non vengono registrate" e l'avviso "Le impostazioni non sono state salvate" (finché il file delle impostazioni non si può scrivere, FR-110; sparisce da solo quando un salvataggio riesce) compaiono in alto al centro, sotto la barra di ricerca, in un piccolo pannello flottante con il pulsante Chiudi; chiuso, resta chiuso finché l'avviso non cambia. L'Assistente vocale li legge quando compaiono. La penna preme Chiudi e intorno scrive sulla pagina (blocco 4a).
 
 ### Schermata iniziale
 

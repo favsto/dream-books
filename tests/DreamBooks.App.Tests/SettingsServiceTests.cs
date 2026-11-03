@@ -1,4 +1,5 @@
 using DreamBooks.App.Ink;
+using DreamBooks.App.Resources;
 using DreamBooks.App.Services;
 using DreamBooks.App.ViewModels;
 using DreamBooks.Core.Ink;
@@ -211,6 +212,32 @@ public sealed class SettingsServiceTests : IDisposable
         await service.WhenWrittenAsync();
 
         Assert.False(service.LastSaveFailed);
+    }
+
+    [Fact]
+    public async Task The_save_status_is_raised_when_writing_starts_failing_and_when_it_works_again()
+    {
+        var root = Path.Combine(_dir, "settings");
+        await File.WriteAllTextAsync(root, "x"); // the folder is a file: writing fails
+        var service = NewService(root);
+        var tools = new ToolsViewModel();
+        service.AttachTools(tools);
+        var changes = new List<string?>();
+        service.SaveStatusChanged += (_, _) => changes.Add(service.Warning);
+
+        tools.BaseWidthMm = 3;
+        _scheduler.Advance(SettingsService.SaveDelay);
+        await service.WhenWrittenAsync();
+        tools.BaseWidthMm = 3.5; // still failing: no new status
+        _scheduler.Advance(SettingsService.SaveDelay);
+        await service.WhenWrittenAsync();
+        Assert.Equal([Strings.WarnSettingsNotSaved], changes);
+
+        File.Delete(root);
+        tools.BaseWidthMm = 4;
+        _scheduler.Advance(SettingsService.SaveDelay);
+        await service.WhenWrittenAsync();
+        Assert.Equal([Strings.WarnSettingsNotSaved, null], changes);
     }
 
     [Fact]

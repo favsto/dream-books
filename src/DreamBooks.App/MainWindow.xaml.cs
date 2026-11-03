@@ -66,6 +66,14 @@ public partial class MainWindow : FluentWindow
         {
             settings.AttachTools(_viewModel.Tools);
             settings.AttachToolbar(_viewModel.Toolbar);
+
+            // A settings file that cannot be written shows a notice until a later write works (FR-110). Raised on a
+            // thread-pool thread, like the journal's faults: shown on this window's thread.
+            void OnSettingsSaveStatus(object? sender, EventArgs e) =>
+                Dispatcher.BeginInvoke(() => CurrentViewModel.SettingsWarning = settings.Warning);
+            settings.SaveStatusChanged += OnSettingsSaveStatus;
+            Closed += (_, _) => settings.SaveStatusChanged -= OnSettingsSaveStatus;
+            _viewModel.SettingsWarning = settings.Warning;
         }
 
         Loaded += OnLoaded;

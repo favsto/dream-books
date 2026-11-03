@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Media;
 using DreamBooks.App.Ink;
+using DreamBooks.App.Resources;
 using DreamBooks.App.Services;
 using DreamBooks.App.ViewModels;
 using DreamBooks.App.Views;
@@ -260,6 +261,47 @@ public sealed class ShellIntegrationTests : IDisposable
                     .ToList();
                 Assert.True(surfaces.Count >= 8, $"{surfaces.Count} floating surfaces");
                 Assert.All(surfaces, s => Assert.True(s.IsOpaque, $"{s.Name} in {s.Parent} is translucent"));
+            }
+            finally
+            {
+                window.CloseForTests();
+            }
+        });
+    }
+
+    [Fact]
+    public void A_settings_file_that_cannot_be_written_shows_a_notice_until_a_later_save_works()
+    {
+        var root = WriteFile("settings-root"); // a file where the settings folder should be: writing fails
+        WpfTestThread.Run(() =>
+        {
+            var service = new SettingsService(new Pdf.AppSettingsStore(root), _scheduler);
+            service.Load();
+            var window = new MainWindow(null, service) { TransparencyEnabled = () => true, MicaSupported = () => true };
+            try
+            {
+                Lay(window);
+                var vm = (MainViewModel)window.DataContext;
+                var notices = window.Notices;
+                Assert.False(notices.IsShown);
+
+                vm.Tools.BaseWidthMm = 3; // remembered: written after the debounce
+                _scheduler.Advance(SettingsService.SaveDelay);
+                WpfTestThread.PumpUntil(() => service.WhenWrittenAsync().IsCompleted && vm.SettingsWarning is not null);
+                WpfTestThread.Drain();
+                Assert.Equal(Strings.WarnSettingsNotSaved, vm.SettingsWarning);
+                Assert.True(notices.IsShown);
+                Assert.Equal(Visibility.Visible, notices.SettingsText.Visibility);
+                Assert.Equal(Strings.WarnSettingsNotSaved, notices.SettingsText.Text);
+                Assert.Equal(Strings.SettingsWarningLabel, System.Windows.Automation.AutomationProperties.GetHelpText(notices.SettingsText));
+
+                File.Delete(root); // the folder can be made again: the next save works
+                vm.Tools.BaseWidthMm = 4;
+                _scheduler.Advance(SettingsService.SaveDelay);
+                WpfTestThread.PumpUntil(() => service.WhenWrittenAsync().IsCompleted && vm.SettingsWarning is null);
+                WpfTestThread.Drain();
+                Assert.False(notices.IsShown);
+                Assert.Equal(Visibility.Collapsed, notices.SettingsText.Visibility);
             }
             finally
             {

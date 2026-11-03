@@ -88,7 +88,7 @@ public class StringsTests
                  {
                      "ToolSelection", "ToolBookmark", "PenBlack", "PenDarkBlue", "PenBlue", "PenRed", "PenGreen", "PenOrange",
                      "PenPurple", "PenGrey", "PenOptions", "EraserOptions", "ClearPage", "ClearPageConfirm", "ClearPageConfirmYes",
-                     "Cancel", "AddCustomColor", "RemoveCustomColor", "WarnSettingsNotSaved",
+                     "Cancel", "AddCustomColor", "RemoveCustomColor", "WarnSettingsNotSaved", "SettingsWarningLabel",
                  })
         {
             Assert.True(keys.ContainsKey(key), $"Strings.resx is missing '{key}'.");

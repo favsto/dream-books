@@ -38,6 +38,12 @@ internal sealed class SettingsService
     /// <summary>Raised on a thread-pool thread after a write failed. Carries nothing about the cause (no path).</summary>
     public event EventHandler? SaveFailed;
 
+    /// <summary>
+    /// Raised on a thread-pool thread when <see cref="LastSaveFailed"/> changes: a write failed after working, or worked
+    /// again after failing. The window shows or clears <see cref="Warning"/> in the notices.
+    /// </summary>
+    public event EventHandler? SaveStatusChanged;
+
     public AppSettings Current => _current;
 
     /// <summary>True when the last write failed (cleared by the next successful one).</summary>
@@ -182,15 +188,19 @@ internal sealed class SettingsService
 
     private void Report(bool failed)
     {
+        var changed = _lastSaveFailed != failed;
         _lastSaveFailed = failed;
-        if (!failed)
-        {
-            return;
-        }
-
         try
         {
-            SaveFailed?.Invoke(this, EventArgs.Empty);
+            if (changed)
+            {
+                SaveStatusChanged?.Invoke(this, EventArgs.Empty);
+            }
+
+            if (failed)
+            {
+                SaveFailed?.Invoke(this, EventArgs.Empty);
+            }
         }
 #pragma warning disable CA1031 // A failing listener must not fault the write chain; the warning stays in LastSaveFailed.
         catch (Exception)
