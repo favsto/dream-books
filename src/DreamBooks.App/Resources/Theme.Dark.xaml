@@ -62,4 +62,6 @@
 
     <!-- The save progress line under the title bar (FR-89): the accent colour. -->
     <SolidColorBrush x:Key="SaveProgressBarBrush" Color="{DynamicResource SystemAccentColorPrimary}" />
+    <SolidColorBrush x:Key="DialogButtonBrush" Color="#3A3A3A" />
+    <SolidColorBrush x:Key="DialogButtonHoverBrush" Color="#4A4A4A" />
 </ResourceDictionary>

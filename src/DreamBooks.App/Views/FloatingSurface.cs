@@ -76,10 +76,23 @@ public sealed class FloatingSurface : Grid
         }
     }
 
+    /// <summary>A radius larger than half the shorter side (the theme's pill) is cut to it: a rounded band, not an ellipse.</summary>
+    protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
+    {
+        base.OnRenderSizeChanged(sizeInfo);
+        ApplyCornerRadius();
+    }
+
     private void ApplyCornerRadius()
     {
-        DiffuseLayer.CornerRadius = CornerRadius;
-        ContactLayer.CornerRadius = CornerRadius;
+        var limit = Math.Min(ActualWidth, ActualHeight) / 2;
+        var radius = limit > 0
+            ? new CornerRadius(
+                Math.Min(CornerRadius.TopLeft, limit), Math.Min(CornerRadius.TopRight, limit),
+                Math.Min(CornerRadius.BottomRight, limit), Math.Min(CornerRadius.BottomLeft, limit))
+            : CornerRadius;
+        DiffuseLayer.CornerRadius = radius;
+        ContactLayer.CornerRadius = radius;
     }
 
     private void ApplyMaterial()

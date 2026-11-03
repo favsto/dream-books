@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+                    xmlns:views="clr-namespace:DreamBooks.App.Views">
     <!-- Visual values are defined once here (see .claude/rules/wpf-ui.md): the tokens that are the same in both themes.
          Colours that change with the theme (backdrop, panels, rail, glyphs, accent brushes, shadows) are in
          Theme.Light.xaml / Theme.Dark.xaml, merged after this one by App.AddThemeResources and swapped by ThemeService; reach them
@@ -315,9 +316,9 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Disc" Background="{TemplateBinding Background}" CornerRadius="{StaticResource PillCornerRadius}">
+                    <views:PillBorder x:Name="Disc" Background="{TemplateBinding Background}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
+                    </views:PillBorder>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Disc" Property="Background" Value="{DynamicResource ToolbarHoverBrush}" />
@@ -347,9 +348,9 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}" CornerRadius="{StaticResource PillCornerRadius}">
+                    <views:PillBorder Background="{TemplateBinding Background}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
+                    </views:PillBorder>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter Property="Background" Value="{DynamicResource ToolbarHoverBrush}" />
@@ -380,16 +381,50 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Disc" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"
-                            CornerRadius="{StaticResource PillCornerRadius}">
+                    <views:PillBorder x:Name="Disc" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
+                    </views:PillBorder>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Disc" Property="Background" Value="{DynamicResource ToolbarHoverBrush}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Disc" Property="Background" Value="{DynamicResource ToolbarPressedBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- The confirmation dialog (ChoiceDialog): a themed window, not WPF UI's global button look. Neutral buttons with
+         the theme text on a solid fill (readable in both themes); the default button has an accent ring. -->
+    <Thickness x:Key="DialogButtonPadding">12,0,12,0</Thickness>
+    <Thickness x:Key="DialogButtonRingThickness">2</Thickness>
+    <Style x:Key="DialogButtonStyle" TargetType="Button">
+        <Setter Property="MinWidth" Value="{StaticResource TouchTarget}" />
+        <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />
+        <Setter Property="Margin" Value="4,0,0,0" />
+        <Setter Property="Padding" Value="{StaticResource DialogButtonPadding}" />
+        <Setter Property="Foreground" Value="{DynamicResource GlyphBrush}" />
+        <Setter Property="Background" Value="{DynamicResource DialogButtonBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Face" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"
+                            CornerRadius="{StaticResource InnerCornerRadius}" BorderBrush="Transparent"
+                            BorderThickness="{StaticResource DialogButtonRingThickness}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsDefault" Value="True">
+                            <Setter TargetName="Face" Property="BorderBrush" Value="{DynamicResource ToolActiveForegroundBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Face" Property="BorderBrush" Value="{DynamicResource ToolActiveForegroundBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Face" Property="Background" Value="{DynamicResource DialogButtonHoverBrush}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

@@ -8,13 +8,12 @@ namespace DreamBooks.App.Services;
 /// <summary>
 /// A small modal question with Italian button labels (a MessageBox cannot label its buttons). Enter presses
 /// the question's default button, which also has the focus; Esc and the close box always give the cancel
-/// answer; buttons are reachable with Tab and use the app's 40 px button style.
+/// answer; buttons are reachable with Tab and use the theme's DialogButtonStyle (40 px, readable text in both themes); the window takes the theme's opaque background and text brushes.
 /// </summary>
 internal sealed class ChoiceDialog : Window
 {
     private const double _maxTextWidth = 420;
     private static readonly Thickness _padding = new(16);
-    private static readonly Thickness _buttonPadding = new(12, 0, 12, 0);
     private static readonly Thickness _buttonsGap = new(0, 16, 0, 0);
     private readonly int _cancelIndex;
 
@@ -34,6 +33,8 @@ internal sealed class ChoiceDialog : Window
         ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        this.SetResourceReference(BackgroundProperty, "WindowBackgroundOpaqueBrush");
+        this.SetResourceReference(ForegroundProperty, "GlyphBrush");
 
         var buttons = new List<Button>(labels.Count);
         var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = _buttonsGap };
@@ -45,7 +46,7 @@ internal sealed class ChoiceDialog : Window
                 Content = labels[i],
                 IsDefault = i == question.DefaultIndex,
                 IsCancel = i == question.CancelIndex,
-                Padding = _buttonPadding,
+                Style = (Style)Application.Current.FindResource("DialogButtonStyle"),
             };
             AutomationProperties.SetName(button, labels[i]);
             button.Click += (_, _) =>
