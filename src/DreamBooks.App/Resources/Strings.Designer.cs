@@ -396,6 +396,9 @@ internal static class Strings
 
     /// <summary>The floating toolbar (UI-02).</summary>
     public static string ToolbarLabel => Get(nameof(ToolbarLabel));
+    public static string TitleBarMinimize => Get(nameof(TitleBarMinimize));
+    public static string TitleBarMaximize => Get(nameof(TitleBarMaximize));
+    public static string TitleBarClose => Get(nameof(TitleBarClose));
 
     /// <summary>The item status of the active tool's button (UI-02, NFR-31).</summary>
     public static string ToolActive => Get(nameof(ToolActive));

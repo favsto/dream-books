@@ -33,7 +33,7 @@ public sealed class MainWindowShellTests
                 // the app name for the taskbar) and the window buttons...
                 var titleBar = window.AppTitleBar;
                 Assert.Equal(nameof(ViewModels.MainViewModel.DocumentTitle),
-                    BindingOperations.GetBinding(titleBar, TitleBar.TitleProperty)?.Path.Path);
+                    BindingOperations.GetBinding(window.TitleNameText, System.Windows.Controls.TextBlock.TextProperty)?.Path.Path);
                 Assert.Equal(nameof(ViewModels.MainViewModel.WindowTitle),
                     BindingOperations.GetBinding(window, Window.TitleProperty)?.Path.Path);
                 Assert.True(titleBar.ShowMinimize && titleBar.ShowMaximize && titleBar.ShowClose);

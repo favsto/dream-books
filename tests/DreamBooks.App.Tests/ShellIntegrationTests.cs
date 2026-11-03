@@ -244,6 +244,8 @@ public sealed class ShellIntegrationTests : IDisposable
                 window.MainMenu.ApplyTransparency();
                 window.IndicatorChip.TransparencyEnabled = () => false;
                 window.IndicatorChip.ApplyTransparency();
+                window.TransparencyEnabled = () => false;
+                window.ApplyBackdrop();
                 window.NavButtons.TransparencyEnabled = () => false;
                 window.NavButtons.ApplyTransparency();
                 window.SearchBar.TransparencyEnabled = () => false;

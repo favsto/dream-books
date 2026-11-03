@@ -21,7 +21,7 @@ public sealed class ChoiceDialogTests
         return (0.2126 * Channel(c.R)) + (0.7152 * Channel(c.G)) + (0.0722 * Channel(c.B));
     }
 
-    private static double Contrast(Color a, Color b)
+    internal static double Contrast(Color a, Color b)
     {
         var (hi, lo) = (Math.Max(Luminance(a), Luminance(b)), Math.Min(Luminance(a), Luminance(b)));
         return (hi + 0.05) / (lo + 0.05);

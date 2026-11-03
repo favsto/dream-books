@@ -9,10 +9,17 @@
     <sys:Double x:Key="TouchTarget">40</sys:Double>
     <Thickness x:Key="Gap">0,4,0,0</Thickness>
     <Thickness x:Key="SectionGap">0,12,0,0</Thickness>
-    <!-- The window's title bar (UI-06) lies over the document: 40 px (the touch target; WPF UI's default is 48),
-         elements docked at the top stay below it. -->
-    <sys:Double x:Key="TitleBarHeight">40</sys:Double>
-    <Thickness x:Key="TitleBarClearance">0,40,0,0</Thickness>
+    <!-- The window's title bar (UI-06) lies over the document: 48 px, the 40 px touch target of its pills and buttons with
+         a 4 px margin above; elements docked at the top stay below it. -->
+    <sys:Double x:Key="TitleBarHeight">48</sys:Double>
+    <Thickness x:Key="TitleBarClearance">0,48,0,0</Thickness>
+    <!-- The title bar's two pills (UI-06): the file name and the window buttons, tinted like the other floating surfaces.
+         The buttons are 44 x 40 DIP (the width is WPF UI's, MainWindow sets the 40 high); the pill lies behind them. -->
+    <Thickness x:Key="TitleBarPillMargin">8,4,8,0</Thickness>
+    <sys:Double x:Key="TitleBarPillHeight">40</sys:Double>
+    <sys:Double x:Key="TitleBarButtonsPillWidth">132</sys:Double>
+    <Thickness x:Key="TitleBarNamePadding">14,0,14,0</Thickness>
+    <sys:Double x:Key="TitleBarNameMaxWidth">480</sys:Double>
 
     <!-- Chisel angle slider (FR-46): one degree per arrow key, fifteen per page key. -->
     <sys:Double x:Key="ChiselAngleSmallChange">1</sys:Double>

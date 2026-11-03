@@ -104,7 +104,22 @@
              and the window buttons through the non-client hit test. For the pen the drag area is client area
              (TitleBarHitTest) and its parts let the pen through (TitleBarPenInput), so the pen writes on the page under
              it; the mouse and fingers drag the window and every pointer presses the buttons as before. -->
-        <ui:TitleBar x:Name="AppTitleBar" Title="{Binding DocumentTitle}" VerticalAlignment="Top" Panel.ZIndex="1"
+        <!-- The two pills behind the title bar (UI-06): the file name with the dirty mark, and the window buttons. They
+             never take input (the bar's own parts do) and follow the theme; opaque with transparency effects off. -->
+        <views:FloatingSurface x:Name="TitleNamePill" Panel.ZIndex="0" HorizontalAlignment="Left" VerticalAlignment="Top"
+                               Height="{StaticResource TitleBarPillHeight}" Margin="{StaticResource TitleBarPillMargin}"
+                               IsHitTestVisible="False" CornerRadius="{StaticResource PillCornerRadius}">
+            <TextBlock x:Name="TitleNameText" Text="{Binding DocumentTitle}" VerticalAlignment="Center"
+                       Padding="{StaticResource TitleBarNamePadding}" MaxWidth="{StaticResource TitleBarNameMaxWidth}"
+                       TextTrimming="CharacterEllipsis" Foreground="{DynamicResource GlyphBrush}" />
+        </views:FloatingSurface>
+        <views:FloatingSurface x:Name="TitleButtonsPill" Panel.ZIndex="0" HorizontalAlignment="Right" VerticalAlignment="Top"
+                               Width="{StaticResource TitleBarButtonsPillWidth}" Height="{StaticResource TitleBarPillHeight}"
+                               Margin="{StaticResource TitleBarPillMargin}" IsHitTestVisible="False"
+                               CornerRadius="{StaticResource PillCornerRadius}" />
+        <ui:TitleBar x:Name="AppTitleBar" VerticalAlignment="Top" Panel.ZIndex="1"
+                     Foreground="{DynamicResource GlyphBrush}" ButtonsForeground="{DynamicResource GlyphBrush}"
+                     ButtonsBackground="Transparent"
                      Height="{StaticResource TitleBarHeight}"
                      ShowHelp="False" />
 

@@ -79,7 +79,7 @@ public sealed class DebugPanelReplacementTests : IDisposable
 
             // The saving indicator: the line under the title bar (FR-89); the dirty mark in the title (UI-06).
             Bound("Saving indicator", window.SaveLine, SaveProgressLine.IsActiveProperty, nameof(MainViewModel.IsSaving));
-            Bound("Dirty mark", window.AppTitleBar, Wpf.Ui.Controls.TitleBar.TitleProperty, nameof(MainViewModel.DocumentTitle));
+            Bound("Dirty mark", window.TitleNameText, System.Windows.Controls.TextBlock.TextProperty, nameof(MainViewModel.DocumentTitle));
 
             // Previous / next page: PgUp / PgDn (FR-10, a screen at a time) and the chip's go to page.
             var top = vm.Viewport.Position;

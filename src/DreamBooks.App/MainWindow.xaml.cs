@@ -1,3 +1,4 @@
+using DreamBooks.App.Resources;
 using System.ComponentModel;
 using System.IO;
 using System.Windows;
@@ -145,18 +146,49 @@ public partial class MainWindow : FluentWindow
         // window buttons among them) is in the tree.
         // Also when it is loaded, and when its template is applied again (a new style builds new parts at the same size,
         // which SizeChanged would miss).
-        AppTitleBar.SizeChanged += (_, _) => TitleBarPenInput.LetPenThrough(AppTitleBar);
-        AppTitleBar.Loaded += (_, _) => TitleBarPenInput.LetPenThrough(AppTitleBar);
+        AppTitleBar.SizeChanged += (_, _) => { TitleBarPenInput.LetPenThrough(AppTitleBar); StyleWindowButtons(); };
+        AppTitleBar.Loaded += (_, _) => { TitleBarPenInput.LetPenThrough(AppTitleBar); StyleWindowButtons(); };
         var titleBarTemplate = DependencyPropertyDescriptor.FromProperty(Control.TemplateProperty, typeof(Control));
         void OnTitleBarTemplateChanged(object? sender, EventArgs e)
         {
             AppTitleBar.ApplyTemplate(); // the new parts now, so they let the pen through before the next press
             TitleBarPenInput.LetPenThrough(AppTitleBar);
+            StyleWindowButtons();
         }
 
         titleBarTemplate.AddValueChanged(AppTitleBar, OnTitleBarTemplateChanged);
         Closed += (_, _) => titleBarTemplate.RemoveValueChanged(AppTitleBar, OnTitleBarTemplateChanged); // a static table
         ContentRendered += OnFirstContentRendered;
+    }
+
+    /// <summary>
+    /// Gives the three window buttons of the title bar their Italian names and the 40 DIP height of the touch target,
+    /// lined up with the pill behind them (UI-06, NFR-31). WPF UI names them PART_MinimizeButton, PART_MaximizeButton and
+    /// PART_CloseButton.
+    /// </summary>
+    internal void StyleWindowButtons()
+    {
+        var height = (double)FindResource("TouchTarget");
+        var gap = (Thickness)FindResource("TitleBarPillMargin");
+        foreach (var button in TitleBarPenInput.Buttons(AppTitleBar))
+        {
+            var name = button.Name switch
+            {
+                "PART_MinimizeButton" => Strings.TitleBarMinimize,
+                "PART_MaximizeButton" => Strings.TitleBarMaximize,
+                "PART_CloseButton" => Strings.TitleBarClose,
+                _ => null,
+            };
+            if (name is null)
+            {
+                continue;
+            }
+
+            System.Windows.Automation.AutomationProperties.SetName(button, name);
+            button.Height = height;
+            button.VerticalAlignment = VerticalAlignment.Top;
+            button.Margin = new Thickness(0, gap.Top, button.Name == "PART_CloseButton" ? gap.Right : 0, 0); // the pill ends before the edge
+        }
     }
 
     /// <summary>The marks list hosted by <see cref="MarksPanel"/> (not named in XAML: the panel is a user control).</summary>
@@ -208,6 +240,8 @@ public partial class MainWindow : FluentWindow
 
         WindowBackdropType = backdrop;
         DocumentViewer.ApplyTransparency(transparent);
+        TitleNamePill.IsOpaque = !TransparencyEnabled();
+        TitleButtonsPill.IsOpaque = !TransparencyEnabled();
     }
 
     /// <summary>

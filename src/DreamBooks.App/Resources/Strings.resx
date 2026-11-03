@@ -183,6 +183,9 @@
   <data name="WarnSettingsNotSaved" xml:space="preserve"><value>Le impostazioni non sono state salvate.</value></data>
   <data name="SettingsWarningLabel" xml:space="preserve"><value>Avviso sulle impostazioni</value></data>
   <data name="ToolbarLabel" xml:space="preserve"><value>Barra degli strumenti</value></data>
+  <data name="TitleBarMinimize" xml:space="preserve"><value>Riduci a icona</value></data>
+  <data name="TitleBarMaximize" xml:space="preserve"><value>Ingrandisci</value></data>
+  <data name="TitleBarClose" xml:space="preserve"><value>Chiudi</value></data>
   <data name="ToolActive" xml:space="preserve"><value>attivo</value></data>
   <data name="PressurePreview" xml:space="preserve"><value>Anteprima del tratto con pressione</value></data>
   <data name="WidthPresetNameFormat" xml:space="preserve"><value>Spessore {0} mm</value></data>

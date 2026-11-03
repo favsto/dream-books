@@ -83,7 +83,7 @@ public sealed class MainMenuTests : IDisposable
             {
                 var menu = window.MainMenu;
                 Assert.Equal(document, vm.Session is not null);
-                Assert.Equal(document ? "a.pdf" : Strings.AppTitle, window.AppTitleBar.Title);
+                Assert.Equal(document ? "a.pdf" : Strings.AppTitle, window.TitleNameText.Text);
                 Assert.Equal(document, menu.SaveItem.IsEnabled);
                 Assert.Equal(document, menu.SaveAsItem.IsEnabled);
                 Assert.True(menu.OpenItem.IsEnabled);
@@ -401,17 +401,16 @@ public sealed class MainMenuTests : IDisposable
     {
         await WithWindowAsync((vm, window) =>
         {
-            var titleBar = window.AppTitleBar;
-            Assert.Equal(nameof(MainViewModel.DocumentTitle), BindingOperations.GetBinding(titleBar, TitleBar.TitleProperty)?.Path.Path);
+            Assert.Equal(nameof(MainViewModel.DocumentTitle), BindingOperations.GetBinding(window.TitleNameText, TextBlock.TextProperty)?.Path.Path);
             Assert.Equal(nameof(MainViewModel.WindowTitle), BindingOperations.GetBinding(window, Window.TitleProperty)?.Path.Path);
-            Assert.Equal("a.pdf", titleBar.Title);
+            Assert.Equal("a.pdf", window.TitleNameText.Text);
             Assert.Equal(vm.WindowTitle, window.Title);
 
             _dialogs.SaveChangesAnswer = SaveChangesAnswer.DontSave; // the window closes at the end
             Assert.True(vm.Editor!.CommitStroke(_line, InkTool.Pen, Palette.Colors[0], 1));
             WpfTestThread.Drain();
-            Assert.Equal(string.Format(Strings.DocumentTitleDirtyFormat, "a.pdf"), titleBar.Title);
-            Assert.Contains("*", titleBar.Title, StringComparison.Ordinal);
+            Assert.Equal(string.Format(Strings.DocumentTitleDirtyFormat, "a.pdf"), window.TitleNameText.Text);
+            Assert.Contains("*", window.TitleNameText.Text, StringComparison.Ordinal);
             Assert.Contains("*", window.Title, StringComparison.Ordinal);
         });
     }

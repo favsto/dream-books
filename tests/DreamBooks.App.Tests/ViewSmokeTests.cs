@@ -159,7 +159,7 @@ public sealed class ViewSmokeTests : IDisposable
                 Assert.False(menu.SaveItem.IsEnabled); // no document
                 Assert.Equal(Visibility.Collapsed, window.SaveLine.Visibility); // not saving
                 Assert.Equal(Strings.AppTitle, window.Title);
-                Assert.Equal(Strings.AppTitle, window.AppTitleBar.Title);
+                Assert.Equal(Strings.AppTitle, window.TitleNameText.Text);
                 Assert.Equal(Visibility.Collapsed, window.Notices.Visibility); // no notice, no journal fault
                 Assert.Equal(Strings.JournalWarningLabel, AutomationProperties.GetHelpText(window.Notices.WarningText));
                 Assert.EndsWith(Path.Combine("DreamBooks", "recovery"), MainWindow.RecoveryRoot(), StringComparison.OrdinalIgnoreCase);
