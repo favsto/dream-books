@@ -30,7 +30,7 @@
     <sys:Double x:Key="PageFadeInFromOpacity">0.6</sys:Double>
 
     <!-- Scroll rail (UI-07, design B): a 40 px touch strip on the right edge with an 8 px bar and a 34 px knob, one large
-         page preview beside the knob while scrubbing, and the page indicator; all fade in 180 ms and out 200 ms after
+         page preview beside the knob while scrubbing; all fade in 180 ms and out 200 ms after
          1.5 s idle, ease-out (instant when Windows animations are off, NFR-32). Mark ticks below (3b). -->
     <sys:TimeSpan x:Key="RailFadeInDuration">0:0:0.18</sys:TimeSpan>
     <sys:TimeSpan x:Key="RailFadeOutDuration">0:0:0.2</sys:TimeSpan>
@@ -87,7 +87,6 @@
     <Color x:Key="RailSearchTickColor">#1E88E5</Color>
     <SolidColorBrush x:Key="RailSearchTickBrush" Color="{StaticResource RailSearchTickColor}" Opacity="0.9" />
     <SolidColorBrush x:Key="RailSearchTickBrushOpaque" Color="{StaticResource RailSearchTickColor}" />
-    <Thickness x:Key="RailIndicatorMargin">0,0,44,12</Thickness>
 
     <!-- Finger fling (FR-05, NFR-03), read by FlingSettings: a pan released faster than FlingMinSpeed glides on, its
          speed decaying like a phone's, v(t) = v0·e^(−t/τ) with τ = FlingDecayTimeConstant (ms), until it falls below
@@ -238,6 +237,38 @@
     <sys:String x:Key="GlyphRedo">&#xE7A6;</sys:String>
     <sys:String x:Key="GlyphBookmark">&#xE728;</sys:String>
     <sys:String x:Key="GlyphAdd">&#xE710;</sys:String>
+    <sys:String x:Key="GlyphBack">&#xE72B;</sys:String>
+    <sys:String x:Key="GlyphPrevious">&#xE70E;</sys:String>
+    <sys:String x:Key="GlyphNext">&#xE70D;</sys:String>
+    <sys:String x:Key="GlyphSearch">&#xE721;</sys:String>
+    <sys:String x:Key="GlyphClose">&#xE711;</sys:String>
+    <sys:String x:Key="GlyphZoomIn">&#xE8A3;</sys:String>
+    <sys:String x:Key="GlyphZoomOut">&#xE71F;</sys:String>
+
+    <!-- The page indicator chip (UI-05, FR-09) at the bottom right, left of the rail's 40 px strip, and the navigation
+         buttons above it (Back, previous and next mark, FR-09, FR-102): floating surfaces like the toolbar's (999 px
+         pill, the same material). They show and hide with the rail, fading in and out in 150 ms (instant when Windows
+         animations are off, NFR-32). The chip's text is 14 px; its zoom buttons are toolbar buttons. -->
+    <sys:TimeSpan x:Key="NavigationFadeDuration">0:0:0.15</sys:TimeSpan>
+    <Thickness x:Key="IndicatorChipMargin">0,0,44,12</Thickness>
+    <Thickness x:Key="IndicatorChipPadding">4</Thickness>
+    <Thickness x:Key="ChipTextPadding">12,0,12,0</Thickness>
+    <sys:Double x:Key="ChipFontSize">14</sys:Double>
+    <Thickness x:Key="NavigationButtonsMargin">0,0,0,8</Thickness>
+    <Thickness x:Key="NavigationButtonGap">6,0,0,0</Thickness>
+    <Thickness x:Key="NavigationStatusPadding">14,8,14,8</Thickness>
+
+    <!-- The search pill (FR-13, FR-105) at the top centre, 8 DIP below the title bar: a search icon, the field, the count,
+         previous / next and close; its messages (wrap, no text, unread pages) in a small panel under it. -->
+    <Thickness x:Key="SearchPillMargin">0,48,0,0</Thickness>
+    <Thickness x:Key="SearchPillPadding">14,4,4,4</Thickness>
+    <sys:Double x:Key="SearchFieldWidth">240</sys:Double>
+    <Thickness x:Key="SearchGlyphMargin">0,0,10,0</Thickness>
+    <Thickness x:Key="SearchCountMargin">10,0,4,0</Thickness>
+    <sys:Double x:Key="SearchCountMinWidth">64</sys:Double>
+    <Thickness x:Key="SearchMessageMargin">0,6,0,0</Thickness>
+    <Thickness x:Key="SearchMessagePadding">14,8,14,8</Thickness>
+    <sys:Double x:Key="SearchMessageMaxWidth">360</sys:Double>
 
     <!-- A toolbar button: a 40 DIP round target with a 20 px icon; hover and press tints; dimmed when disabled. -->
     <Style x:Key="ToolbarButtonStyle" TargetType="Button">
@@ -305,6 +336,34 @@
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource FlyoutHeaderBrush}" />
         <Setter Property="Margin" Value="{StaticResource FlyoutHeaderMargin}" />
+    </Style>
+    <!-- The indicator chip's text ("12 / 48 · 125%"): a 40 DIP tall pill target as wide as the text, hover and press tints. -->
+    <Style x:Key="ChipTextButtonStyle" TargetType="Button">
+        <Setter Property="MinWidth" Value="{StaticResource TouchTarget}" />
+        <Setter Property="Height" Value="{StaticResource TouchTarget}" />
+        <Setter Property="Padding" Value="{StaticResource ChipTextPadding}" />
+        <Setter Property="FontSize" Value="{StaticResource ChipFontSize}" />
+        <Setter Property="Foreground" Value="{DynamicResource GlyphBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Stylus.IsPressAndHoldEnabled" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Disc" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"
+                            CornerRadius="{StaticResource PillCornerRadius}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Disc" Property="Background" Value="{DynamicResource ToolbarHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Disc" Property="Background" Value="{DynamicResource ToolbarPressedBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- The 40 px touch targets over WPF UI's Fluent styles (ControlsDictionary, merged before this dictionary). -->

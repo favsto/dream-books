@@ -1,0 +1,40 @@
+<UserControl x:Class="DreamBooks.App.Views.NavigationButtons"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="clr-namespace:DreamBooks.App.Resources"
+             xmlns:views="clr-namespace:DreamBooks.App.Views"
+             HorizontalAlignment="Right" VerticalAlignment="Bottom" Focusable="False" IsTabStop="False"
+             AutomationProperties.Name="{x:Static res:Strings.NavigationLabel}">
+    <!-- The navigation buttons above the indicator chip: Back (FR-09, Alt+Left), previous and next mark (FR-102,
+         Alt+Up / Alt+Down), each a small round 40 px floating button, and the marks' status ("Nessun altro segno") on
+         their left while there is one. The data context is the MainViewModel. They show and hide with the rail and the
+         chip (the window wires it). Pen rule: only the surfaces hit-test and they carry the inert stylus plug-in; the pen
+         presses the buttons; between and around them it inks; hidden, they take nothing. -->
+    <StackPanel x:Name="Row" Orientation="Horizontal">
+        <views:FloatingSurface x:Name="StatusSurface" CornerRadius="{StaticResource PillCornerRadius}" VerticalAlignment="Center"
+                               Visibility="Collapsed" Stylus.IsPressAndHoldEnabled="False">
+            <TextBlock x:Name="StatusText" Text="{Binding Marks.StatusText, NotifyOnTargetUpdated=True}"
+                       TargetUpdated="OnStatusTextUpdated" Margin="{StaticResource NavigationStatusPadding}"
+                       Foreground="{DynamicResource GlyphBrush}" VerticalAlignment="Center"
+                       AutomationProperties.LiveSetting="Polite" />
+        </views:FloatingSurface>
+        <views:FloatingSurface x:Name="BackSurface" CornerRadius="{StaticResource PillCornerRadius}"
+                               Margin="{StaticResource NavigationButtonGap}" Stylus.IsPressAndHoldEnabled="False">
+            <Button x:Name="BackButton" Style="{StaticResource ToolbarButtonStyle}" Margin="0" Content="{StaticResource GlyphBack}"
+                    Command="{Binding Viewport.BackCommand}"
+                    ToolTip="{x:Static res:Strings.Back}" AutomationProperties.Name="{x:Static res:Strings.Back}" />
+        </views:FloatingSurface>
+        <views:FloatingSurface x:Name="PreviousMarkSurface" CornerRadius="{StaticResource PillCornerRadius}"
+                               Margin="{StaticResource NavigationButtonGap}" Stylus.IsPressAndHoldEnabled="False">
+            <Button x:Name="PreviousMarkButton" Style="{StaticResource ToolbarButtonStyle}" Margin="0" Content="{StaticResource GlyphPrevious}"
+                    Command="{Binding Marks.PreviousCommand}"
+                    ToolTip="{x:Static res:Strings.PreviousMark}" AutomationProperties.Name="{x:Static res:Strings.PreviousMark}" />
+        </views:FloatingSurface>
+        <views:FloatingSurface x:Name="NextMarkSurface" CornerRadius="{StaticResource PillCornerRadius}"
+                               Margin="{StaticResource NavigationButtonGap}" Stylus.IsPressAndHoldEnabled="False">
+            <Button x:Name="NextMarkButton" Style="{StaticResource ToolbarButtonStyle}" Margin="0" Content="{StaticResource GlyphNext}"
+                    Command="{Binding Marks.NextCommand}"
+                    ToolTip="{x:Static res:Strings.NextMark}" AutomationProperties.Name="{x:Static res:Strings.NextMark}" />
+        </views:FloatingSurface>
+    </StackPanel>
+</UserControl>

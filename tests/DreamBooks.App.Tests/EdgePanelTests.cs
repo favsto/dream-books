@@ -568,8 +568,8 @@ public sealed class EdgePanelTests : IDisposable
         await WithWindowAsync((vm, window) =>
         {
             // The status is named by its own text (no fixed label overriding it) and announced when it changes.
-            Assert.True(string.IsNullOrEmpty(AutomationProperties.GetName(window.MarkStatusText)));
-            Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(window.MarkStatusText));
+            Assert.True(string.IsNullOrEmpty(AutomationProperties.GetName(window.NavButtons.StatusText)));
+            Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(window.NavButtons.StatusText));
             WpfTestThread.PumpUntil(() =>
             {
                 _scheduler.Advance(MarksViewModel.RefreshInterval);
@@ -581,10 +581,18 @@ public sealed class EdgePanelTests : IDisposable
             vm.Marks.PreviousCommand.Execute(null); // nothing above the first page
             Assert.Equal(Strings.MarksNoOther, vm.Marks.StatusText);
             WpfTestThread.Drain();
-            Assert.Equal(Visibility.Visible, window.MarkStatusText.Visibility);
+            Assert.Equal(Visibility.Visible, window.NavButtons.StatusSurface.Visibility);
+            Assert.True(window.NavButtons.IsShown); // the status shows the buttons (and the rail) when it appears
             Assert.Equal(announced + 1, window.StatusAnnouncements);
-            var statusPeer = System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(window.MarkStatusText);
+            var statusPeer = System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(window.NavButtons.StatusText);
             Assert.Equal(Strings.MarksNoOther, statusPeer.GetName());
+
+            // The buttons (and the rail) stay while the status is on screen, then may fade.
+            Assert.True(window.DocumentViewer.Rail.State.IsHeld);
+            _scheduler.Advance(MarksViewModel.StatusDuration);
+            Assert.Null(vm.Marks.StatusText);
+            Assert.Equal(Visibility.Collapsed, window.NavButtons.StatusSurface.Visibility);
+            Assert.False(window.DocumentViewer.Rail.State.IsHeld);
 
             // The count in the panel's header has a peer and a name that includes the number.
             var countPeer = System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(window.MarksPanel.DetailText);

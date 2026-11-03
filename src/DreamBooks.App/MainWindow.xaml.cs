@@ -34,9 +34,6 @@ public partial class MainWindow : FluentWindow
     private readonly MainViewModel _viewModel = new(
         new FileDialogService(), new RecoveryStore(RecoveryRoot()), new ViewPositionStore(PositionsRoot()));
 
-    private static readonly DependencyPropertyDescriptor _statusText =
-        DependencyPropertyDescriptor.FromProperty(TextBlock.TextProperty, typeof(TextBlock));
-
     private readonly ThemeService? _theme;
 
     private int? _dismissTouchId;
@@ -112,9 +109,14 @@ public partial class MainWindow : FluentWindow
         DocumentViewer.ThumbnailScaleChanged += (_, _) => thumbnails.ClearBitmaps(); // rendered for the old scale
         DocumentViewer.ThumbnailRetryRequested += (_, _) => thumbnails.RetryMissing(); // the file is back after a save
 
-        // "Nessun altro segno" is a live region: Narrator reads it when it appears (NFR-31).
-        _statusText.AddValueChanged(MarkStatusText, OnMarkStatusTextChanged);
-        Closed += (_, _) => _statusText.RemoveValueChanged(MarkStatusText, OnMarkStatusTextChanged);
+        // The indicator chip and the navigation buttons (UI-05, FR-09, FR-102) show and hide with the rail, and keep it
+        // shown while they are used. "Nessun altro segno" beside the buttons is a live region: Narrator reads it when it
+        // appears (NFR-31), and it shows the buttons.
+        DocumentViewer.Rail.ShownChanged += (_, _) => OnRailShownChanged();
+        IndicatorChip.HoldChanged += (_, _) => OnOverlayHoldChanged();
+        NavButtons.HoldChanged += (_, _) => OnOverlayHoldChanged();
+        NavButtons.StatusShown += (_, _) => OnMarkStatusShown();
+        OnRailShownChanged();
 
         // Esc or the clear button emptied the search: the keyboard goes back to the document (FR-13).
         _viewModel.Search.FocusDocumentRequested += (_, _) => FocusDocument();
@@ -377,17 +379,21 @@ public partial class MainWindow : FluentWindow
     /// document, or Esc for the open left-edge panel (it closes). Keys pressed inside the open panel (arrows, PgUp/PgDn,
     /// Home/End in the list) stay the panel's. Everything else (Alt+Left for Back, Alt+Up/Alt+Down for the marks, the
     /// shortcuts) is left to the key bindings.
-    /// The search keys (FR-13, FR-105) come first: Ctrl+F focuses the search field and F3 / Shift+F3 go to the next /
-    /// previous result from anywhere; in the search field Enter / Shift+Enter do the same and Esc clears the search
-    /// (the keyboard goes back to the document), as does Esc elsewhere outside a text field while a search is shown.
+    /// The search keys (FR-13, FR-105) come first: Ctrl+F opens the search pill and gives its field the keyboard, and
+    /// F3 / Shift+F3 go to the next / previous result from anywhere; in a search field (the pill's, or the debug
+    /// panel's) Enter / Shift+Enter do the same and Esc clears the search and closes the pill (the keyboard goes back to
+    /// the document), as does Esc elsewhere outside a text field while a search is shown or the pill is open. The
+    /// indicator chip's page field keeps its own Enter and Esc.
     /// </summary>
     internal bool RouteKey(Key key, ModifierKeys modifiers, object? source)
     {
-        // Esc closes the open toolbar flyout first (UI-02), except in the search field, which keeps its own Esc.
-        if (key == Key.Escape && modifiers == ModifierKeys.None && _viewModel.Toolbar.OpenPanel != OptionsPanel.None
-            && !(source is DependencyObject origin && IsWithin(origin, SearchField)))
+        // Esc closes the open toolbar flyout first (UI-02), except in the search fields and the chip's page field, which
+        // keep their own Esc.
+        var viewModel = CurrentViewModel;
+        if (key == Key.Escape && modifiers == ModifierKeys.None && viewModel.Toolbar.OpenPanel != OptionsPanel.None
+            && !(source is DependencyObject origin && (IsInSearchField(origin) || IsWithin(origin, IndicatorChip.GoToPageBox))))
         {
-            _viewModel.Toolbar.ClosePanel();
+            viewModel.Toolbar.ClosePanel();
             return true;
         }
 
@@ -416,12 +422,12 @@ public partial class MainWindow : FluentWindow
 
     private bool RouteSearchKey(Key key, ModifierKeys modifiers, object? source, bool panelOpen)
     {
-        var search = _viewModel.Search;
-        var inField = source is DependencyObject element && IsWithin(element, SearchField); // also a part of its template
+        var search = CurrentViewModel.Search;
+        var inField = source is DependencyObject element && IsInSearchField(element); // also a part of its template
         switch (key)
         {
             case Key.F when modifiers == ModifierKeys.Control:
-                FocusSearchField();
+                FocusSearchField(search);
                 return true;
             case Key.F3 when modifiers is ModifierKeys.None or ModifierKeys.Shift:
                 Run(modifiers == ModifierKeys.Shift ? search.PreviousCommand : search.NextCommand);
@@ -430,8 +436,10 @@ public partial class MainWindow : FluentWindow
                 Run(modifiers == ModifierKeys.Shift ? search.PreviousCommand : search.NextCommand);
                 return true;
             case Key.Escape when modifiers == ModifierKeys.None
-                                 && (inField || (!panelOpen && source is not TextBoxBase && search.QueryText.Length > 0)):
-                search.ClearCommand.Execute(null); // empties the field; the view model asks for the document's focus
+                                 && (inField || (!panelOpen && source is not TextBoxBase
+                                                 && (search.QueryText.Length > 0 || search.IsOpen))):
+                // Empties the field and closes the pill; the view model asks for the document's focus.
+                search.ClearCommand.Execute(null);
                 return true;
             default:
                 return false;
@@ -446,12 +454,19 @@ public partial class MainWindow : FluentWindow
         }
     }
 
-    private void FocusSearchField()
+    /// <summary>Ctrl+F: the search pill opens and its field takes the keyboard, the text selected (FR-13).</summary>
+    private void FocusSearchField(SearchViewModel search)
     {
         SearchFocusRequests++;
-        SearchField.Focus();
-        SearchField.SelectAll();
+        search.Open();
+        SearchBar.FocusField();
     }
+
+    /// <summary>The window's view model as bound now (tests may give the window another one).</summary>
+    private MainViewModel CurrentViewModel => DataContext as MainViewModel ?? _viewModel;
+
+    /// <summary>True inside the search pill's field or the debug panel's search box (also a part of their template).</summary>
+    private bool IsInSearchField(DependencyObject element) => IsWithin(element, SearchBar.Field) || IsWithin(element, SearchField);
 
     private void FocusDocument()
     {
@@ -566,18 +581,27 @@ public partial class MainWindow : FluentWindow
         return true;
     }
 
-    /// <summary>The status line's text changed: announced as a live region when it says something.</summary>
-    private void OnMarkStatusTextChanged(object? sender, EventArgs e)
+    /// <summary>The marks' status says something: announced as a live region, and shown with the buttons and the rail.</summary>
+    private void OnMarkStatusShown()
     {
-        if (string.IsNullOrEmpty(MarkStatusText.Text))
-        {
-            return;
-        }
-
         StatusAnnouncements++;
-        var peer = UIElementAutomationPeer.FromElement(MarkStatusText) ?? UIElementAutomationPeer.CreatePeerForElement(MarkStatusText);
+        var status = NavButtons.StatusText;
+        var peer = UIElementAutomationPeer.FromElement(status) ?? UIElementAutomationPeer.CreatePeerForElement(status);
         peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+        DocumentViewer.Rail.NotifyActivity();
     }
+
+    /// <summary>The rail showed, started to fade out, hid, or got or lost a document: the chip and the buttons follow.</summary>
+    private void OnRailShownChanged()
+    {
+        var rail = DocumentViewer.Rail;
+        IndicatorChip.SetShown(rail.IsShownForOverlays, rail.HasDocument);
+        NavButtons.SetShown(rail.IsShownForOverlays, rail.HasDocument);
+    }
+
+    /// <summary>The chip or the buttons are in use (hovered, the page field open, the keyboard on them): the rail stays.</summary>
+    private void OnOverlayHoldChanged() =>
+        DocumentViewer.Rail.SetExternalHold(IndicatorChip.IsHolding || NavButtons.IsHolding);
 
     /// <summary>
     /// A press at <paramref name="position"/> (page host coordinates) over the document: the open left-edge panel and
@@ -590,6 +614,7 @@ public partial class MainWindow : FluentWindow
     {
         var panel = MarksPanel.RoutePress(PageHost.TranslatePoint(position, MarksPanel), kind);
         var flyout = FloatingToolbar.RoutePress(PageHost.TranslatePoint(position, FloatingToolbar), kind);
+        IndicatorChip.RoutePress(PageHost.TranslatePoint(position, IndicatorChip)); // closes its open field; never taken
         return panel || flyout;
     }
 

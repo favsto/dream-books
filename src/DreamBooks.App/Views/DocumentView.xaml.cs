@@ -1061,21 +1061,16 @@ public partial class DocumentView : UserControl
     }
 
     /// <summary>
-    /// A press at <paramref name="position"/> (rail coordinates, the same as this view's). Any press outside the open
-    /// page field closes it. The pen is taken only on the shown rail's knob (true: it grabs it, unless
-    /// <paramref name="mayGrab"/> is false, e.g. the back end); anywhere else it inks on the page under it (false,
-    /// FR-30). A finger or the mouse on the knob's wider zone grabs it, in the strip presses it (a tap jumps on lift), on its indicator
-    /// opens the page field (true: the press is the rail's); a palm-sized <paramref name="contact"/> there is taken and
-    /// does nothing; a finger near the edge of a hidden rail shows it and still pans (false).
+    /// A press at <paramref name="position"/> (rail coordinates, the same as this view's). The pen is taken only on the
+    /// shown rail's knob (true: it grabs it, unless <paramref name="mayGrab"/> is false, e.g. the back end); anywhere
+    /// else it inks on the page under it (false, FR-30). A finger or the mouse on the knob's wider zone grabs it, in the
+    /// strip presses it (a tap jumps on lift; true: the press is the rail's); a palm-sized <paramref name="contact"/>
+    /// there is taken and does nothing; a finger near the edge of a hidden rail shows it and still pans (false). The
+    /// page indicator is the window's chip, outside this view.
     /// </summary>
     internal bool RoutePointerDown(Point position, PointerKind kind, Size contact = default, bool mayGrab = true)
     {
         StopGlide(); // any press, anywhere (the rail included), stops a glide
-        if (Rail.IsEditing && !Rail.IsOnGoToPageBox(position))
-        {
-            Rail.CancelGoToPage();
-        }
-
         if (kind == PointerKind.Pen)
         {
             // The pen only grabs the knob of the shown rail (UI-07); anywhere else, the strip and the ticks included,
@@ -1097,9 +1092,6 @@ public partial class DocumentView : UserControl
                 return Rail.PointerDown(Rail.TrackYAt(position), onKnob: true) || AnyInking();
             case RailZone.Strip:
                 return Rail.PointerDown(Rail.TrackYAt(position)) || AnyInking(); // while inking: taken, nothing moves
-            case RailZone.Indicator:
-                Rail.OpenGoToPage();
-                return true;
             default:
                 if (IsNearRail(position))
                 {
@@ -1301,7 +1293,7 @@ public partial class DocumentView : UserControl
 
     private void OnHostMouseLeave(object sender, MouseEventArgs e) => Rail.SetHover(false);
 
-    /// <summary>A finger press: in the shown rail's strip or on its indicator it is the rail's (never panned).</summary>
+    /// <summary>A finger press: in the shown rail's strip it is the rail's (never panned).</summary>
     private void OnHostTouchDown(object? sender, TouchEventArgs e)
     {
         StopGlide(); // a finger (or the pen's tip) touching down stops a glide, wherever it lands
@@ -1382,7 +1374,7 @@ public partial class DocumentView : UserControl
 
     /// <summary>
     /// The pen's press: on the shown rail's knob it grabs it (the stylus is captured by the knob's grip, so the drag
-    /// goes on wherever the pen moves and nothing inks); anywhere else it inks. It closes an open page field.
+    /// goes on wherever the pen moves and nothing inks); anywhere else it inks.
     /// </summary>
     private void OnHostStylusDown(object sender, StylusDownEventArgs e)
     {
@@ -1391,7 +1383,7 @@ public partial class DocumentView : UserControl
             return; // fingers go through the touch events
         }
 
-        // The back end never grabs (it always erases), but it still closes the page field and stops a glide.
+        // The back end never grabs (it always erases), but it still stops a glide.
         if (RoutePointerDown(e.GetPosition(Rail), PointerKind.Pen, mayGrab: !e.StylusDevice.Inverted))
         {
             e.Handled = true; // the page under the grip never sees this press

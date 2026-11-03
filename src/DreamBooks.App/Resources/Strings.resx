@@ -199,4 +199,11 @@
   <data name="ColorPickerConfirm" xml:space="preserve"><value>Conferma colore</value></data>
   <data name="HighlighterTip" xml:space="preserve"><value>Punta</value></data>
   <data name="SwatchChosen" xml:space="preserve"><value>scelto</value></data>
+  <data name="PageIndicatorChipLabel" xml:space="preserve"><value>Indicatore di pagina e zoom</value></data>
+  <data name="PageIndicatorHelp" xml:space="preserve"><value>Tocca per andare a una pagina; tieni premuto o passa sopra col mouse per i pulsanti dello zoom</value></data>
+  <data name="ZoomIn" xml:space="preserve"><value>Aumenta lo zoom</value></data>
+  <data name="ZoomOut" xml:space="preserve"><value>Riduci lo zoom</value></data>
+  <data name="NavigationLabel" xml:space="preserve"><value>Navigazione</value></data>
+  <data name="SearchPillLabel" xml:space="preserve"><value>Barra di ricerca</value></data>
+  <data name="CloseSearch" xml:space="preserve"><value>Chiudi la ricerca</value></data>
 </root>

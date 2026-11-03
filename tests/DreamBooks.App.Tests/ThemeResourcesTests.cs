@@ -24,7 +24,7 @@ public sealed class ThemeResourcesTests
         "RailMarkTickBrushOpaque", "RailNoteTickLength", "RailNoteTickThickness", "RailNoteTickOffset", "RailNoteTickColor",
         "RailNoteTickBrush", "RailNoteTickBrushOpaque", "RailSearchTickLength", "RailSearchTickThickness",
         "RailSearchTickOffset", "RailSearchTickColor", "RailSearchTickBrush", "RailSearchTickBrushOpaque",
-        "RailIndicatorMargin", "FlingDecayTimeConstant", "FlingMinSpeed", "FlingMaxSpeed", "EdgePanelWidth",
+        "IndicatorChipMargin", "FlingDecayTimeConstant", "FlingMinSpeed", "FlingMaxSpeed", "EdgePanelWidth",
         "EdgePanelOpenDuration", "EdgePanelCloseDuration", "EdgeSwipeZoneWidth", "EdgePanelCornerRadius",
         "EdgePanelPadding", "EdgePanelMargin", "EdgePanelBackgroundBrush", "EdgePanelBackgroundBrushOpaque",
         "EdgePanelShadow", "EdgePanelTitleSize", "EdgePanelDetailMargin", "CloseGlyph", "PreviousMarkGlyph",
@@ -44,6 +44,13 @@ public sealed class ThemeResourcesTests
     [
         "WindowBackgroundOpaqueBrush", "PageBackdropBrushOpaque", "PageShadow", "PanelTintBrush", "PanelTintBrushOpaque",
         "PanelDiffuseShadow", "PanelContactShadow", "TitleBarHeight", "TitleBarClearance",
+
+        // The indicator chip, the navigation buttons and the search pill (UI-05, FR-09, FR-13, task 4).
+        "NavigationFadeDuration", "IndicatorChipPadding", "NavigationButtonsMargin", "NavigationButtonGap",
+        "NavigationStatusPadding", "ChipTextButtonStyle", "ChipTextPadding", "ChipFontSize", "SearchPillMargin",
+        "SearchPillPadding", "SearchFieldWidth", "SearchGlyphMargin", "SearchCountMargin", "SearchCountMinWidth",
+        "SearchMessageMargin", "SearchMessagePadding", "SearchMessageMaxWidth", "GlyphBack", "GlyphPrevious", "GlyphNext",
+        "GlyphSearch", "GlyphClose", "GlyphZoomIn", "GlyphZoomOut",
     ];
 
     [Theory]

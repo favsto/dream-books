@@ -461,10 +461,11 @@ public sealed class ScrollRailTests : IDisposable
             Settle(view);
 
             Assert.Equal("12 / 30 · 125%", vm.Viewport.IndicatorText);
-            Assert.Equal(vm.Viewport.IndicatorText, view.Rail.IndicatorButton.Content);
-            Assert.Equal(Strings.PageIndicatorLabel, AutomationProperties.GetName(view.Rail.IndicatorButton));
-            Assert.True(view.Rail.IndicatorButton.MinHeight >= 40);
-            Assert.False(view.Rail.IndicatorButton.Focusable); // tapping it never takes focus from the document
+
+            // The indicator is the window's chip now (PageIndicatorChip, NavigationOverlayTests): the rail has none.
+            Assert.Equal(["None", "Strip", "Knob"], Enum.GetNames<RailZone>());
+            Assert.Null(view.Rail.FindName("IndicatorButton"));
+            Assert.Null(view.Rail.FindName("GoToPageBox"));
         });
     }
 
@@ -486,69 +487,38 @@ public sealed class ScrollRailTests : IDisposable
             Assert.Equal(6, viewport.CurrentPage);
             Assert.True(viewport.History.CanGoBack);
 
-            // The rail's field: tap the indicator, type, Enter; invalid text keeps it open, Esc closes it.
-            var rail = view.Rail;
-            rail.OpenGoToPage();
-            Assert.Equal(Visibility.Visible, rail.GoToPageBox.Visibility);
-            Assert.Equal(Visibility.Collapsed, rail.IndicatorButton.Visibility);
-            Assert.Equal("7", rail.GoToPageBox.Text);
-            Assert.Equal(Strings.GoToPageIndicatorField, AutomationProperties.GetName(rail.GoToPageBox));
-            Assert.NotEqual(Strings.GoToPage, Strings.GoToPageIndicatorField); // the panel's field has its own name
-            Assert.Equal(Strings.GoToPageHint, AutomationProperties.GetHelpText(rail.GoToPageBox));
-            Assert.True(rail.State.IsHeld); // the rail stays while typing
-
-            rail.GoToPageBox.Text = "xyz";
-            Assert.False(rail.ConfirmGoToPage());
-            Assert.Equal(Visibility.Visible, rail.GoToPageBox.Visibility);
-            Assert.Equal(6, viewport.CurrentPage);
-
-            rail.GoToPageBox.Text = "20";
-            Assert.True(rail.ConfirmGoToPage());
-            Settle(view);
-            Assert.Equal(19, viewport.CurrentPage);
-            Assert.Equal(Visibility.Collapsed, rail.GoToPageBox.Visibility);
-            Assert.Equal(Visibility.Visible, rail.IndicatorButton.Visibility);
-
-            rail.OpenGoToPage();
-            rail.GoToPageBox.Text = "3";
-            rail.CancelGoToPage();
-            Assert.Equal(19, viewport.CurrentPage);
-            Assert.Equal(Visibility.Collapsed, rail.GoToPageBox.Visibility);
-            Assert.False(rail.State.IsHeld);
+            // The field itself is the indicator chip's (NavigationOverlayTests); its name differs from the panel's.
+            Assert.NotEqual(Strings.GoToPage, Strings.GoToPageIndicatorField);
         });
     }
 
     [Fact]
-    public async Task Go_to_page_field_closes_on_any_pointer_down_outside_it_and_on_unload()
+    public async Task External_hold_keeps_the_rail_shown_and_reports_its_shown_state()
     {
         await WithViewAsync((vm, view) =>
         {
+            // The indicator chip and the navigation buttons follow ShownChanged and hold the rail while they are used.
             var rail = view.Rail;
-            var page = new Point(500, 400);
-            foreach (var kind in new[] { PointerKind.Pen, PointerKind.Finger, PointerKind.Mouse })
-            {
-                rail.OpenGoToPage();
-                Settle(view);
-                Assert.True(rail.IsEditing);
+            var reports = new List<(bool Shown, bool HasDocument)>();
+            rail.ShownChanged += (_, _) => reports.Add((rail.IsShownForOverlays, rail.HasDocument));
+            Assert.True(rail.HasDocument);
+            Assert.False(rail.IsShownForOverlays);
 
-                // Inside the field: it stays open (the finger or the mouse places the caret).
-                var inside = rail.GoToPageBox.TranslatePoint(
-                    new Point(rail.GoToPageBox.ActualWidth / 2, rail.GoToPageBox.ActualHeight / 2), rail);
-                Assert.False(view.RoutePointerDown(inside, PointerKind.Finger));
-                Assert.True(rail.IsEditing);
-
-                // On the page: closed without moving, and the rail is no longer held.
-                Assert.False(view.RoutePointerDown(page, kind));
-                Assert.False(rail.IsEditing, kind.ToString());
-                Assert.Equal(Visibility.Collapsed, rail.GoToPageBox.Visibility);
-                Assert.False(rail.State.IsHeld);
-                Assert.Equal(0, vm.Viewport.CurrentPage);
-            }
-
-            rail.OpenGoToPage();
-            rail.RaiseEvent(new RoutedEventArgs(FrameworkElement.UnloadedEvent));
-            Assert.False(rail.IsEditing);
+            rail.SetExternalHold(true); // e.g. the keyboard reaching the chip: shown, and held
+            Assert.True(rail.IsShownForOverlays);
+            Assert.True(rail.State.IsHeld);
+            Assert.Equal((true, true), reports[^1]);
+            rail.SetExternalHold(false);
             Assert.False(rail.State.IsHeld);
+
+            rail.HideNow();
+            Assert.Equal((false, true), reports[^1]);
+            vm.Viewport.Attach(null, null, null); // no document
+            Assert.False(rail.HasDocument);
+            Assert.Equal((false, false), reports[^1]);
+            var count = reports.Count;
+            rail.HideNow(); // nothing changed: no report
+            Assert.Equal(count, reports.Count);
         });
     }
 
@@ -583,7 +553,7 @@ public sealed class ScrollRailTests : IDisposable
 
             // Not while typing in a field, nor on a slider, nor with modifiers, nor for other keys.
             var offset = view.Viewport.VerticalOffset;
-            Assert.False(view.HandleNavigationKey(Key.PageDown, ModifierKeys.None, view.Rail.GoToPageBox));
+            Assert.False(view.HandleNavigationKey(Key.PageDown, ModifierKeys.None, new TextBox { InputScope = new InputScope() }));
             Assert.False(view.HandleNavigationKey(Key.End, ModifierKeys.None, new TextBox()));
             Assert.False(view.HandleNavigationKey(Key.PageDown, ModifierKeys.None, new Slider()));
             Assert.False(view.HandleNavigationKey(Key.End, ModifierKeys.Control, view.Viewport));
@@ -885,23 +855,21 @@ public sealed class ScrollRailTests : IDisposable
             rail.NotifyActivity();
             Settle(view);
             Assert.True(rail.Strip.ActualWidth <= 40.0001 && rail.Strip.ActualWidth >= 40);
-            var indicator = rail.IndicatorButton.TranslatePoint(
-                new Point(rail.IndicatorButton.ActualWidth / 2, rail.IndicatorButton.ActualHeight / 2), rail);
+            var besideStrip = new Point(view.ActualWidth - 80, view.ActualHeight - 30); // where the old indicator was
             Assert.Equal(RailZone.Strip, rail.ZoneAt(strip));
-            Assert.Equal(RailZone.Indicator, rail.ZoneAt(indicator));
+            Assert.Equal(RailZone.None, rail.ZoneAt(besideStrip));
 
-            // The rail is shown, yet the pen in its strip and on the indicator reaches the page surface and inks:
-            // nothing of the rail hit-tests, and the router leaves the pen alone.
-            foreach (var point in new[] { strip, indicator })
+            // The rail is shown, yet the pen in its strip and beside it reaches the page surface and inks: nothing of
+            // the rail hit-tests, and the router leaves the pen alone.
+            foreach (var point in new[] { strip, besideStrip })
             {
                 Assert.True(IsWithin(HitAt(view, point), surface), point.ToString());
                 Assert.False(IsWithin(HitAt(view, point), rail));
                 Assert.False(view.RoutePointerDown(point, PointerKind.Pen));
                 Assert.False(rail.IsDragging);
-                Assert.False(rail.IsEditing);
             }
 
-            // A finger or the mouse in the strip goes to the rail (a press starts), on the indicator opens the field.
+            // A finger or the mouse in the strip goes to the rail (a press starts); beside it, to the document.
             Assert.True(view.RoutePointerDown(strip, PointerKind.Finger));
             Assert.True(rail.IsPressed); // off the knob: a tap that jumps on lift (I3)
             view.RoutePointerUp();
@@ -909,9 +877,8 @@ public sealed class ScrollRailTests : IDisposable
             Assert.True(view.RoutePointerDown(strip, PointerKind.Mouse));
             Assert.True(rail.IsPressed); // off the knob: a tap that jumps on lift (I3)
             view.RoutePointerUp();
-            Assert.True(view.RoutePointerDown(indicator, PointerKind.Finger));
-            Assert.True(rail.IsEditing);
-            rail.CancelGoToPage();
+            Assert.False(view.RoutePointerDown(besideStrip, PointerKind.Finger));
+            Assert.False(rail.IsPressed);
 
             // Hidden: a finger at the edge is the document's (it pans, and shows the rail).
             rail.HideNow();
@@ -949,8 +916,6 @@ public sealed class ScrollRailTests : IDisposable
 
             // The rail's names reach UI Automation: they sit on elements that have a peer.
             Assert.Equal(Strings.RailLabel, UIElementAutomationPeer.CreatePeerForElement(view.Rail).GetName());
-            Assert.Equal(
-                Strings.PageIndicatorLabel, UIElementAutomationPeer.CreatePeerForElement(view.Rail.IndicatorButton).GetName());
         });
     }
 

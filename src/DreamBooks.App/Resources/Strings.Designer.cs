@@ -441,6 +441,25 @@ internal static class Strings
     /// <summary>The item status of the chosen colour swatch (UI-02, NFR-31).</summary>
     public static string SwatchChosen => Get(nameof(SwatchChosen));
 
+    /// <summary>The page indicator chip at the bottom right (UI-05), as a group.</summary>
+    public static string PageIndicatorChipLabel => Get(nameof(PageIndicatorChipLabel));
+
+    /// <summary>The help text of the chip's indicator: tap for the page field, long press or hover for the zoom (UI-05).</summary>
+    public static string PageIndicatorHelp => Get(nameof(PageIndicatorHelp));
+
+    /// <summary>The chip's zoom buttons (UI-05, FR-06).</summary>
+    public static string ZoomIn => Get(nameof(ZoomIn));
+
+    public static string ZoomOut => Get(nameof(ZoomOut));
+
+    /// <summary>The navigation buttons above the chip: Back, previous and next mark (FR-09, FR-102).</summary>
+    public static string NavigationLabel => Get(nameof(NavigationLabel));
+
+    /// <summary>The search pill at the top centre (FR-13) and its close button (Esc).</summary>
+    public static string SearchPillLabel => Get(nameof(SearchPillLabel));
+
+    public static string CloseSearch => Get(nameof(CloseSearch));
+
     private static string Get(string name) =>
         Manager.GetString(name, System.Globalization.CultureInfo.CurrentUICulture) ?? name;
 }

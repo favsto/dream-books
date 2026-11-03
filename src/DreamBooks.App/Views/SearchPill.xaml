@@ -1,0 +1,60 @@
+<UserControl x:Class="DreamBooks.App.Views.SearchPill"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="clr-namespace:DreamBooks.App.Resources"
+             xmlns:views="clr-namespace:DreamBooks.App.Views"
+             HorizontalAlignment="Center" VerticalAlignment="Top" Margin="{StaticResource SearchPillMargin}"
+             Focusable="False" IsTabStop="False" Visibility="Collapsed">
+    <!-- The search pill (FR-13, FR-105) at the top centre, below the title bar: the field, the count, previous / next and
+         close, and under it the search's messages (wrap, no text layer, unread pages) while there are any. The data
+         context is the SearchViewModel; it is shown while IsOpen (Ctrl+F opens it; Esc and the close button clear the
+         search and close it). Enter / Shift+Enter in the field and F3 / Shift+F3 anywhere are routed by the window.
+         Pen rule: only the two surfaces hit-test and they carry the inert stylus plug-in; on them the pen types in the
+         field and presses the buttons; around them it inks; closed, the pill takes nothing. -->
+    <StackPanel>
+        <views:FloatingSurface x:Name="Surface" CornerRadius="{StaticResource PillCornerRadius}" HorizontalAlignment="Center"
+                               Stylus.IsPressAndHoldEnabled="False"
+                               AutomationProperties.Name="{x:Static res:Strings.SearchPillLabel}">
+            <StackPanel Orientation="Horizontal" Margin="{StaticResource SearchPillPadding}">
+                <TextBlock Text="{StaticResource GlyphSearch}" FontFamily="{StaticResource IconFont}" FontSize="{StaticResource IconSize}"
+                           Foreground="{DynamicResource GlyphBrush}" VerticalAlignment="Center"
+                           Margin="{StaticResource SearchGlyphMargin}" IsHitTestVisible="False" />
+                <TextBox x:Name="Field" Text="{Binding QueryText, UpdateSourceTrigger=PropertyChanged}"
+                         Width="{StaticResource SearchFieldWidth}" MinHeight="{StaticResource TouchTarget}"
+                         VerticalAlignment="Center" VerticalContentAlignment="Center"
+                         ToolTip="{x:Static res:Strings.SearchHint}"
+                         AutomationProperties.Name="{x:Static res:Strings.SearchField}"
+                         AutomationProperties.HelpText="{x:Static res:Strings.SearchHint}" />
+                <TextBlock x:Name="CountText" Text="{Binding CountText}" VerticalAlignment="Center"
+                           MinWidth="{StaticResource SearchCountMinWidth}" Margin="{StaticResource SearchCountMargin}"
+                           Foreground="{DynamicResource GlyphBrush}"
+                           AutomationProperties.Name="{x:Static res:Strings.SearchCountLabel}"
+                           AutomationProperties.LiveSetting="Polite" />
+                <Button x:Name="PreviousButton" Style="{StaticResource ToolbarButtonStyle}" Content="{StaticResource GlyphPrevious}"
+                        Command="{Binding PreviousCommand}"
+                        ToolTip="{x:Static res:Strings.PreviousResult}" AutomationProperties.Name="{x:Static res:Strings.PreviousResult}" />
+                <Button x:Name="NextButton" Style="{StaticResource ToolbarButtonStyle}" Content="{StaticResource GlyphNext}"
+                        Command="{Binding NextCommand}"
+                        ToolTip="{x:Static res:Strings.NextResult}" AutomationProperties.Name="{x:Static res:Strings.NextResult}" />
+                <Button x:Name="CloseButton" Style="{StaticResource ToolbarButtonStyle}" Content="{StaticResource GlyphClose}"
+                        Command="{Binding ClearCommand}"
+                        ToolTip="{x:Static res:Strings.CloseSearch}" AutomationProperties.Name="{x:Static res:Strings.CloseSearch}" />
+            </StackPanel>
+        </views:FloatingSurface>
+
+        <views:FloatingSurface x:Name="MessageSurface" CornerRadius="{StaticResource PanelCornerRadius}" HorizontalAlignment="Center"
+                               Margin="{StaticResource SearchMessageMargin}" MaxWidth="{StaticResource SearchMessageMaxWidth}"
+                               Visibility="Collapsed" Stylus.IsPressAndHoldEnabled="False">
+            <StackPanel Margin="{StaticResource SearchMessagePadding}">
+                <TextBlock x:Name="FailedPagesText" Text="{Binding FailedPagesText, NotifyOnTargetUpdated=True}"
+                           TargetUpdated="OnMessageUpdated" TextWrapping="Wrap" Foreground="{DynamicResource GlyphBrush}" />
+                <TextBlock x:Name="NoTextText" Text="{Binding NoTextLayerMessage, NotifyOnTargetUpdated=True}"
+                           TargetUpdated="OnMessageUpdated" TextWrapping="Wrap" Foreground="{DynamicResource GlyphBrush}"
+                           AutomationProperties.LiveSetting="Polite" />
+                <TextBlock x:Name="StatusText" Text="{Binding StatusText, NotifyOnTargetUpdated=True}"
+                           TargetUpdated="OnMessageUpdated" TextWrapping="Wrap" Foreground="{DynamicResource GlyphBrush}"
+                           AutomationProperties.LiveSetting="Polite" />
+            </StackPanel>
+        </views:FloatingSurface>
+    </StackPanel>
+</UserControl>

@@ -7,8 +7,9 @@
              AutomationProperties.Name="{x:Static res:Strings.RailLabel}">
     <!-- The scroll rail (UI-07, design B) over the document's right edge. Its visuals never hit-test, so the pen
          reaches the page under them and inks (FR-30), except on the knob: while the rail is shown the pen grabs it
-         (KnobGrip). Fingers and the mouse reach the knob (a wider zone), the strip and the indicator through
-         DocumentView, which routes them by position (ZoneAt). Only the page field, while open, takes keyboard focus. -->
+         (KnobGrip). Fingers and the mouse reach the knob (a wider zone) and the strip through DocumentView, which
+         routes them by position (ZoneAt). The page indicator and its go-to-page field are the window's indicator chip
+         (PageIndicatorChip, UI-05), which shows and hides with the rail (ShownChanged). -->
     <Grid>
         <Grid x:Name="Visuals" IsHitTestVisible="False">
             <!-- One large preview beside the knob while scrubbing: the page number and a light render with the reader's
@@ -67,12 +68,6 @@
                     </Border>
                 </Grid>
             </Border>
-
-            <!-- "12 / 48 · 125%": a finger or mouse tap opens the page field (FR-09); a button for UI Automation. -->
-            <Button x:Name="IndicatorButton" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                    Margin="{StaticResource RailIndicatorMargin}" Content="{Binding Viewport.IndicatorText}"
-                    Focusable="False" Click="OnIndicatorClick"
-                    AutomationProperties.Name="{x:Static res:Strings.PageIndicatorLabel}" />
         </Grid>
 
         <!-- The only part of the rail the pen can take: the knob plus a small slop, while the rail is shown (the grip
@@ -80,15 +75,5 @@
         <Canvas x:Name="GripLayer">
             <local:RailKnobGrip x:Name="KnobGrip" IsHitTestVisible="False" />
         </Canvas>
-
-        <!-- The page field in the indicator's place; Enter goes, Esc cancels, any press outside it closes it. -->
-        <TextBox x:Name="GoToPageBox" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                 Margin="{StaticResource RailIndicatorMargin}" Visibility="Collapsed" InputScope="Number"
-                 MinWidth="{StaticResource GoToPageFieldWidth}" MinHeight="{StaticResource TouchTarget}"
-                 VerticalContentAlignment="Center"
-                 ToolTip="{x:Static res:Strings.GoToPageHint}"
-                 AutomationProperties.Name="{x:Static res:Strings.GoToPageIndicatorField}"
-                 AutomationProperties.HelpText="{x:Static res:Strings.GoToPageHint}"
-                 PreviewKeyDown="OnGoToPageKeyDown" LostKeyboardFocus="OnGoToPageLostFocus" />
     </Grid>
 </UserControl>

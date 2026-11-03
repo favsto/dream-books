@@ -130,8 +130,9 @@
                                     AutomationProperties.Name="{x:Static res:Strings.OpenPagesList}"
                                     ToolTip="{x:Static res:Strings.OpenPagesList}" />
                         </StackPanel>
+                        <!-- Announced from the navigation buttons' copy (NavButtons.StatusText), not from here. -->
                         <TextBlock x:Name="MarkStatusText" Text="{Binding Marks.StatusText}" TextWrapping="Wrap"
-                                   Margin="{StaticResource Gap}" AutomationProperties.LiveSetting="Polite">
+                                   Margin="{StaticResource Gap}">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
                                     <Style.Triggers>
@@ -143,9 +144,10 @@
                             </TextBlock.Style>
                         </TextBlock>
 
-                        <!-- Text search (FR-13, FR-105): Ctrl+F focuses the field; Enter / Shift+Enter in it and F3 / Shift+F3
-                             anywhere go to the next / previous result; Esc clears (MainWindow.RouteKey). The count, the
-                             "no text" message and the wrap status show below. Spartan, the real placement is phase 4. -->
+                        <!-- Text search (FR-13, FR-105), the same view model as the search pill (Ctrl+F opens the pill);
+                             Enter / Shift+Enter in either field and F3 / Shift+F3 anywhere go to the next / previous
+                             result; Esc clears (MainWindow.RouteKey). The count, the "no text" message and the wrap status
+                             show below. Goes with the debug panel (Task 5). -->
                         <TextBlock Text="{x:Static res:Strings.Search}" Style="{StaticResource SectionLabel}" />
                         <TextBox x:Name="SearchField" Text="{Binding Search.QueryText, UpdateSourceTrigger=PropertyChanged}"
                                  MinHeight="{StaticResource TouchTarget}" VerticalContentAlignment="Center"
@@ -419,6 +421,21 @@
                      the open flyout hit-test: the pen around them writes on the page; presses over the document close
                      an open flyout (RoutePagePress). The debug panel's tool controls bind the same view models. -->
                 <views:ToolbarView x:Name="FloatingToolbar" DataContext="{Binding Toolbar}" />
+
+                <!-- Bottom right, left of the rail's strip (UI-05, FR-09, FR-102): the navigation buttons (Back, previous
+                     and next mark, the marks' status) above the page indicator chip ("12 / 48 · 125%": tap = go to page,
+                     long press or hover = zoom − / +). Both show and hide with the rail and keep it shown while used
+                     (OnRailShownChanged, OnOverlayHoldChanged). The panel has no background: only their surfaces
+                     hit-test, so the pen around them writes on the page. -->
+                <StackPanel x:Name="NavigationCorner" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                            Margin="{StaticResource IndicatorChipMargin}">
+                    <views:NavigationButtons x:Name="NavButtons" Margin="{StaticResource NavigationButtonsMargin}" />
+                    <views:PageIndicatorChip x:Name="IndicatorChip" />
+                </StackPanel>
+
+                <!-- The search pill at the top centre (FR-13, FR-105): Ctrl+F opens it, Esc closes it and clears the search
+                     (RouteKey); F3 / Shift+F3 anywhere. The debug panel's search box binds the same view model. -->
+                <views:SearchPill x:Name="SearchBar" DataContext="{Binding Search}" IsOpen="{Binding IsOpen, Mode=OneWay}" />
 
                 <!-- The left-edge panel (UI-04) with two tabs: the marks list (FR-103, Ctrl+M) and the page thumbnails
                      (Ctrl+Shift+P). It opens with a finger swipe from the left edge (on the last tab shown) or the menu
