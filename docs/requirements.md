@@ -70,7 +70,7 @@ Il documento è sempre protagonista: nessuna barra fissa, nessuna cornice, nessu
 | Tema | Chiaro e scuro, segue il tema di sistema, commutabile a mano |
 | Colore accento | Colore accento di sistema, con override nelle impostazioni |
 | Sfondo attorno alle pagine | Grigio neutro scuro in tema scuro, chiaro in tema chiaro |
-| Pagine | Ombra morbida (blur 24 px, opacità 15%), angoli dritti |
+| Pagine | Angoli dritti, senza ombra: in WPF un effetto ombra su ogni pagina costa latenza alla penna (NFR-04), quindi la pagina si stacca solo grazie al colore dello sfondo attorno, più scuro in tema chiaro e più chiaro del nero in tema scuro (blocco 4a; l'ombra morbida da 24 px resta un'idea solo se non pesa sul tratto) |
 
 ### Forme e tipografia
 

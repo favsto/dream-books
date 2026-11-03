@@ -39,10 +39,10 @@ public sealed class ThemeResourcesTests
         "SearchHighlightPaddingPt", "EdgePanelTabStyle",
     ];
 
-    /// <summary>The new shell's tokens (section 3): window fallback, page shadow, floating panels.</summary>
+    /// <summary>The new shell's tokens (section 3): window fallback, floating panels.</summary>
     private static readonly string[] _shellKeys =
     [
-        "WindowBackgroundOpaqueBrush", "PageBackdropBrushOpaque", "PageShadow", "PanelTintBrush", "PanelTintBrushOpaque",
+        "WindowBackgroundOpaqueBrush", "PageBackdropBrushOpaque", "PanelTintBrushOpaque",
         "PanelDiffuseShadow", "PanelContactShadow", "TitleBarHeight", "TitleBarClearance",
 
         // The indicator chip, the navigation buttons and the search pill (UI-05, FR-09, FR-13, task 4).
@@ -79,6 +79,11 @@ public sealed class ThemeResourcesTests
 
             // The implicit styles (40 px targets) are still there.
             Assert.True(resources.Contains(typeof(System.Windows.Controls.Button)));
+
+            // No page shadow (an effect on every page would cost pen latency, NFR-04) and no unused panel tint: the
+            // panels use PanelLayerBrush twice.
+            Assert.False(resources.Contains("PageShadow"), "PageShadow is back");
+            Assert.False(resources.Contains("PanelTintBrush"), "PanelTintBrush is back");
         });
     }
 

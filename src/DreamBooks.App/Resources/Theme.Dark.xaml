@@ -11,14 +11,12 @@
     <SolidColorBrush x:Key="WindowBackgroundOpaqueBrush" Color="#202020" />
 
     <!-- Around the pages: a dark neutral grey laid over the Mica (opaque with transparency effects off, NFR-32).
-         Pages: a soft shadow (blur 24 px), square corners. -->
+         Pages: square corners and no shadow (an effect on every page would cost pen latency, NFR-04). -->
     <Color x:Key="PageBackdropColor">#1A1A1A</Color>
     <SolidColorBrush x:Key="PageBackdropBrush" Color="{StaticResource PageBackdropColor}" Opacity="0.6" />
     <SolidColorBrush x:Key="PageBackdropBrushOpaque" Color="{StaticResource PageBackdropColor}" />
-    <DropShadowEffect x:Key="PageShadow" BlurRadius="24" ShadowDepth="0" Opacity="0.3" Color="{StaticResource ThemeShadowColor}" />
 
     <!-- Floating panels: tinted translucency (65%), opaque with transparency effects off (NFR-32); two shadows. -->
-    <SolidColorBrush x:Key="PanelTintBrush" Color="{StaticResource ThemePanelColor}" Opacity="0.65" />
     <SolidColorBrush x:Key="PanelTintBrushOpaque" Color="{StaticResource ThemePanelColor}" />
     <DropShadowEffect x:Key="PanelDiffuseShadow" BlurRadius="32" ShadowDepth="4" Opacity="0.24" Color="{StaticResource ThemeShadowColor}" />
     <DropShadowEffect x:Key="PanelContactShadow" BlurRadius="4" ShadowDepth="1" Opacity="0.16" Color="{StaticResource ThemeShadowColor}" />

@@ -13,16 +13,14 @@
     <SolidColorBrush x:Key="WindowBackgroundOpaqueBrush" Color="#F3F3F3" />
 
     <!-- Around the pages: a light neutral grey laid over the Mica (opaque with transparency effects off, NFR-32).
-         Pages: a soft shadow (blur 24 px, 15%), square corners. -->
+         Pages: square corners and no shadow (an effect on every page would cost pen latency, NFR-04). -->
     <Color x:Key="PageBackdropColor">#E5E5E5</Color>
     <SolidColorBrush x:Key="PageBackdropBrush" Color="{StaticResource PageBackdropColor}" Opacity="0.6" />
     <SolidColorBrush x:Key="PageBackdropBrushOpaque" Color="{StaticResource PageBackdropColor}" />
-    <DropShadowEffect x:Key="PageShadow" BlurRadius="24" ShadowDepth="0" Opacity="0.15" Color="{StaticResource ThemeShadowColor}" />
 
     <!-- Floating panels (phase 4a toolbar and flyouts): a tinted translucency (WPF has no in-window backdrop blur;
          65% tint, section 3), opaque with transparency effects off (NFR-32); two shadows, diffuse (blur 32 px, 12%)
          and contact (blur 4 px, 8%). -->
-    <SolidColorBrush x:Key="PanelTintBrush" Color="{StaticResource ThemePanelColor}" Opacity="0.65" />
     <SolidColorBrush x:Key="PanelTintBrushOpaque" Color="{StaticResource ThemePanelColor}" />
     <DropShadowEffect x:Key="PanelDiffuseShadow" BlurRadius="32" ShadowDepth="4" Opacity="0.12" Color="{StaticResource ThemeShadowColor}" />
     <DropShadowEffect x:Key="PanelContactShadow" BlurRadius="4" ShadowDepth="1" Opacity="0.08" Color="{StaticResource ThemeShadowColor}" />
