@@ -82,6 +82,18 @@ public class StringsTests
             Assert.True(keys.ContainsKey(key), $"Strings.resx is missing '{key}'.");
             Assert.NotNull(_stringsType.GetProperty(key, BindingFlags.Public | BindingFlags.Static));
         }
+
+        // The toolbar and its option panels (UI-02, FR-25, FR-31, FR-110), in both files.
+        foreach (var key in new[]
+                 {
+                     "ToolSelection", "ToolBookmark", "PenBlack", "PenDarkBlue", "PenBlue", "PenRed", "PenGreen", "PenOrange",
+                     "PenPurple", "PenGrey", "PenOptions", "EraserOptions", "ClearPage", "ClearPageConfirm", "ClearPageConfirmYes",
+                     "Cancel", "AddCustomColor", "RemoveCustomColor", "WarnSettingsNotSaved",
+                 })
+        {
+            Assert.True(keys.ContainsKey(key), $"Strings.resx is missing '{key}'.");
+            Assert.NotNull(_stringsType.GetProperty(key, BindingFlags.Public | BindingFlags.Static));
+        }
     }
 
     [Fact]

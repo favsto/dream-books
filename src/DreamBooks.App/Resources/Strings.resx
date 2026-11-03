@@ -166,4 +166,23 @@
   <data name="HighlighterPink" xml:space="preserve"><value>Rosa</value></data>
   <data name="HighlighterOrange" xml:space="preserve"><value>Arancio</value></data>
   <data name="HighlighterPurple" xml:space="preserve"><value>Viola</value></data>
+  <data name="ToolSelection" xml:space="preserve"><value>Selezione (lazo)</value></data>
+  <data name="ToolBookmark" xml:space="preserve"><value>Segnalibro sulla pagina</value></data>
+  <data name="PenBlack" xml:space="preserve"><value>Nero</value></data>
+  <data name="PenDarkBlue" xml:space="preserve"><value>Blu scuro</value></data>
+  <data name="PenBlue" xml:space="preserve"><value>Blu</value></data>
+  <data name="PenRed" xml:space="preserve"><value>Rosso</value></data>
+  <data name="PenGreen" xml:space="preserve"><value>Verde</value></data>
+  <data name="PenOrange" xml:space="preserve"><value>Arancione</value></data>
+  <data name="PenPurple" xml:space="preserve"><value>Viola</value></data>
+  <data name="PenGrey" xml:space="preserve"><value>Grigio</value></data>
+  <data name="PenOptions" xml:space="preserve"><value>Opzioni penna</value></data>
+  <data name="EraserOptions" xml:space="preserve"><value>Opzioni gomma</value></data>
+  <data name="ClearPage" xml:space="preserve"><value>Cancella tutto nella pagina</value></data>
+  <data name="ClearPageConfirm" xml:space="preserve"><value>Cancellare tutti i tratti di questa pagina? Si può annullare.</value></data>
+  <data name="ClearPageConfirmYes" xml:space="preserve"><value>Cancella tutto</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Annulla operazione</value></data>
+  <data name="AddCustomColor" xml:space="preserve"><value>Aggiungi colore</value></data>
+  <data name="RemoveCustomColor" xml:space="preserve"><value>Rimuovi colore</value></data>
+  <data name="WarnSettingsNotSaved" xml:space="preserve"><value>Le impostazioni non sono state salvate.</value></data>
 </root>

@@ -342,6 +342,63 @@ internal static class Strings
     /// <summary>Highlighter colour name (FR-41).</summary>
     public static string HighlighterPurple => Get(nameof(HighlighterPurple));
 
+    /// <summary>Toolbar button of the lasso, disabled until phase 5 (UI-02).</summary>
+    public static string ToolSelection => Get(nameof(ToolSelection));
+
+    /// <summary>Toolbar button of the page bookmark, disabled until bookmarks exist (UI-02).</summary>
+    public static string ToolBookmark => Get(nameof(ToolBookmark));
+
+    /// <summary>Pen preset colour name (FR-25).</summary>
+    public static string PenBlack => Get(nameof(PenBlack));
+
+    /// <summary>Pen preset colour name (FR-25).</summary>
+    public static string PenDarkBlue => Get(nameof(PenDarkBlue));
+
+    /// <summary>Pen preset colour name (FR-25).</summary>
+    public static string PenBlue => Get(nameof(PenBlue));
+
+    /// <summary>Pen preset colour name (FR-25).</summary>
+    public static string PenRed => Get(nameof(PenRed));
+
+    /// <summary>Pen preset colour name (FR-25).</summary>
+    public static string PenGreen => Get(nameof(PenGreen));
+
+    /// <summary>Pen preset colour name (FR-25).</summary>
+    public static string PenOrange => Get(nameof(PenOrange));
+
+    /// <summary>Pen preset colour name (FR-25).</summary>
+    public static string PenPurple => Get(nameof(PenPurple));
+
+    /// <summary>Pen preset colour name (FR-25).</summary>
+    public static string PenGrey => Get(nameof(PenGrey));
+
+    /// <summary>The pen's option panel (UI-02).</summary>
+    public static string PenOptions => Get(nameof(PenOptions));
+
+    /// <summary>The eraser's option panel (UI-02).</summary>
+    public static string EraserOptions => Get(nameof(EraserOptions));
+
+    /// <summary>"Clear all on this page" in the eraser panel (UI-02).</summary>
+    public static string ClearPage => Get(nameof(ClearPage));
+
+    /// <summary>The confirmation step of clearing the page (UI-02).</summary>
+    public static string ClearPageConfirm => Get(nameof(ClearPageConfirm));
+
+    /// <summary>The button that confirms clearing the page (UI-02).</summary>
+    public static string ClearPageConfirmYes => Get(nameof(ClearPageConfirmYes));
+
+    /// <summary>Cancels a confirmation step (not "Annulla", which is undo).</summary>
+    public static string Cancel => Get(nameof(Cancel));
+
+    /// <summary>The "+" swatch that opens the colour picker (UI-02 custom palette).</summary>
+    public static string AddCustomColor => Get(nameof(AddCustomColor));
+
+    /// <summary>Removing a custom colour from the palette (UI-02 custom palette).</summary>
+    public static string RemoveCustomColor => Get(nameof(RemoveCustomColor));
+
+    /// <summary>The settings file could not be written (FR-110).</summary>
+    public static string WarnSettingsNotSaved => Get(nameof(WarnSettingsNotSaved));
+
     private static string Get(string name) =>
         Manager.GetString(name, System.Globalization.CultureInfo.CurrentUICulture) ?? name;
 }

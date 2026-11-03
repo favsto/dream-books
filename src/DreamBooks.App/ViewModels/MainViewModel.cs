@@ -98,11 +98,13 @@ public sealed class MainViewModel : ObservableObject
     /// </param>
     /// <param name="positions">Where the last position of each document is remembered (FR-04); null disables it.</param>
     /// <param name="scheduler">Debounce timers; the UI thread's dispatcher when null.</param>
+    /// <param name="clock">The time in the scheduler's terms, for the toolbar's visibility; a stopwatch when null.</param>
     public MainViewModel(
         IFileDialogService dialogs,
         RecoveryStore? recovery = null,
         ViewPositionStore? positions = null,
-        IDelayScheduler? scheduler = null)
+        IDelayScheduler? scheduler = null,
+        Func<TimeSpan>? clock = null)
     {
         ArgumentNullException.ThrowIfNull(dialogs);
         _dialogs = dialogs;
@@ -136,6 +138,16 @@ public sealed class MainViewModel : ObservableObject
         RedoCommand = new AsyncRelayCommand(RedoAsync, () => Session is not null && Undo.CanRedo);
         SaveCommand = new AsyncRelayCommand(() => SaveCoreAsync(saveAs: false), CanSave);
         SaveAsCommand = new AsyncRelayCommand(() => SaveCoreAsync(saveAs: true), CanSave);
+        Toolbar = new ToolbarViewModel(Tools, UndoCommand, RedoCommand, () => Editor, _scheduler, clock ?? StopwatchClock());
+    }
+
+    /// <summary>The floating toolbar, its option panels and its automatic visibility (UI-02, section 4).</summary>
+    public ToolbarViewModel Toolbar { get; }
+
+    private static Func<TimeSpan> StopwatchClock()
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        return () => watch.Elapsed;
     }
 
     /// <summary>Raised after a successful Save or Save as (the session is already marked saved).</summary>
@@ -186,7 +198,13 @@ public sealed class MainViewModel : ObservableObject
     public PageEditor? Editor
     {
         get => _editor;
-        private set => SetProperty(ref _editor, value);
+        private set
+        {
+            if (SetProperty(ref _editor, value))
+            {
+                Toolbar?.Eraser.Refresh();
+            }
+        }
     }
 
     /// <summary>
@@ -1493,6 +1511,16 @@ public sealed class MainViewModel : ObservableObject
         if (e.PropertyName == nameof(ZoomViewModel.IsLocked))
         {
             SetScanPause(ref _scanPausedForInk, ZoomVm.IsLocked);
+
+            // The same signal is "the pen is writing or erasing" for the toolbar's automatic visibility (section 4).
+            if (ZoomVm.IsLocked)
+            {
+                Toolbar.PenDown();
+            }
+            else
+            {
+                Toolbar.PenUp();
+            }
         }
     }
 
@@ -2003,6 +2031,7 @@ public sealed class MainViewModel : ObservableObject
 
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
+        Toolbar.Eraser.Refresh(); // the page's strokes changed: "Clear all on this page" follows
     }
 
     /// <summary>
