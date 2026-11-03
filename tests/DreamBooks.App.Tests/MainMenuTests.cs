@@ -103,7 +103,7 @@ public sealed class MainMenuTests : IDisposable
             var button = Bounds(menu.MenuButton, window.PageHost);
             var titleBar = ((Thickness)window.FindResource("TitleBarClearance")).Top;
             Assert.True(button.Top >= titleBar, $"the button starts at {button.Top}, under the title bar");
-            Assert.InRange(button.Left, 0, 24);
+            Assert.InRange(button.Left, (double)window.FindResource("EdgeSwipeZoneWidth"), 40); // right of the left-edge swipe zone
             Assert.InRange(button.Top, titleBar, titleBar + 24);
             Assert.Equal(40, menu.MenuButton.ActualWidth, 1);
             Assert.Equal(40, menu.MenuButton.ActualHeight, 1);

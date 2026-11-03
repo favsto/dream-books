@@ -243,11 +243,11 @@
     <sys:String x:Key="GlyphFitWidth">&#xE9A6;</sys:String>
     <sys:String x:Key="GlyphMenu">&#xE700;</sys:String>
 
-    <!-- The main menu (UI-03): a round 40 px floating button at the top left, 8 DIP below the title bar and from the
-         edge, and its panel under it (12 px corners, the toolbar's material): 40 px entries with 8 px corners, the
-         shortcut on the right in the secondary text colour, thin separators. It appears like a flyout (fade and scale,
+    <!-- The main menu (UI-03): a round 40 px floating button at the top left, 8 DIP below the title bar and 4 DIP right of
+         the left-edge swipe zone (EdgeSwipeZoneWidth, 24: a finger swipe at the very edge opens the left panel, UI-04),
+         and its panel under it (12 px corners, the toolbar's material): 40 px entries with 8 px corners, the shortcut on the right in the secondary text colour, thin separators. It appears like a flyout (fade and scale,
          FlyoutOpenDuration, instant when Windows animations are off) and goes at once. -->
-    <Thickness x:Key="MainMenuMargin">8,48,0,0</Thickness>
+    <Thickness x:Key="MainMenuMargin">28,48,0,0</Thickness>
     <Thickness x:Key="MainMenuPanelMargin">0,8,0,0</Thickness>
     <sys:Double x:Key="MainMenuPanelWidth">280</sys:Double>
     <Thickness x:Key="MainMenuPanelPadding">4</Thickness>

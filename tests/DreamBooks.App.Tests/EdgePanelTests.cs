@@ -194,6 +194,47 @@ public sealed class EdgePanelTests : IDisposable
     }
 
     [Fact]
+    public void A_swipe_from_the_edge_beside_the_menu_button_opens_the_panel_and_does_not_press_the_button()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var window = new MainWindow();
+            try
+            {
+                var content = (FrameworkElement)window.Content;
+                ScrollRailTests.LayOut(content, 1200, 800);
+                window.MarksPanel.AnimationsEnabled = () => false;
+                var zone = (double)Application.Current.FindResource("EdgeSwipeZoneWidth");
+
+                // The menu button starts right of the swipe zone (UI-03, UI-04).
+                var button = ToolbarViewTests.Bounds(window.MainMenu.MenuButton, content);
+                Assert.True(button.Left >= zone, $"the menu button starts at {button.Left}, inside the {zone} DIP swipe zone");
+
+                // A finger at the very edge, level with the button: the document's, and the swipe opens the panel.
+                for (var y = button.Top; y <= button.Bottom; y += 10)
+                {
+                    var start = new Point(zone - 4, y);
+                    var hit = ScrollRailTests.HitAt(content, window.DocumentViewer.TranslatePoint(start, content));
+                    Assert.False(ScrollRailTests.IsWithin(hit, window.MainMenu), $"the menu button at y {y}");
+                    Assert.True(ScrollRailTests.IsWithin(hit, window.DocumentViewer));
+                }
+
+                var view = window.DocumentViewer;
+                var middle = button.Top + (button.Height / 2);
+                Assert.True(view.BeginEdgeSwipe(new Point(zone - 4, middle), PointerKind.Finger));
+                view.MoveEdgeSwipe(new Point(zone + 60, middle + 4));
+                Assert.True(window.MarksPanel.IsOpen);
+                Assert.False(window.MainMenu.IsOpen);
+                view.EndEdgeSwipe();
+            }
+            finally
+            {
+                window.CloseForTests();
+            }
+        });
+    }
+
+    [Fact]
     public void Finger_swipe_from_the_edge_opens_it()
     {
         WpfTestThread.Run(() =>
