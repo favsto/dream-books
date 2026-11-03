@@ -270,14 +270,19 @@ public partial class PageIndicatorChip : UserControl
 
     /// <summary>
     /// A press anywhere over the document at <paramref name="position"/> (this chip's coordinates): outside the open
-    /// field it closes it. Never taken: the press goes on to whatever is under it (the pen inks).
+    /// field it closes it. True (taken) when a finger or the mouse closed it from outside the chip: that press only
+    /// closes the field, as for the other panels, and is not also a tap on an empty area. The pen is never taken (it
+    /// inks), nor a press on the chip itself (its controls keep it).
     /// </summary>
-    internal void RoutePress(Point position)
+    internal bool RoutePress(Point position, PointerKind kind)
     {
-        if (_editing && !BoundsOf(GoToPageBox).Contains(position))
+        if (!_editing || BoundsOf(GoToPageBox).Contains(position))
         {
-            CancelGoToPage();
+            return false;
         }
+
+        CancelGoToPage();
+        return kind != PointerKind.Pen && !BoundsOf(Surface).Contains(position);
     }
 
     /// <summary>Opaque theme brushes when Windows transparency effects are off (NFR-32), the tinted layers otherwise.</summary>

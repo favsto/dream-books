@@ -677,8 +677,8 @@ public partial class MainWindow : FluentWindow
         var panel = MarksPanel.RoutePress(PageHost.TranslatePoint(position, MarksPanel), kind);
         var flyout = FloatingToolbar.RoutePress(PageHost.TranslatePoint(position, FloatingToolbar), kind);
         var menu = MainMenu.RoutePress(PageHost.TranslatePoint(position, MainMenu), kind);
-        IndicatorChip.RoutePress(PageHost.TranslatePoint(position, IndicatorChip)); // closes its open field; never taken
-        return panel || flyout || menu;
+        var chip = IndicatorChip.RoutePress(PageHost.TranslatePoint(position, IndicatorChip), kind); // closes its open field
+        return panel || flyout || menu || chip;
     }
 
     /// <summary>

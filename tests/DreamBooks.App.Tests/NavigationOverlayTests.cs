@@ -183,9 +183,11 @@ public sealed class NavigationOverlayTests : IDisposable
                 Assert.False(window.RoutePagePress(Centre(chip.GoToPageBox, window.PageHost), kind));
                 Assert.True(chip.IsEditing);
 
-                // On the page: closed without moving; the pen still inks (not taken).
-                Assert.False(window.RoutePagePress(page, kind));
+                // On the page: closed without moving. A finger or the mouse is taken, so the press only closes the
+                // field (it is not also a tap on an empty area that shows or hides the toolbar); the pen still inks.
+                Assert.Equal(kind != PointerKind.Pen, window.RoutePagePress(page, kind));
                 Assert.False(chip.IsEditing, kind.ToString());
+                Assert.False(window.RoutePagePress(page, kind), "a closed field takes nothing");
                 Assert.False(rail.State.IsHeld);
                 Assert.Equal(0, vm.Viewport.CurrentPage);
             }
