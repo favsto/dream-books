@@ -113,6 +113,7 @@ public partial class MainWindow : FluentWindow
 
         // Esc or the clear button emptied the search: the keyboard goes back to the document (FR-13).
         _viewModel.Search.FocusDocumentRequested += (_, _) => FocusDocument();
+
     }
 
     /// <summary>The marks list hosted by <see cref="MarksPanel"/> (not named in XAML: the panel is a user control).</summary>
@@ -301,6 +302,14 @@ public partial class MainWindow : FluentWindow
     /// </summary>
     internal bool RouteKey(Key key, ModifierKeys modifiers, object? source)
     {
+        // Esc closes the open toolbar flyout first (UI-02), except in the search field, which keeps its own Esc.
+        if (key == Key.Escape && modifiers == ModifierKeys.None && _viewModel.Toolbar.OpenPanel != OptionsPanel.None
+            && !(source is DependencyObject origin && IsWithin(origin, SearchField)))
+        {
+            _viewModel.Toolbar.ClosePanel();
+            return true;
+        }
+
         if (RouteSearchKey(key, modifiers, source, panelOpen: MarksPanel.IsOpen))
         {
             return true;
@@ -388,7 +397,7 @@ public partial class MainWindow : FluentWindow
     /// <summary>A real mouse press over the document while the left-edge panel is open (FR-30: the pen has its own).</summary>
     private void OnPageHostMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.StylusDevice is null && MarksPanel.RoutePress(e.GetPosition(MarksPanel), PointerKind.Mouse))
+        if (e.StylusDevice is null && RoutePagePress(e.GetPosition(PageHost), PointerKind.Mouse))
         {
             e.Handled = true;
         }
@@ -407,7 +416,7 @@ public partial class MainWindow : FluentWindow
         }
 
         var device = e.TouchDevice;
-        if (RouteDismissTouchDown(e.GetTouchPoint(MarksPanel).Position, device.Id, () => PageHost.CaptureTouch(device)))
+        if (RouteDismissTouchDown(e.GetTouchPoint(PageHost).Position, device.Id, () => PageHost.CaptureTouch(device)))
         {
             e.Handled = true; // not promoted to the mouse
         }
@@ -439,13 +448,14 @@ public partial class MainWindow : FluentWindow
     }
 
     /// <summary>
-    /// A finger down at <paramref name="position"/> (panel coordinates): when it closes the open panel from outside,
-    /// <paramref name="capture"/> holds it on the page host and the press is taken (true). Separate so tests can drive it.
+    /// A finger down at <paramref name="position"/> (page host coordinates, the panel's too): when it closes the open panel
+    /// or an open flyout from outside, <paramref name="capture"/> holds it on the page host and the press is taken (true).
+    /// Separate so tests can drive it.
     /// </summary>
     internal bool RouteDismissTouchDown(Point position, int touchId, Func<bool> capture)
     {
         ArgumentNullException.ThrowIfNull(capture);
-        if (!MarksPanel.RoutePress(position, PointerKind.Finger))
+        if (!RoutePagePress(position, PointerKind.Finger))
         {
             return false;
         }
@@ -488,11 +498,24 @@ public partial class MainWindow : FluentWindow
         peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
     }
 
-    /// <summary>The pen's press: outside the open panel it closes it and inks; on it, it closes it and is taken.</summary>
+    /// <summary>
+    /// A press at <paramref name="position"/> (page host coordinates) over the document: the open left-edge panel and
+    /// the open toolbar flyout each decide (<see cref="EdgePanel.RoutePress"/>, <see cref="ToolbarView.RoutePress"/>);
+    /// true when either takes it. Outside them both close; fingers and the mouse are taken, the pen inks. The pen on
+    /// either closes it and is taken (no stroke). Separate so tests can drive it.
+    /// </summary>
+    internal bool RoutePagePress(Point position, PointerKind kind)
+    {
+        var panel = MarksPanel.RoutePress(PageHost.TranslatePoint(position, MarksPanel), kind);
+        var flyout = FloatingToolbar.RoutePress(PageHost.TranslatePoint(position, FloatingToolbar), kind);
+        return panel || flyout;
+    }
+
+    /// <summary>The pen's press: outside the open panel or flyout it closes it and inks; on it, it closes it and is taken.</summary>
     private void OnPageHostStylusDown(object sender, StylusDownEventArgs e)
     {
         if (e.StylusDevice.TabletDevice?.Type == TabletDeviceType.Stylus
-            && MarksPanel.RoutePress(e.GetPosition(MarksPanel), PointerKind.Pen))
+            && RoutePagePress(e.GetPosition(PageHost), PointerKind.Pen))
         {
             e.Handled = true;
         }

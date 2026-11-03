@@ -415,6 +415,11 @@
                     <TextBlock Text="{Binding ErrorMessage}" TextAlignment="Center" Margin="{StaticResource Gap}" />
                 </StackPanel>
 
+                <!-- The floating toolbar and its option flyouts (UI-02), bottom centre over the document. Only the pill and
+                     the open flyout hit-test: the pen around them writes on the page; presses over the document close
+                     an open flyout (RoutePagePress). The debug panel's tool controls bind the same view models. -->
+                <views:ToolbarView x:Name="FloatingToolbar" DataContext="{Binding Toolbar}" />
+
                 <!-- The left-edge panel (UI-04) with two tabs: the marks list (FR-103, Ctrl+M) and the page thumbnails
                      (Ctrl+Shift+P). It opens with a finger swipe from the left edge (on the last tab shown) or the menu
                      entries; it closes with the close button, Esc, a swipe, a press outside and after a jump to a mark (a jump

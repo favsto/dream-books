@@ -130,6 +130,64 @@ public sealed class MainWindowShellTests
         });
     }
 
+    [Fact]
+    public void The_window_with_the_toolbar_and_its_flyouts_instantiates_in_both_themes()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var system = new FakeSystemThemeSource();
+            using var theme = new ThemeService(system);
+            try
+            {
+                foreach (var mode in new[] { AppThemeMode.Light, AppThemeMode.Dark })
+                {
+                    theme.SetMode(mode);
+                    WpfTestThread.Drain();
+                    var window = new MainWindow(theme) { TransparencyEnabled = () => true, MicaSupported = () => true };
+                    try
+                    {
+                        var root = (FrameworkElement)window.Content;
+                        var toolbar = window.FloatingToolbar;
+                        toolbar.AnimationsEnabled = () => false;
+                        Lay(root, 1000, 700);
+                        var panelColour = ((SolidColorBrush)toolbar.Pill.DiffuseLayer.Background).Color;
+                        Assert.Equal((Color)window.FindResource("ThemePanelColor"), panelColour);
+                        foreach (var panel in new[] { ViewModels.OptionsPanel.Pen, ViewModels.OptionsPanel.Highlighter, ViewModels.OptionsPanel.Eraser })
+                        {
+                            ToolbarViewTests.OpenFlyout(toolbar, panel);
+                            Lay(root, 1000, 700);
+                            Assert.True(toolbar.FlyoutFor(panel).ActualHeight > 0);
+                        }
+                    }
+                    finally
+                    {
+                        window.Close();
+                    }
+                }
+
+                // A switch with the window open repaints the toolbar from the other dictionary.
+                var open = new MainWindow(theme) { TransparencyEnabled = () => true, MicaSupported = () => true };
+                try
+                {
+                    Lay((FrameworkElement)open.Content, 1000, 700);
+                    var dark = ((SolidColorBrush)open.FloatingToolbar.Pill.DiffuseLayer.Background).Color;
+                    theme.SetMode(AppThemeMode.Light);
+                    WpfTestThread.Drain();
+                    Lay((FrameworkElement)open.Content, 1000, 700);
+                    Assert.NotEqual(dark, ((SolidColorBrush)open.FloatingToolbar.Pill.DiffuseLayer.Background).Color);
+                }
+                finally
+                {
+                    open.Close();
+                }
+            }
+            finally
+            {
+                theme.SetMode(AppThemeMode.Light);
+            }
+        });
+    }
+
     private static Color BackdropColor(MainWindow window) =>
         ((SolidColorBrush)window.DocumentViewer.Viewport.Background).Color;
 

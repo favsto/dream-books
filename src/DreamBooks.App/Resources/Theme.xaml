@@ -166,6 +166,147 @@
     <SolidColorBrush x:Key="SearchCurrentHighlightBrush" Color="{StaticResource SearchCurrentHighlightColor}" Opacity="0.5" />
     <sys:Double x:Key="SearchHighlightPaddingPt">1.5</sys:Double>
 
+    <!-- Floating toolbar and option flyouts (UI-02, phase 4a; section 3 shapes and animations). Shapes: 999 px pill for
+         the toolbar and single buttons, 12 px panels, 8 px inner elements. Icons: Segoe Fluent Icons at 20 px (Segoe
+         MDL2 Assets where Fluent Icons is missing). The surfaces are two layers, each with one of the two shadows
+         (diffuse and contact: WPF gives an element one effect); their brushes are in the theme dictionaries. -->
+    <CornerRadius x:Key="PillCornerRadius">999</CornerRadius>
+    <CornerRadius x:Key="PanelCornerRadius">12</CornerRadius>
+    <CornerRadius x:Key="InnerCornerRadius">8</CornerRadius>
+    <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+    <sys:Double x:Key="IconSize">20</sys:Double>
+    <Thickness x:Key="ToolbarPadding">8,6,8,6</Thickness>
+    <Thickness x:Key="ToolbarMargin">0,0,0,14</Thickness>
+    <Thickness x:Key="ToolbarButtonMargin">1,0,1,0</Thickness>
+    <sys:Double x:Key="ToolbarSeparatorWidth">1</sys:Double>
+    <sys:Double x:Key="ToolbarSeparatorHeight">22</sys:Double>
+    <Thickness x:Key="ToolbarSeparatorMargin">6,0,6,0</Thickness>
+    <!-- The active tool: an accent disc behind its icon and a short bar under it, sliding to the new tool in 150 ms. -->
+    <sys:Double x:Key="ToolIndicatorBarWidth">14</sys:Double>
+    <sys:Double x:Key="ToolIndicatorBarHeight">3</sys:Double>
+    <Thickness x:Key="ToolIndicatorBarMargin">0,0,0,3</Thickness>
+    <CornerRadius x:Key="ToolIndicatorBarCornerRadius">2</CornerRadius>
+    <sys:Double x:Key="DisabledOpacity">0.4</sys:Double>
+    <!-- Animations (section 3), all instant when Windows animations are off (NFR-32): the tool indicator slides in
+         150 ms; the toolbar dissolves in 200 ms while writing and comes back in 180 ms; a flyout appears in 180 ms (fade
+         and scale 0.95 to 1, ease-out) and disappears in 120 ms (fade and scale to 0.97, ease-in). -->
+    <sys:TimeSpan x:Key="ToolIndicatorSlideDuration">0:0:0.15</sys:TimeSpan>
+    <sys:TimeSpan x:Key="ToolbarRetractDuration">0:0:0.2</sys:TimeSpan>
+    <sys:TimeSpan x:Key="ToolbarShowDuration">0:0:0.18</sys:TimeSpan>
+    <sys:TimeSpan x:Key="FlyoutOpenDuration">0:0:0.18</sys:TimeSpan>
+    <sys:TimeSpan x:Key="FlyoutCloseDuration">0:0:0.12</sys:TimeSpan>
+    <sys:Double x:Key="FlyoutOpenFromScale">0.95</sys:Double>
+    <sys:Double x:Key="FlyoutCloseToScale">0.97</sys:Double>
+    <!-- The flyouts: 300 DIP wide, 12 px padding, 8 DIP above the toolbar. -->
+    <sys:Double x:Key="FlyoutWidth">300</sys:Double>
+    <Thickness x:Key="FlyoutPadding">12</Thickness>
+    <Thickness x:Key="FlyoutMargin">0,0,0,8</Thickness>
+    <sys:Double x:Key="FlyoutHeaderSize">12</sys:Double>
+    <Thickness x:Key="FlyoutHeaderMargin">0,8,0,4</Thickness>
+    <!-- Colour swatches: a 28 DIP disc in a 40 DIP target, a ring around the chosen colour; a long press (0.6 s, moving
+         less than 8 DIP) on a custom colour removes it. -->
+    <sys:Double x:Key="SwatchSize">28</sys:Double>
+    <sys:Double x:Key="SwatchRingSize">36</sys:Double>
+    <sys:Double x:Key="SwatchRingThickness">2</sys:Double>
+    <sys:Double x:Key="SwatchOutlineThickness">1</sys:Double>
+    <sys:TimeSpan x:Key="LongPressDuration">0:0:0.6</sys:TimeSpan>
+    <sys:Double x:Key="LongPressSlop">8</sys:Double>
+    <!-- The free colour picker: saturation and brightness square, hue strip, hex field. The two gradients are the HSV
+         model itself (white to the hue, then to black), the same in both themes. -->
+    <sys:Double x:Key="ColorPickerSquareHeight">140</sys:Double>
+    <sys:Double x:Key="ColorPickerHueHeight">12</sys:Double>
+    <sys:Double x:Key="ColorPickerThumbSize">14</sys:Double>
+    <sys:Double x:Key="ColorPickerPreviewSize">28</sys:Double>
+    <LinearGradientBrush x:Key="ColorPickerWhiteGradient" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#FFFFFFFF" Offset="0" />
+        <GradientStop Color="#00FFFFFF" Offset="1" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="ColorPickerBlackGradient" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#00000000" Offset="0" />
+        <GradientStop Color="#FF000000" Offset="1" />
+    </LinearGradientBrush>
+    <!-- The pen's pressure preview: a stroke from light to full pressure and back, at the pen's colour and width. -->
+    <sys:Double x:Key="PressurePreviewHeight">36</sys:Double>
+    <!-- The preset width buttons show a dot this many times the width (at 100% zoom). -->
+    <sys:Double x:Key="WidthPresetDotScale">2</sys:Double>
+    <!-- Segoe Fluent Icons glyphs. -->
+    <sys:String x:Key="GlyphPen">&#xE70F;</sys:String>
+    <sys:String x:Key="GlyphHighlighter">&#xE7E6;</sys:String>
+    <sys:String x:Key="GlyphEraser">&#xE75C;</sys:String>
+    <sys:String x:Key="GlyphSelection">&#xE8B3;</sys:String>
+    <sys:String x:Key="GlyphUndo">&#xE7A7;</sys:String>
+    <sys:String x:Key="GlyphRedo">&#xE7A6;</sys:String>
+    <sys:String x:Key="GlyphBookmark">&#xE728;</sys:String>
+    <sys:String x:Key="GlyphAdd">&#xE710;</sys:String>
+
+    <!-- A toolbar button: a 40 DIP round target with a 20 px icon; hover and press tints; dimmed when disabled. -->
+    <Style x:Key="ToolbarButtonStyle" TargetType="Button">
+        <Setter Property="Width" Value="{StaticResource TouchTarget}" />
+        <Setter Property="Height" Value="{StaticResource TouchTarget}" />
+        <Setter Property="Margin" Value="{StaticResource ToolbarButtonMargin}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+        <Setter Property="FontSize" Value="{StaticResource IconSize}" />
+        <Setter Property="Foreground" Value="{DynamicResource GlyphBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Stylus.IsPressAndHoldEnabled" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Disc" Background="{TemplateBinding Background}" CornerRadius="{StaticResource PillCornerRadius}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Disc" Property="Background" Value="{DynamicResource ToolbarHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Disc" Property="Background" Value="{DynamicResource ToolbarPressedBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="{StaticResource DisabledOpacity}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!-- A colour swatch: the 40 DIP target is the button; its content (disc and ring) is built by ColorSwatches. -->
+    <Style x:Key="SwatchButtonStyle" TargetType="Button">
+        <Setter Property="Width" Value="{StaticResource TouchTarget}" />
+        <Setter Property="Height" Value="{StaticResource TouchTarget}" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource GlyphBrush}" />
+        <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+        <Setter Property="FontSize" Value="{StaticResource IconSize}" />
+        <Setter Property="Stylus.IsPressAndHoldEnabled" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}" CornerRadius="{StaticResource PillCornerRadius}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource ToolbarHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="{StaticResource DisabledOpacity}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="FlyoutHeader" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="{StaticResource FlyoutHeaderSize}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource FlyoutHeaderBrush}" />
+        <Setter Property="Margin" Value="{StaticResource FlyoutHeaderMargin}" />
+    </Style>
+
     <!-- The 40 px touch targets over WPF UI's Fluent styles (ControlsDictionary, merged before this dictionary). -->
     <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="MinWidth" Value="{StaticResource TouchTarget}" />

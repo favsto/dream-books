@@ -72,7 +72,10 @@ public sealed class ViewSmokeTests : IDisposable
             {
                 LayOut((FrameworkElement)window.Content, 1000, 2000);
                 var vm = (MainViewModel)window.DataContext;
-                var named = Descendants((DependencyObject)window.Content)
+                // The debug panel's controls (until Task 5 removes it): the toolbar and its flyouts have the same names
+                // and are covered by ToolbarViewTests.
+                var debugPanel = Descendants((DependencyObject)window.Content).OfType<Expander>().First();
+                var named = Descendants(debugPanel)
                     .OfType<Control>()
                     .Where(c => !string.IsNullOrEmpty(AutomationProperties.GetName(c)))
                     .ToList();

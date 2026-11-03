@@ -1,0 +1,74 @@
+<UserControl x:Class="DreamBooks.App.Views.ToolbarView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="clr-namespace:DreamBooks.App.Resources"
+             xmlns:views="clr-namespace:DreamBooks.App.Views"
+             HorizontalAlignment="Center" VerticalAlignment="Bottom" Focusable="False" IsTabStop="False">
+    <!-- The floating toolbar (UI-02), bottom centre over the document: Pen, Highlighter, Eraser, Selection (disabled until
+         phase 5), separator, Undo, Redo, separator, Bookmark (disabled until bookmarks exist), and the option flyout of
+         the active tool above it. The data context is the ToolbarViewModel.
+         Pen rule: nothing here has a background except the pill and the open flyout, so the pen and fingers around them
+         reach the page; a pen press on the flyout closes it without writing (RoutePress, and the flyouts' own handlers);
+         on the pill the pen presses the buttons. While the toolbar retracts or is hidden it takes no input. -->
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="FlyoutHost" Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+              Margin="{StaticResource FlyoutMargin}">
+            <views:PenOptionsFlyout x:Name="PenFlyout" Visibility="Collapsed" VerticalAlignment="Bottom" RenderTransformOrigin="0.5,1" />
+            <views:HighlighterOptionsFlyout x:Name="HighlighterFlyout" Visibility="Collapsed" VerticalAlignment="Bottom" RenderTransformOrigin="0.5,1" />
+            <views:EraserOptionsFlyout x:Name="EraserFlyout" Visibility="Collapsed" VerticalAlignment="Bottom" RenderTransformOrigin="0.5,1" />
+        </Grid>
+
+        <views:FloatingSurface x:Name="Pill" Grid.Row="1" HorizontalAlignment="Center" Margin="{StaticResource ToolbarMargin}"
+                               CornerRadius="{StaticResource PillCornerRadius}" Stylus.IsPressAndHoldEnabled="False"
+                               AutomationProperties.Name="{x:Static res:Strings.ToolbarLabel}">
+            <Grid Margin="{StaticResource ToolbarPadding}">
+                <!-- The active tool's indicator, behind the buttons: an accent disc and a short bar, sliding (150 ms). -->
+                <Canvas IsHitTestVisible="False" HorizontalAlignment="Left" VerticalAlignment="Top">
+                    <Grid x:Name="Indicator" Width="{StaticResource TouchTarget}" Height="{StaticResource TouchTarget}">
+                        <Grid.RenderTransform>
+                            <TranslateTransform x:Name="IndicatorSlide" />
+                        </Grid.RenderTransform>
+                        <Border CornerRadius="{StaticResource PillCornerRadius}" Background="{DynamicResource ToolIndicatorBrush}" />
+                        <Border VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="{StaticResource ToolIndicatorBarMargin}"
+                                Width="{StaticResource ToolIndicatorBarWidth}" Height="{StaticResource ToolIndicatorBarHeight}"
+                                CornerRadius="{StaticResource ToolIndicatorBarCornerRadius}" Background="{DynamicResource ToolIndicatorBarBrush}" />
+                    </Grid>
+                </Canvas>
+                <StackPanel x:Name="ButtonRow" Orientation="Horizontal">
+                    <Button x:Name="PenButton" Style="{StaticResource ToolbarButtonStyle}" Content="{StaticResource GlyphPen}"
+                            Command="{Binding Buttons[0].Command}" ToolTip="{Binding Buttons[0].Name}"
+                            AutomationProperties.Name="{Binding Buttons[0].Name}" />
+                    <Button x:Name="HighlighterButton" Style="{StaticResource ToolbarButtonStyle}" Content="{StaticResource GlyphHighlighter}"
+                            Command="{Binding Buttons[1].Command}" ToolTip="{Binding Buttons[1].Name}"
+                            AutomationProperties.Name="{Binding Buttons[1].Name}" />
+                    <Button x:Name="EraserButton" Style="{StaticResource ToolbarButtonStyle}" Content="{StaticResource GlyphEraser}"
+                            Command="{Binding Buttons[2].Command}" ToolTip="{Binding Buttons[2].Name}"
+                            AutomationProperties.Name="{Binding Buttons[2].Name}" />
+                    <Button x:Name="SelectionButton" Style="{StaticResource ToolbarButtonStyle}" Content="{StaticResource GlyphSelection}"
+                            Command="{Binding Buttons[3].Command}" ToolTip="{Binding Buttons[3].Name}"
+                            AutomationProperties.Name="{Binding Buttons[3].Name}" />
+                    <Border x:Name="Separator1" Width="{StaticResource ToolbarSeparatorWidth}" Height="{StaticResource ToolbarSeparatorHeight}"
+                            Margin="{StaticResource ToolbarSeparatorMargin}" Background="{DynamicResource ToolbarSeparatorBrush}"
+                            VerticalAlignment="Center" IsHitTestVisible="False" />
+                    <Button x:Name="UndoButton" Style="{StaticResource ToolbarButtonStyle}" Content="{StaticResource GlyphUndo}"
+                            Command="{Binding Buttons[4].Command}" ToolTip="{Binding Buttons[4].Name}"
+                            AutomationProperties.Name="{Binding Buttons[4].Name}" />
+                    <Button x:Name="RedoButton" Style="{StaticResource ToolbarButtonStyle}" Content="{StaticResource GlyphRedo}"
+                            Command="{Binding Buttons[5].Command}" ToolTip="{Binding Buttons[5].Name}"
+                            AutomationProperties.Name="{Binding Buttons[5].Name}" />
+                    <Border x:Name="Separator2" Width="{StaticResource ToolbarSeparatorWidth}" Height="{StaticResource ToolbarSeparatorHeight}"
+                            Margin="{StaticResource ToolbarSeparatorMargin}" Background="{DynamicResource ToolbarSeparatorBrush}"
+                            VerticalAlignment="Center" IsHitTestVisible="False" />
+                    <Button x:Name="BookmarkButton" Style="{StaticResource ToolbarButtonStyle}" Content="{StaticResource GlyphBookmark}"
+                            Command="{Binding Buttons[6].Command}" ToolTip="{Binding Buttons[6].Name}"
+                            AutomationProperties.Name="{Binding Buttons[6].Name}" />
+                </StackPanel>
+            </Grid>
+        </views:FloatingSurface>
+    </Grid>
+</UserControl>

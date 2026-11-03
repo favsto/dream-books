@@ -1,0 +1,46 @@
+<UserControl x:Class="DreamBooks.App.Views.HighlighterOptionsFlyout"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="clr-namespace:DreamBooks.App.Resources"
+             xmlns:vm="clr-namespace:DreamBooks.App.ViewModels"
+             xmlns:views="clr-namespace:DreamBooks.App.Views"
+             AutomationProperties.Name="{x:Static res:Strings.HighlighterOptions}"
+             Focusable="False" IsTabStop="False">
+    <!-- The highlighter's option panel (UI-02, FR-41, FR-44, FR-46), above the toolbar: the six presets and the shared
+         custom palette (alpha 89 whatever the colour), round or chisel tip, the chisel angle and the straight line. The
+         widths are fixed (FR-46). The data context is the ToolbarViewModel. -->
+    <views:FloatingSurface x:Name="Surface" Width="{StaticResource FlyoutWidth}" CornerRadius="{StaticResource PanelCornerRadius}">
+        <StackPanel Margin="{StaticResource FlyoutPadding}" KeyboardNavigation.TabNavigation="Cycle">
+            <TextBlock Text="{x:Static res:Strings.Color}" Style="{StaticResource FlyoutHeader}" Margin="0,0,0,4" />
+            <views:ColorSwatches x:Name="Swatches"
+                                 Presets="{Binding Highlighter.Swatches}" CustomColors="{Binding Highlighter.CustomColors}"
+                                 SelectedColor="{Binding Highlighter.Color, Mode=OneWay}"
+                                 SelectCommand="{Binding Highlighter.SelectColorCommand}"
+                                 AddCommand="{Binding Highlighter.AddCustomColorCommand}"
+                                 RemoveCommand="{Binding Highlighter.RemoveCustomColorCommand}" />
+
+            <TextBlock Text="{x:Static res:Strings.HighlighterTip}" Style="{StaticResource FlyoutHeader}" />
+            <StackPanel Orientation="Horizontal">
+                <RadioButton x:Name="RoundRadio" Content="{x:Static res:Strings.HighlighterTipRound}"
+                             AutomationProperties.Name="{x:Static res:Strings.HighlighterTipRound}"
+                             IsChecked="{Binding Highlighter.IsRound}" />
+                <RadioButton x:Name="ChiselRadio" Content="{x:Static res:Strings.HighlighterTipChisel}"
+                             AutomationProperties.Name="{x:Static res:Strings.HighlighterTipChisel}"
+                             IsChecked="{Binding Highlighter.IsChisel}" />
+            </StackPanel>
+            <DockPanel Margin="{StaticResource Gap}">
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Highlighter.ChiselAngleDeg, StringFormat={}{0:0}°}" VerticalAlignment="Center" />
+                <TextBlock Text="{x:Static res:Strings.HighlighterAngle}" VerticalAlignment="Center" />
+            </DockPanel>
+            <Slider x:Name="AngleSlider" Minimum="{x:Static vm:HighlighterOptionsViewModel.MinChiselAngleDeg}"
+                    Maximum="{x:Static vm:HighlighterOptionsViewModel.MaxChiselAngleDeg}"
+                    Value="{Binding Highlighter.ChiselAngleDeg}"
+                    SmallChange="{StaticResource ChiselAngleSmallChange}" LargeChange="{StaticResource ChiselAngleLargeChange}"
+                    MinHeight="{StaticResource TouchTarget}" IsEnabled="{Binding Highlighter.IsChisel}"
+                    AutomationProperties.Name="{x:Static res:Strings.HighlighterAngle}" />
+            <CheckBox x:Name="StraightLineCheck" Content="{x:Static res:Strings.HighlighterStraightLine}"
+                      AutomationProperties.Name="{x:Static res:Strings.HighlighterStraightLine}"
+                      IsChecked="{Binding Highlighter.IsStraightLine}" />
+        </StackPanel>
+    </views:FloatingSurface>
+</UserControl>

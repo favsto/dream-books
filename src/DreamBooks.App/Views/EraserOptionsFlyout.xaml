@@ -1,0 +1,52 @@
+<UserControl x:Class="DreamBooks.App.Views.EraserOptionsFlyout"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="clr-namespace:DreamBooks.App.Resources"
+             xmlns:views="clr-namespace:DreamBooks.App.Views"
+             AutomationProperties.Name="{x:Static res:Strings.EraserOptions}"
+             Focusable="False" IsTabStop="False">
+    <!-- The eraser's option panel (UI-02, FR-31, FR-32, FR-63), above the toolbar: whole stroke or part of the stroke
+         (one mode, also for the pen's back end), the size, and "Clear all on this page", which asks first and is one
+         undoable step. The data context is the ToolbarViewModel. -->
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="ShowWhen" />
+    </UserControl.Resources>
+    <views:FloatingSurface x:Name="Surface" Width="{StaticResource FlyoutWidth}" CornerRadius="{StaticResource PanelCornerRadius}">
+        <StackPanel Margin="{StaticResource FlyoutPadding}" KeyboardNavigation.TabNavigation="Cycle">
+            <TextBlock Text="{x:Static res:Strings.EraserMode}" Style="{StaticResource FlyoutHeader}" Margin="0,0,0,4" />
+            <StackPanel Orientation="Horizontal">
+                <RadioButton x:Name="WholeRadio" Content="{x:Static res:Strings.EraseWhole}"
+                             AutomationProperties.Name="{x:Static res:Strings.EraseWhole}"
+                             IsChecked="{Binding Eraser.IsWholeStroke}" />
+                <RadioButton x:Name="PartialRadio" Content="{x:Static res:Strings.ErasePartial}"
+                             AutomationProperties.Name="{x:Static res:Strings.ErasePartial}"
+                             IsChecked="{Binding Eraser.IsPartial}" />
+            </StackPanel>
+
+            <DockPanel Margin="{StaticResource FlyoutHeaderMargin}">
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Eraser.SizeMm, StringFormat={}{0:0.0} mm}" VerticalAlignment="Center" />
+                <TextBlock Text="{x:Static res:Strings.EraserSize}" Style="{StaticResource FlyoutHeader}" Margin="0" />
+            </DockPanel>
+            <Slider x:Name="SizeSlider" Minimum="{Binding Eraser.MinSizeMm, Mode=OneWay}" Maximum="{Binding Eraser.MaxSizeMm, Mode=OneWay}"
+                    Value="{Binding Eraser.SizeMm}" SmallChange="0.5" LargeChange="2"
+                    MinHeight="{StaticResource TouchTarget}"
+                    AutomationProperties.Name="{x:Static res:Strings.EraserSize}" />
+
+            <Button x:Name="ClearPageButton" Content="{x:Static res:Strings.ClearPage}" Margin="{StaticResource SectionGap}"
+                    HorizontalAlignment="Stretch" Command="{Binding Eraser.ClearPageCommand}"
+                    AutomationProperties.Name="{x:Static res:Strings.ClearPage}" />
+            <StackPanel x:Name="ConfirmPanel" Margin="{StaticResource Gap}"
+                        Visibility="{Binding Eraser.IsConfirmingClear, Converter={StaticResource ShowWhen}}">
+                <TextBlock Text="{x:Static res:Strings.ClearPageConfirm}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                <StackPanel Orientation="Horizontal" Margin="{StaticResource Gap}">
+                    <Button x:Name="ConfirmClearButton" Content="{x:Static res:Strings.ClearPageConfirmYes}"
+                            Command="{Binding Eraser.ConfirmClearPageCommand}"
+                            AutomationProperties.Name="{x:Static res:Strings.ClearPageConfirmYes}" />
+                    <Button x:Name="CancelClearButton" Content="{x:Static res:Strings.Cancel}"
+                            Command="{Binding Eraser.CancelClearPageCommand}"
+                            AutomationProperties.Name="{x:Static res:Strings.Cancel}" />
+                </StackPanel>
+            </StackPanel>
+        </StackPanel>
+    </views:FloatingSurface>
+</UserControl>

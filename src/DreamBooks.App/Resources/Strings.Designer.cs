@@ -399,6 +399,48 @@ internal static class Strings
     /// <summary>The settings file could not be written (FR-110).</summary>
     public static string WarnSettingsNotSaved => Get(nameof(WarnSettingsNotSaved));
 
+    /// <summary>The floating toolbar (UI-02).</summary>
+    public static string ToolbarLabel => Get(nameof(ToolbarLabel));
+
+    /// <summary>The item status of the active tool's button (UI-02, NFR-31).</summary>
+    public static string ToolActive => Get(nameof(ToolActive));
+
+    /// <summary>The pen panel's pressure preview (UI-02).</summary>
+    public static string PressurePreview => Get(nameof(PressurePreview));
+
+    /// <summary>A preset pen width button; {0} is the width in millimetres (UI-02).</summary>
+    public static string WidthPresetNameFormat => Get(nameof(WidthPresetNameFormat));
+
+    /// <summary>A custom palette swatch; {0} is its hex code (UI-02).</summary>
+    public static string CustomColorNameFormat => Get(nameof(CustomColorNameFormat));
+
+    /// <summary>How to remove a custom colour (UI-02).</summary>
+    public static string CustomColorHelp => Get(nameof(CustomColorHelp));
+
+    /// <summary>The free colour picker (UI-02).</summary>
+    public static string ColorPicker => Get(nameof(ColorPicker));
+
+    /// <summary>The colour picker's hue slider (UI-02).</summary>
+    public static string ColorPickerHue => Get(nameof(ColorPickerHue));
+
+    /// <summary>The colour picker's saturation and brightness square (UI-02).</summary>
+    public static string ColorPickerSquare => Get(nameof(ColorPickerSquare));
+
+    /// <summary>The colour picker's hex field (UI-02).</summary>
+    public static string ColorPickerHex => Get(nameof(ColorPickerHex));
+
+    /// <summary>The hex field's hint (UI-02).</summary>
+    public static string ColorPickerHexHint => Get(nameof(ColorPickerHexHint));
+
+    /// <summary>Adds the picked colour to the custom palette (UI-02).</summary>
+    public static string ColorPickerAdd => Get(nameof(ColorPickerAdd));
+
+    /// <summary>The highlighter panel's tip header (UI-02).</summary>
+    public static string HighlighterTip => Get(nameof(HighlighterTip));
+
+    /// <summary>The item status of the chosen colour swatch (UI-02, NFR-31).</summary>
+    public static string SwatchChosen => Get(nameof(SwatchChosen));
+
     private static string Get(string name) =>
         Manager.GetString(name, System.Globalization.CultureInfo.CurrentUICulture) ?? name;
 }
