@@ -399,6 +399,20 @@ internal static class Strings
     public static string TitleBarMinimize => Get(nameof(TitleBarMinimize));
     public static string TitleBarMaximize => Get(nameof(TitleBarMaximize));
     public static string TitleBarClose => Get(nameof(TitleBarClose));
+    public static string WhenMonthsFormat => Get(nameof(WhenMonthsFormat));
+    public static string WhenMonthAgo => Get(nameof(WhenMonthAgo));
+    public static string WhenWeeksFormat => Get(nameof(WhenWeeksFormat));
+    public static string WhenWeekAgo => Get(nameof(WhenWeekAgo));
+    public static string WhenDaysFormat => Get(nameof(WhenDaysFormat));
+    public static string WhenYesterday => Get(nameof(WhenYesterday));
+    public static string WhenToday => Get(nameof(WhenToday));
+    public static string StartNotAPdf => Get(nameof(StartNotAPdf));
+    public static string StartPageFormat => Get(nameof(StartPageFormat));
+    public static string StartRemove => Get(nameof(StartRemove));
+    public static string StartMissing => Get(nameof(StartMissing));
+    public static string StartMore => Get(nameof(StartMore));
+    public static string StartOpenPdf => Get(nameof(StartOpenPdf));
+    public static string StartResume => Get(nameof(StartResume));
 
     /// <summary>The item status of the active tool's button (UI-02, NFR-31).</summary>
     public static string ToolActive => Get(nameof(ToolActive));

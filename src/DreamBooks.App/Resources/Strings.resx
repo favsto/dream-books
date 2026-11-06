@@ -186,6 +186,20 @@
   <data name="TitleBarMinimize" xml:space="preserve"><value>Riduci a icona</value></data>
   <data name="TitleBarMaximize" xml:space="preserve"><value>Ingrandisci</value></data>
   <data name="TitleBarClose" xml:space="preserve"><value>Chiudi</value></data>
+  <data name="WhenMonthsFormat" xml:space="preserve"><value>{0} mesi fa</value></data>
+  <data name="WhenMonthAgo" xml:space="preserve"><value>1 mese fa</value></data>
+  <data name="WhenWeeksFormat" xml:space="preserve"><value>{0} settimane fa</value></data>
+  <data name="WhenWeekAgo" xml:space="preserve"><value>1 settimana fa</value></data>
+  <data name="WhenDaysFormat" xml:space="preserve"><value>{0} giorni fa</value></data>
+  <data name="WhenYesterday" xml:space="preserve"><value>ieri</value></data>
+  <data name="WhenToday" xml:space="preserve"><value>oggi</value></data>
+  <data name="StartNotAPdf" xml:space="preserve"><value>Questo non è un PDF</value></data>
+  <data name="StartPageFormat" xml:space="preserve"><value>pag. {0}</value></data>
+  <data name="StartRemove" xml:space="preserve"><value>Rimuovi dall'elenco</value></data>
+  <data name="StartMissing" xml:space="preserve"><value>non trovato</value></data>
+  <data name="StartMore" xml:space="preserve"><value>Altri…</value></data>
+  <data name="StartOpenPdf" xml:space="preserve"><value>Apri PDF…</value></data>
+  <data name="StartResume" xml:space="preserve"><value>Riprendi a leggere</value></data>
   <data name="ToolActive" xml:space="preserve"><value>attivo</value></data>
   <data name="PressurePreview" xml:space="preserve"><value>Anteprima del tratto con pressione</value></data>
   <data name="WidthPresetNameFormat" xml:space="preserve"><value>Spessore {0} mm</value></data>
