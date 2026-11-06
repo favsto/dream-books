@@ -267,6 +267,7 @@
     <Thickness x:Key="MainMenuPanelMargin">0,8,0,0</Thickness>
     <sys:Double x:Key="MainMenuPanelWidth">280</sys:Double>
     <Thickness x:Key="MainMenuPanelPadding">4</Thickness>
+    <Thickness x:Key="MenuSubListMargin">12,0,0,0</Thickness>
     <Thickness x:Key="MenuItemPadding">12,0,12,0</Thickness>
     <Thickness x:Key="MenuShortcutMargin">24,0,0,0</Thickness>
     <Thickness x:Key="MenuSeparatorMargin">8,4,8,4</Thickness>

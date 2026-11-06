@@ -35,7 +35,7 @@ public partial class MainMenuButton : UserControl
     {
         InitializeComponent();
         PanelHost.RenderTransform = new ScaleTransform(1, 1);
-        Items = [OpenItem, SaveItem, SaveAsItem, RecentItem, ExportItem, MarksItem, PagesItem, SearchItem, SettingsItem];
+        Items = [OpenItem, SaveItem, SaveAsItem, CloseItem, RecentItem, ExportItem, MarksItem, PagesItem, SearchItem, SettingsItem];
         Separators = [Separator1, Separator2, Separator3];
         EntryList.AddHandler(ButtonBase.ClickEvent, new RoutedEventHandler(OnEntryClick));
         Loaded += (_, _) =>
@@ -74,6 +74,41 @@ public partial class MainMenuButton : UserControl
 
     /// <summary>True while the panel is open.</summary>
     internal bool IsOpen { get; private set; }
+
+    /// <summary>How many recent documents the menu lists (the start screen has them all, FR-03).</summary>
+    internal const int MaxRecents = 8;
+
+    /// <summary>The recent documents under "File recenti" (enabled when there are any); choosing one calls <paramref name="open"/> and closes the menu.</summary>
+    internal void SetRecents(IReadOnlyList<RecentEntry> entries, Action<string> open)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        ArgumentNullException.ThrowIfNull(open);
+        RecentList.Children.Clear();
+        foreach (var entry in entries.Take(MaxRecents))
+        {
+            var path = entry.Path;
+            var row = new Button
+            {
+                Style = (Style)FindResource("MenuItemStyle"),
+                Content = new TextBlock { Text = System.IO.Path.GetFileNameWithoutExtension(entry.FileName), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis },
+            };
+            System.Windows.Automation.AutomationProperties.SetName(row, entry.FileName);
+            row.Click += (_, _) => open(path);
+            RecentList.Children.Add(row);
+        }
+
+        RecentItem.IsEnabled = entries.Count > 0;
+        if (entries.Count == 0)
+        {
+            RecentList.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>The rows of the recent list, in order.</summary>
+    internal IReadOnlyList<Button> RecentRows => RecentList.Children.OfType<Button>().ToList();
+
+    /// <summary>True while the "File recenti" list is expanded.</summary>
+    internal bool IsRecentListOpen => RecentList.Visibility == Visibility.Visible;
 
     /// <summary>The duration of the last opening animation (tests); null when it opened at once.</summary>
     internal TimeSpan? LastOpenDuration { get; set; }
@@ -227,7 +262,16 @@ public partial class MainMenuButton : UserControl
 
     // Raised before the entry's command runs (ButtonBase.OnClick): the menu is closed when the command starts, so a
     // dialog it opens, or the panel or the pill it shows, is not under the menu.
-    private void OnEntryClick(object sender, RoutedEventArgs e) => Close(restoreFocus: true);
+    private void OnEntryClick(object sender, RoutedEventArgs e)
+    {
+        if (ReferenceEquals(e.OriginalSource, RecentItem))
+        {
+            RecentList.Visibility = RecentList.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+            return; // "File recenti" opens its list; choosing a document closes the menu
+        }
+
+        Close(restoreFocus: true);
+    }
 
     private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e) =>
         Dispatcher.BeginInvoke(DispatcherPriority.Background, ApplyTransparency); // raised on another thread

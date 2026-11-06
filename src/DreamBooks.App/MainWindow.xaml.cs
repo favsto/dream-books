@@ -261,6 +261,8 @@ public partial class MainWindow : FluentWindow
             }
         };
         SyncStartScreen(recents);
+        MainMenu.SetRecents(recents.Entries, path => _ = _viewModel.OpenRecentAsync(path));
+        recents.Changed += (_, _) => MainMenu.SetRecents(recents.Entries, path => _ = _viewModel.OpenRecentAsync(path));
     }
 
     private void SyncStartScreen(RecentFilesService recents)

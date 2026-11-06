@@ -127,7 +127,7 @@ public sealed class MainMenuTests : IDisposable
             // The entries in order, with their names and shortcuts (UI-03).
             Button[] order =
             [
-                menu.OpenItem, menu.SaveItem, menu.SaveAsItem, menu.RecentItem, menu.ExportItem,
+                menu.OpenItem, menu.SaveItem, menu.SaveAsItem, menu.CloseItem, menu.RecentItem, menu.ExportItem,
                 menu.MarksItem, menu.PagesItem, menu.SearchItem, menu.SettingsItem,
             ];
             Assert.Equal(order, menu.Items);
@@ -167,7 +167,7 @@ public sealed class MainMenuTests : IDisposable
             Assert.Contains((Key.S, ModifierKeys.Control | ModifierKeys.Shift, (ICommand)vm.SaveAsCommand), gestures);
 
             // Not yet available (4b): disabled, with no command, and saying so.
-            foreach (var placeholder in new[] { menu.RecentItem, menu.ExportItem, menu.SettingsItem })
+            foreach (var placeholder in new[] { menu.ExportItem, menu.SettingsItem })
             {
                 Assert.False(placeholder.IsEnabled);
                 Assert.Null(placeholder.Command);

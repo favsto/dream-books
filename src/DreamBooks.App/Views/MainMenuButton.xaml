@@ -56,15 +56,20 @@
                         <TextBlock Text="{x:Static res:Strings.MenuSaveAs}" VerticalAlignment="Center" />
                     </DockPanel>
                 </Button>
+                <Button x:Name="CloseItem" Style="{StaticResource MenuItemStyle}" Command="{Binding CloseDocumentCommand}"
+                        AutomationProperties.Name="{x:Static res:Strings.MenuCloseDocument}">
+                    <TextBlock Text="{x:Static res:Strings.MenuCloseDocument}" VerticalAlignment="Center" />
+                </Button>
 
                 <Border x:Name="Separator1" Height="{StaticResource MenuSeparatorHeight}" Margin="{StaticResource MenuSeparatorMargin}"
                         Background="{DynamicResource ToolbarSeparatorBrush}" IsHitTestVisible="False" />
 
                 <Button x:Name="RecentItem" Style="{StaticResource MenuItemStyle}" IsEnabled="False"
-                        AutomationProperties.Name="{x:Static res:Strings.MenuRecentFiles}"
-                        AutomationProperties.HelpText="{x:Static res:Strings.MenuNotYetAvailable}">
+                        AutomationProperties.Name="{x:Static res:Strings.MenuRecentFiles}">
                     <TextBlock Text="{x:Static res:Strings.MenuRecentFiles}" VerticalAlignment="Center" />
                 </Button>
+                <!-- The last few recent documents, opened by "File recenti" (the full list is the start screen). -->
+                <StackPanel x:Name="RecentList" Visibility="Collapsed" Margin="{StaticResource MenuSubListMargin}" />
                 <Button x:Name="ExportItem" Style="{StaticResource MenuItemStyle}" IsEnabled="False"
                         AutomationProperties.Name="{x:Static res:Strings.MenuExport}"
                         AutomationProperties.HelpText="{x:Static res:Strings.MenuNotYetAvailable}">
