@@ -46,12 +46,12 @@ live on the other three edges.
 5. **Settings window (Fausto: contents "per ora ok").** Opened from the menu "Impostazioni" (and Ctrl+,
    **(call)**). It edits exactly what FR-110 already stores and 4a only exposed through the toolbar: theme (sistema,
    chiaro, scuro), accent colour override, eraser mode, pressure curve with preview (FR-21), smoothing (FR-23),
-   "Toolbar fissa", toolbar edge, and "Disegna anche con il dito" (section on finger/pen separation). Changes apply
+   "Toolbar fissa", toolbar edge. Changes apply
    immediately and are saved through the existing `SettingsService` (debounced, atomic). **(call)** The settings are
    a floating panel centred over the document in the 4a surface language (not a second OS window), so the pen/finger
    rules and the theme/transparency fallback are the existing ones; it closes with Esc, a close button, or a press
-   outside it. If "Disegna anche con il dito" does not exist yet in code, adding it as a setting and honouring it in
-   input routing is in scope; otherwise show it only if it works.
+   outside it. **(Fausto)** "Disegna anche con il dito" is removed for good: fingers never draw, there is no such
+   setting, and it is removed from the requirements.
 6. **Export (Fausto: both).** Menu "Esporta" with two entries, both asking where to save through the standard save
    dialog:
    - **PDF appiattito (FR-87):** a new PDF in which strokes, highlighters and margin notes are merged into the page

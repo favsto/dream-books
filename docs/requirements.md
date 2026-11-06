@@ -161,7 +161,7 @@ L'utente deve poter aprire qualsiasi PDF standard e muoversi nel documento con d
 | FR-12 | Rotazione della vista di una pagina di 90° (solo visualizzazione, non modifica il file) | Could |
 | FR-13 | Ricerca di testo nel PDF con evidenziazione dei risultati (solo dove il PDF ha un livello di testo) | Should |
 
-**Separazione dita / penna.** Il dito non disegna mai: serve solo a scorrere, zoomare e toccare i comandi. La penna scrive sempre con lo strumento attivo. Il mouse si comporta come la penna se lo strumento attivo è di disegno, altrimenti scorre. Questo comportamento si può cambiare nelle impostazioni ("Disegna anche con il dito").
+**Separazione dita / penna.** Il dito non disegna mai: serve solo a scorrere, zoomare e toccare i comandi. La penna scrive sempre con lo strumento attivo. Il mouse si comporta come la penna se lo strumento attivo è di disegno, altrimenti scorre. Il dito non disegna mai, in nessuna impostazione (decisione del 06/11/2026: "Disegna anche con il dito" è stato tolto).
 
 **Rifiuto del palmo.** Mentre la penna è in prossimità dello schermo, i tocchi del palmo vengono ignorati, sfruttando il rilevamento di Windows Ink.
 
