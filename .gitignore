@@ -482,4 +482,4 @@ $RECYCLE.BIN/
 *.swp
 
 # --- Claude Code: personal settings, do not commit ---
-.claude/settings.local.json
+.claude/settings.local.json.superpowers/

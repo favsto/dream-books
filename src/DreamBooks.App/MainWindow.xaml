@@ -5,7 +5,8 @@
         xmlns:res="clr-namespace:DreamBooks.App.Resources"
         xmlns:views="clr-namespace:DreamBooks.App.Views"
         Title="{Binding WindowTitle}" Height="720" Width="1200"
-        WindowBackdropType="Mica" ExtendsContentIntoTitleBar="True">
+        WindowBackdropType="Mica" ExtendsContentIntoTitleBar="True"
+        Icon="pack://application:,,,/DreamBooks.App;component/Assets/app-icon.png">
     <Window.InputBindings>
         <KeyBinding Key="Z" Modifiers="Ctrl" Command="{Binding UndoCommand}" />
         <KeyBinding Key="Y" Modifiers="Ctrl" Command="{Binding RedoCommand}" />
