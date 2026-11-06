@@ -729,7 +729,7 @@ public sealed class ScrollRailTests : IDisposable
             Settle(view);
             var knob = KnobCentre(rail);
             Assert.Equal(RailZone.None, rail.ZoneAt(knob, PointerKind.Pen));
-            Assert.True(IsWithin(HitAt(view, knob), surface));
+            Assert.True(IsWithin(HitAt(view, rail.TranslatePoint(knob, view)), surface));
             Assert.False(view.RoutePointerDown(knob, PointerKind.Pen));
             Assert.False(rail.IsPressed);
 
@@ -739,11 +739,11 @@ public sealed class ScrollRailTests : IDisposable
             Settle(view);
             knob = KnobCentre(rail);
             Assert.Equal(RailZone.Knob, rail.ZoneAt(knob, PointerKind.Pen));
-            Assert.True(IsWithin(HitAt(view, knob), rail.KnobGrip));
+            Assert.True(IsWithin(HitAt(view, rail.TranslatePoint(knob, view)), rail.KnobGrip));
             Assert.True(rail.KnobGrip.HasStylusPlugIn);
             var slop = new Point(knob.X + (rail.Knob.ActualWidth / 2) + 6, knob.Y + (rail.KnobHeight / 2) + 6);
             Assert.Equal(RailZone.Knob, rail.ZoneAt(slop, PointerKind.Pen));
-            Assert.True(IsWithin(HitAt(view, slop), rail.KnobGrip));
+            Assert.True(IsWithin(HitAt(view, rail.TranslatePoint(slop, view)), rail.KnobGrip));
 
             // Beside the knob on the strip, and to its left over the page (the finger's wider zone), the pen inks.
             var below = new Point(knob.X, knob.Y + (rail.KnobHeight / 2) + 30);
@@ -751,7 +751,7 @@ public sealed class ScrollRailTests : IDisposable
             foreach (var point in new[] { below, left })
             {
                 Assert.Equal(RailZone.None, rail.ZoneAt(point, PointerKind.Pen));
-                Assert.True(IsWithin(HitAt(view, point), surface), point.ToString());
+                Assert.True(IsWithin(HitAt(view, rail.TranslatePoint(point, view)), surface), point.ToString());
                 Assert.False(view.RoutePointerDown(point, PointerKind.Pen));
                 Assert.False(rail.IsPressed);
             }

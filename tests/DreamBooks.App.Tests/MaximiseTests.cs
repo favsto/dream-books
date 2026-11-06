@@ -91,4 +91,23 @@ public sealed class MaximiseTests
             AssertStaysMaximisedThenRestores(window, hwnd, states);
         });
     }
+
+    [Fact]
+    public void Two_calls_of_one_click_toggle_the_window_once()
+    {
+        WithShownWindow((window, hwnd, states) =>
+        {
+            var button = TitleBarPenInput.Buttons(window.AppTitleBar).First(b => b.Name == "PART_MaximizeButton");
+            button.Command.Execute(button.CommandParameter);
+            window.ToggleMaximize(); // the same click reaching the action a second time
+            Pump(800);
+            Assert.Equal(WindowState.Maximized, window.WindowState);
+            Assert.Equal([WindowState.Maximized], states);
+
+            Pump((int)MainWindow.MaximizeDebounce.TotalMilliseconds);
+            button.Command.Execute(button.CommandParameter); // a later click restores
+            Pump(500);
+            Assert.Equal(WindowState.Normal, window.WindowState);
+        });
+    }
 }

@@ -116,7 +116,8 @@
     <sys:Double x:Key="EdgeSwipeZoneWidth">24</sys:Double>
     <CornerRadius x:Key="EdgePanelCornerRadius">0,12,12,0</CornerRadius>
     <Thickness x:Key="EdgePanelPadding">12,8,8,12</Thickness>
-    <Thickness x:Key="EdgePanelMargin">0,8,0,8</Thickness>
+    <!-- Below the title bar (TitleBarClearance 48) and its pills, with the usual 8 around. -->
+    <Thickness x:Key="EdgePanelMargin">0,56,0,8</Thickness>
     <!-- EdgePanelBackgroundBrush(Opaque) and EdgePanelShadow: theme dictionaries. -->
     <sys:Double x:Key="EdgePanelTitleSize">16</sys:Double>
     <Thickness x:Key="EdgePanelDetailMargin">8,0,0,0</Thickness>

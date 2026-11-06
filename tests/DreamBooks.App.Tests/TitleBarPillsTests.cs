@@ -67,6 +67,22 @@ public sealed class TitleBarPillsTests
     }
 
     [Fact]
+    public void The_scroll_rail_and_the_edge_panel_start_below_the_title_bar()
+    {
+        WithWindow((window, root) =>
+        {
+            var clearance = ((Thickness)window.FindResource("TitleBarClearance")).Top;
+            var rail = window.DocumentViewer.Rail.TransformToAncestor(root).TransformBounds(new Rect(window.DocumentViewer.Rail.RenderSize));
+            Assert.True(rail.Top >= clearance - 0.5, $"the rail starts at {rail.Top}");
+
+            window.MarksPanel.OpenTabCommand.Execute(MainWindow.MarksTab);
+            root.UpdateLayout();
+            var sheet = window.MarksPanel.Sheet.TransformToAncestor(root).TransformBounds(new Rect(window.MarksPanel.Sheet.RenderSize));
+            Assert.True(sheet.Top >= clearance - 0.5, $"the panel starts at {sheet.Top}");
+        });
+    }
+
+    [Fact]
     public void Without_transparency_the_pills_are_opaque()
     {
         WithWindow((window, _) =>

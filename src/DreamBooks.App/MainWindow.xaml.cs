@@ -159,6 +159,7 @@ public partial class MainWindow : FluentWindow
 
         titleBarTemplate.AddValueChanged(AppTitleBar, OnTitleBarTemplateChanged);
         Closed += (_, _) => titleBarTemplate.RemoveValueChanged(AppTitleBar, OnTitleBarTemplateChanged); // a static table
+        AppTitleBar.MaximizeActionOverride = (_, _) => ToggleMaximize();
         ContentRendered += OnFirstContentRendered;
     }
 
@@ -190,6 +191,27 @@ public partial class MainWindow : FluentWindow
             button.Margin = new Thickness(0); // the targets run to the top and right edges of the window (the corner convention)
         }
     }
+
+    private long _lastMaximizeToggle;
+
+    /// <summary>
+    /// The maximise button: maximises or restores, once per click. The device test saw the button maximise and fall back
+    /// (and later do nothing): one click reached WPF UI's action twice, through the button and through the non-client
+    /// hit test. A second call within <see cref="MaximizeDebounce"/> of the first is the same click.
+    /// </summary>
+    internal void ToggleMaximize()
+    {
+        var now = Environment.TickCount64;
+        if (now - _lastMaximizeToggle < MaximizeDebounce.TotalMilliseconds)
+        {
+            return;
+        }
+
+        _lastMaximizeToggle = now;
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    }
+
+    internal static readonly TimeSpan MaximizeDebounce = TimeSpan.FromMilliseconds(500);
 
     /// <summary>The marks list hosted by <see cref="MarksPanel"/> (not named in XAML: the panel is a user control).</summary>
     internal MarksListView MarksList => (MarksListView)MarksPanel.Body!;

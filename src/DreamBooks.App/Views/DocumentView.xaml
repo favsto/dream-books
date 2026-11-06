@@ -42,6 +42,6 @@
         </ScrollViewer>
 
         <!-- The fading scroll rail over the right edge: it never hit-tests (only the knob's pen grip does). -->
-        <views:ScrollRail x:Name="Rail" />
+        <views:ScrollRail x:Name="Rail" Margin="{StaticResource TitleBarClearance}" />
     </Grid>
 </UserControl>
