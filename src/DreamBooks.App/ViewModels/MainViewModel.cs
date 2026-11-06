@@ -130,6 +130,7 @@ public sealed class MainViewModel : ObservableObject
         // Navigation stays available while a save runs (the earlier lock is gone): pages that cannot be loaded
         // meanwhile show their placeholder, and the commands may overlap.
         OpenPdfCommand = new AsyncRelayCommand(OpenPdfAsync, () => !IsSaving);
+        CloseDocumentCommand = new AsyncRelayCommand(CloseDocumentAsync, () => Session is not null && !IsSaving);
         GoToPageCommand = new AsyncRelayCommand<int>(GoToPageAsync, AsyncRelayCommandOptions.AllowConcurrentExecutions);
         PreviousPageCommand = new AsyncRelayCommand(
             () => Viewport.StepPageAsync(-1), AsyncRelayCommandOptions.AllowConcurrentExecutions);
@@ -186,8 +187,27 @@ public sealed class MainViewModel : ObservableObject
     public DocumentSession? Session
     {
         get => _session;
-        private set => SetProperty(ref _session, value);
+        private set
+        {
+            if (SetProperty(ref _session, value))
+            {
+                OnPropertyChanged(nameof(IsStartScreenVisible));
+                CloseDocumentCommand?.NotifyCanExecuteChanged();
+            }
+        }
     }
+
+    /// <summary>The recent documents (FR-03); null in tests that do not need them.</summary>
+    internal RecentFilesService? Recents { get; set; }
+
+    /// <summary>Documents being opened or restored right now: the start screen waits for them.</summary>
+    private int _opening;
+
+    /// <summary>True when no document is open and none is being opened: the start screen shows (FR-03).</summary>
+    public bool IsStartScreenVisible => Session is null && _opening == 0;
+
+    /// <summary>Closes the open document (asks about unsaved changes, FR-85) and shows the start screen.</summary>
+    public IAsyncRelayCommand CloseDocumentCommand { get; private set; } = null!;
 
     /// <summary>The current document's undo history; an empty, inert one when no document is open.</summary>
     public UndoManager Undo => Session?.Undo ?? _noDocumentUndo;
@@ -234,6 +254,7 @@ public sealed class MainViewModel : ObservableObject
                 }
 
                 OpenPdfCommand.NotifyCanExecuteChanged();
+                CloseDocumentCommand.NotifyCanExecuteChanged();
                 SaveCommand.NotifyCanExecuteChanged();
                 SaveAsCommand.NotifyCanExecuteChanged();
             }
@@ -706,6 +727,19 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     private async Task OpenPathAsync(string path, bool quietIfInUse, CancellationToken ct)
     {
+        StartOpening();
+        try
+        {
+            await OpenPathCoreAsync(path, quietIfInUse, ct);
+        }
+        finally
+        {
+            FinishOpening();
+        }
+    }
+
+    private async Task OpenPathCoreAsync(string path, bool quietIfInUse, CancellationToken ct)
+    {
         // 1. Single writer: refuse before asking anything. Reopening the current document keeps its lock.
         var sameDocument = Session is { } current && SamePath(current.Path, path);
         DocumentLock? newLock = null;
@@ -838,6 +872,7 @@ public sealed class MainViewModel : ObservableObject
         var previousDocument = _document;
         Swap(opened, session, journal, newLock ?? _lock, layout, restored, firstPage);
         ShowRestoreOutcome(restore, journalUnavailable);
+        Recents?.Opened(opened.Path, Viewport.CurrentPage, session.PageCount);
         if (opened.Viewer is { Info.CanBeRewritten: false })
         {
             // Owner-password or restricted PDFs open without a password but are never rewritten (FR-82): say so now,
@@ -858,6 +893,92 @@ public sealed class MainViewModel : ObservableObject
         }
 
         await PrunePositionsOnceAsync();
+    }
+
+    private void StartOpening()
+    {
+        _opening++;
+        if (_opening == 1)
+        {
+            OnPropertyChanged(nameof(IsStartScreenVisible));
+        }
+    }
+
+    private void FinishOpening()
+    {
+        _opening--;
+        if (_opening == 0)
+        {
+            OnPropertyChanged(nameof(IsStartScreenVisible));
+        }
+    }
+
+    /// <summary>Opens a document chosen from the recent list or the menu (the same path as "Apri").</summary>
+    public Task OpenRecentAsync(string path, CancellationToken ct = default) =>
+        OpenPathAsync(path, quietIfInUse: false, ct);
+
+    /// <summary>
+    /// Opens the file the app was started with ("Apri con"). A failure shows the usual error and leaves the start screen;
+    /// it never throws except on cancellation.
+    /// </summary>
+    public Task OpenStartupFileAsync(string path, CancellationToken ct = default) =>
+        OpenPathAsync(path, quietIfInUse: false, ct);
+
+    /// <summary>
+    /// Closes the open document (FR-85: asks Save / Don't save / Cancel when it has unsaved changes), remembers where
+    /// the reader was and shows the start screen. Cancel keeps the document open.
+    /// </summary>
+    private async Task CloseDocumentAsync()
+    {
+        if (Session is null || !await CanCloseAsync())
+        {
+            return;
+        }
+
+        CancelErase();
+        _pendingSettle?.Dispose();
+        _pendingSettle = null;
+        var previousSession = Session;
+        var previousDocument = _document;
+        if (previousSession is not null)
+        {
+            previousSession.CurrentPageChanged -= OnCurrentPageChanged;
+            previousSession.RevealRequested -= OnRevealRequested;
+            previousSession.Undo.StateChanged -= OnUndoStateChanged;
+            previousSession.DirtyChanged -= OnDirtyChanged;
+        }
+
+        if (_viewer is { } viewer)
+        {
+            viewer.CurrentChanged -= OnViewerChanged;
+        }
+
+        _document = null;
+        _viewer = null;
+        _lock = null; // released by CanCloseAsync
+        AttachJournal(null);
+        Session = null;
+        Viewport.Attach(null, null, null);
+        PageCount = 0;
+        ErrorMessage = null;
+        _noticeShown = false;
+        Notice = null;
+        ShowCurrentPage();
+        OnPropertyChanged(nameof(Undo));
+        OnPropertyChanged(nameof(Renderer));
+        OnPropertyChanged(nameof(IsDirty));
+        OnPropertyChanged(nameof(WindowTitle));
+        OnPropertyChanged(nameof(DocumentTitle));
+        SaveCommand.NotifyCanExecuteChanged();
+        SaveAsCommand.NotifyCanExecuteChanged();
+        UndoCommand.NotifyCanExecuteChanged();
+        RedoCommand.NotifyCanExecuteChanged();
+        Search.ResetForDocument();
+        previousSession?.Dispose();
+        if (previousDocument is not null)
+        {
+            await previousDocument.Lifetime.DisposeAsync();
+        }
     }
 
     private static DocumentLayout BuildLayout(IPageSource source)
@@ -999,6 +1120,11 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Writes the current position now (close, document swap) and waits for the store. Never throws.</summary>
     private async Task PersistViewAsync()
     {
+        if (Session is { } open)
+        {
+            Recents?.UpdateProgress(open.Path, Viewport.CurrentPage, open.PageCount); // where the reader stopped (FR-03)
+        }
+
         QueueViewPersistence();
         try
         {
@@ -1881,6 +2007,11 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Tells every <see cref="Saved"/> listener, each isolated: one failing listener stops neither the others nor the caller.</summary>
     private void RaiseSaved(DocumentSavedEventArgs saved)
     {
+        if (saved.IsSaveAs)
+        {
+            Recents?.Opened(saved.NewPath, Viewport.CurrentPage, saved.Session.PageCount); // the new file is a recent document too
+        }
+
         if (Saved is not { } handlers)
         {
             return;
