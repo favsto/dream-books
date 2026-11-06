@@ -17,7 +17,8 @@
       "Bash(dotnet new*)",
       "Bash(dotnet sln*)",
       "Bash(dotnet --version*)",
-      "Bash(dotnet --info*)"
+      "Bash(dotnet --info*)",
+      "WebSearch"
     ],
     "deny": [
       "Read(./.env)",
