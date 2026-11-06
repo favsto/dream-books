@@ -399,6 +399,10 @@ internal static class Strings
     public static string TitleBarMinimize => Get(nameof(TitleBarMinimize));
     public static string TitleBarMaximize => Get(nameof(TitleBarMaximize));
     public static string TitleBarClose => Get(nameof(TitleBarClose));
+    public static string StartAllName => Get(nameof(StartAllName));
+    public static string StartRemoveName => Get(nameof(StartRemoveName));
+    public static string StartCardNameFormat => Get(nameof(StartCardNameFormat));
+    public static string StartLabel => Get(nameof(StartLabel));
     public static string WhenMonthsFormat => Get(nameof(WhenMonthsFormat));
     public static string WhenMonthAgo => Get(nameof(WhenMonthAgo));
     public static string WhenWeeksFormat => Get(nameof(WhenWeeksFormat));

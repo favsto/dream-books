@@ -31,6 +31,9 @@ public sealed partial class RecentCardViewModel : ObservableObject
 
     internal RecentCardViewModel(string path) => DocumentPath = path;
 
+    /// <summary>The card as one phrase for a screen reader: title, when, page.</summary>
+    public string AutomationName => string.Format(CultureInfo.CurrentCulture, Strings.StartCardNameFormat, Title, WhenText, PageText);
+
     /// <summary>The document's path: the card's identity, never shown.</summary>
     public string DocumentPath { get; }
 
@@ -43,5 +46,6 @@ public sealed partial class RecentCardViewModel : ObservableObject
             ? Strings.StartMissing
             : string.Format(CultureInfo.CurrentCulture, Strings.StartPageFormat, entry.Page + 1);
         Progress = entry.PageCount > 0 ? Math.Clamp((entry.Page + 1.0) / entry.PageCount, 0, 1) : 0;
+        OnPropertyChanged(nameof(AutomationName));
     }
 }

@@ -441,6 +441,53 @@
         </Setter>
     </Style>
 
+    <!-- The start screen (FR-03, phase 4b): the recent documents as cover cards under "Riprendi a leggere" and the
+         "Apri PDF…" button. A card is a cover (a floating surface) with the title, when it was opened and the page
+         reached, and a thin reading-progress bar. -->
+    <Thickness x:Key="StartMargin">44,72,44,24</Thickness>
+    <!-- The error line over the page, above the floating toolbar. -->
+    <Thickness x:Key="ErrorLineMargin">0,0,0,96</Thickness>
+    <sys:Double x:Key="StartMaxWidth">920</sys:Double>
+    <sys:Double x:Key="StartTitleSize">22</sys:Double>
+    <Thickness x:Key="StartHeaderMargin">0,0,0,20</Thickness>
+    <sys:Double x:Key="StartCardWidth">140</sys:Double>
+    <sys:Double x:Key="StartCoverHeight">190</sys:Double>
+    <sys:Double x:Key="StartCardGap">16</sys:Double>
+    <Thickness x:Key="StartCardMargin">0,0,16,16</Thickness>
+    <Thickness x:Key="StartCardTextMargin">2,8,2,0</Thickness>
+    <Thickness x:Key="StartCardSubtextMargin">2,0,2,0</Thickness>
+    <sys:Double x:Key="StartCardTextSize">12</sys:Double>
+    <sys:Double x:Key="StartProgressHeight">3</sys:Double>
+    <Thickness x:Key="StartProgressMargin">0,6,0,0</Thickness>
+    <Style x:Key="StartCardButtonStyle" TargetType="Button">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Stylus.IsPressAndHoldEnabled" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Frame" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"
+                            CornerRadius="{StaticResource InnerCornerRadius}" BorderBrush="Transparent"
+                            BorderThickness="{StaticResource DialogButtonRingThickness}">
+                        <ContentPresenter />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Frame" Property="Background" Value="{DynamicResource ToolbarHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Frame" Property="Background" Value="{DynamicResource ToolbarPressedBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource ToolActiveForegroundBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- The 40 px touch targets over WPF UI's Fluent styles (ControlsDictionary, merged before this dictionary). -->
     <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="MinWidth" Value="{StaticResource TouchTarget}" />

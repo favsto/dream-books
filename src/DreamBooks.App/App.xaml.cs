@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using DreamBooks.App.Services;
@@ -17,6 +18,7 @@ public partial class App : Application
 
     private ThemeService? _theme;
     private SettingsService? _settings;
+    private RecentFilesService? _recents;
 
     public App() => AddThemeResources(Resources);
 
@@ -46,7 +48,10 @@ public partial class App : Application
             theme.SetMode(ToAppThemeMode(s.ThemeMode));
             theme.SetAccentOverride(ToAccent(s.AccentOverride));
         });
-        var window = new MainWindow(_theme, _settings);
+        _recents = new RecentFilesService(new RecentFilesStore(RecentFilesStore.DefaultRootDirectory()), File.Exists, new DispatcherDelayScheduler());
+        _recents.Load(); // one small file; anything unreadable gives an empty list
+        var covers = new CoverService(new CoverStore(RecentFilesStore.DefaultRootDirectory()));
+        var window = new MainWindow(_theme, _settings, _recents, covers);
         MainWindow = window;
         window.Show();
     }
@@ -54,6 +59,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _settings?.Flush(_flushTimeout);
+        _recents?.Flush(_flushTimeout);
         _theme?.Dispose();
         base.OnExit(e);
     }

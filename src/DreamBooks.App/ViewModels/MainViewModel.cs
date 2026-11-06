@@ -296,6 +296,9 @@ public sealed class MainViewModel : ObservableObject
         private set => SetProperty(ref _pageCount, value);
     }
 
+    /// <summary>Shows an error line over the page (the window's own messages, e.g. a dropped file that is not a PDF).</summary>
+    internal void ShowError(string message) => ErrorMessage = message;
+
     public string? ErrorMessage
     {
         get => _errorMessage;

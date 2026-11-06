@@ -54,11 +54,13 @@ public partial class MainWindow : FluentWindow
     /// backdrop is applied again, as WPF UI's theme manager re-applies the main window's backdrop itself.
     /// </summary>
     /// <param name="theme">The app's theme service, or null.</param>
+    /// <param name="recents">The recent documents (FR-03) for the start screen, or null (no start screen).</param>
+    /// <param name="covers">The cover cache of the recent documents, or null (cards keep their placeholder).</param>
     /// <param name="settings">
     /// The app settings (FR-110): the tools and the toolbar take the remembered values and every change is remembered;
     /// null in tests that do not use the settings file.
     /// </param>
-    internal MainWindow(ThemeService? theme, SettingsService? settings = null)
+    internal MainWindow(ThemeService? theme, SettingsService? settings = null, RecentFilesService? recents = null, CoverService? covers = null)
     {
         _theme = theme;
         InitializeComponent();
@@ -124,6 +126,11 @@ public partial class MainWindow : FluentWindow
                 ? DocumentViewer.Bitmaps.RunWhenIdleAsync(token => vm.LoadPageInkAsync(pageIndex, token), ct)
                 : Task.FromResult<PageInk?>(null));
         thumbnails.SetPaused(true); // until the Pages tab is shown
+        if (recents is not null)
+        {
+            AttachStart(recents, covers, thumbnails.GetBitmapAsync);
+        }
+
         PagesList.Thumbnails = thumbnails;
         MarksList.PageBitmaps = thumbnails; // the marks rows draw the page under their ink from the same queue and cache
         DocumentViewer.ThumbnailScaleChanged += (_, _) => thumbnails.ClearBitmaps(); // rendered for the old scale
@@ -212,6 +219,108 @@ public partial class MainWindow : FluentWindow
     }
 
     internal static readonly TimeSpan MaximizeDebounce = TimeSpan.FromMilliseconds(500);
+
+    private CoverService? _covers;
+
+    /// <summary>The start screen's view model; null when the window has no recent-documents service (tests).</summary>
+    internal StartViewModel? Start => StartScreen.DataContext as StartViewModel;
+
+    /// <summary>
+    /// The start screen (FR-03): the recent documents as covers, shown while no document is open or being opened. The
+    /// covers come from the cover cache, and a document that opens stores its first page there; "Apri con" and a file
+    /// dropped on the window open through the normal open path.
+    /// </summary>
+    private void AttachStart(RecentFilesService recents, CoverService? covers, Func<int, CancellationToken, Task<System.Windows.Media.Imaging.BitmapSource?>> firstPage)
+    {
+        _covers = covers;
+        _viewModel.Recents = recents;
+        var start = new StartViewModel(
+            recents,
+            () => _viewModel.OpenPdfCommand.ExecuteAsync(null),
+            path => _viewModel.OpenRecentAsync(path),
+            fitCount: 4);
+        StartScreen.DataContext = start;
+        if (covers is not null)
+        {
+            start.CoverProvider = async (path, ct) => await covers.GetAsync(path, ct);
+            covers.Stored += (_, path) => Dispatcher.BeginInvoke(() => start.ReloadCover(path));
+            _viewModel.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(MainViewModel.Session) && _viewModel.Session is { } session)
+                {
+                    _ = StoreCoverAsync(covers, session.Path, firstPage);
+                }
+            };
+        }
+
+        _viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.IsStartScreenVisible))
+            {
+                SyncStartScreen(recents);
+            }
+        };
+        SyncStartScreen(recents);
+    }
+
+    private void SyncStartScreen(RecentFilesService recents)
+    {
+        var show = _viewModel.IsStartScreenVisible;
+        StartScreen.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        if (show)
+        {
+            _ = recents.RefreshAvailabilityAsync(CancellationToken.None); // off the UI thread: a dead network drive never freezes the window
+        }
+    }
+
+    /// <summary>The first page of the document that just opened becomes its cover (low-priority render; a few tries while the viewer starts).</summary>
+    private static async Task StoreCoverAsync(
+        CoverService covers, string path, Func<int, CancellationToken, Task<System.Windows.Media.Imaging.BitmapSource?>> firstPage)
+    {
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            var bitmap = await firstPage(0, CancellationToken.None);
+            if (bitmap is not null)
+            {
+                await covers.StoreAsync(path, bitmap, CancellationToken.None);
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(500));
+        }
+    }
+
+    private void OnWindowDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void OnWindowDrop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(DataFormats.FileDrop) is string[] paths)
+        {
+            _ = OpenDroppedFileAsync(paths);
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// A file dropped on the window: the first PDF opens (the normal open path, with its question about unsaved changes);
+    /// anything else says "Questo non è un PDF" and changes nothing.
+    /// </summary>
+    internal async Task OpenDroppedFileAsync(IReadOnlyList<string> paths)
+    {
+        var pdf = paths.FirstOrDefault(p => string.Equals(System.IO.Path.GetExtension(p), ".pdf", StringComparison.OrdinalIgnoreCase));
+        if (pdf is null)
+        {
+            _viewModel.ShowError(Strings.StartNotAPdf);
+            return;
+        }
+
+        await CurrentViewModel.OpenRecentAsync(pdf);
+    }
 
     /// <summary>The marks list hosted by <see cref="MarksPanel"/> (not named in XAML: the panel is a user control).</summary>
     internal MarksListView MarksList => (MarksListView)MarksPanel.Body!;

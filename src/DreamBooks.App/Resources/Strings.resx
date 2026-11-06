@@ -186,6 +186,10 @@
   <data name="TitleBarMinimize" xml:space="preserve"><value>Riduci a icona</value></data>
   <data name="TitleBarMaximize" xml:space="preserve"><value>Ingrandisci</value></data>
   <data name="TitleBarClose" xml:space="preserve"><value>Chiudi</value></data>
+  <data name="StartAllName" xml:space="preserve"><value>Mostra tutti i recenti</value></data>
+  <data name="StartRemoveName" xml:space="preserve"><value>Rimuovi {0} dall'elenco</value></data>
+  <data name="StartCardNameFormat" xml:space="preserve"><value>{0}, {1}, {2}</value></data>
+  <data name="StartLabel" xml:space="preserve"><value>Schermata iniziale</value></data>
   <data name="WhenMonthsFormat" xml:space="preserve"><value>{0} mesi fa</value></data>
   <data name="WhenMonthAgo" xml:space="preserve"><value>1 mese fa</value></data>
   <data name="WhenWeeksFormat" xml:space="preserve"><value>{0} settimane fa</value></data>

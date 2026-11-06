@@ -5,7 +5,7 @@
         xmlns:res="clr-namespace:DreamBooks.App.Resources"
         xmlns:views="clr-namespace:DreamBooks.App.Views"
         Title="{Binding WindowTitle}" Height="720" Width="1200"
-        WindowBackdropType="Mica" ExtendsContentIntoTitleBar="True"
+        WindowBackdropType="Mica" ExtendsContentIntoTitleBar="True" AllowDrop="True" DragOver="OnWindowDragOver" Drop="OnWindowDrop"
         Icon="pack://application:,,,/DreamBooks.App;component/Assets/app-icon.png">
     <Window.InputBindings>
         <KeyBinding Key="Z" Modifiers="Ctrl" Command="{Binding UndoCommand}" />
@@ -38,22 +38,13 @@
                   PreviewTouchMove="OnPageHostTouchMove" PreviewTouchUp="OnPageHostTouchUp"
                   LostTouchCapture="OnPageHostLostTouchCapture" PreviewStylusDown="OnPageHostStylusDown">
                 <views:DocumentView x:Name="DocumentViewer" />
-                <!-- Shown until a document is open (4b adds the start screen); the error line stays visible over the page. -->
-                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
-                    <TextBlock Text="{x:Static res:Strings.NoDocument}" TextAlignment="Center">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Visibility" Value="Collapsed" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Session}" Value="{x:Null}">
-                                        <Setter Property="Visibility" Value="Visible" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                    <TextBlock Text="{Binding ErrorMessage}" TextAlignment="Center" Margin="{StaticResource Gap}" />
-                </StackPanel>
+                <!-- With no document open: "Riprendi a leggere" and the recent documents as covers (FR-03, 4b). Collapsed
+                     while a document is open or being opened; the window shows it through IsStartScreenVisible. -->
+                <views:StartView x:Name="StartScreen" Visibility="Collapsed" />
+
+                <!-- The error line (file not found, not a PDF, ...) stays visible over the page and the start screen. -->
+                <TextBlock Text="{Binding ErrorMessage}" TextAlignment="Center" VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                           Margin="{StaticResource ErrorLineMargin}" IsHitTestVisible="False" />
 
                 <!-- The floating toolbar and its option flyouts (UI-02), bottom centre over the document. Only the pill and
                      the open flyout hit-test: the pen around them writes on the page; presses over the document close

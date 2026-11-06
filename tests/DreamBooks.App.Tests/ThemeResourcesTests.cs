@@ -58,6 +58,7 @@ public sealed class ThemeResourcesTests
         "MenuItemPadding", "MenuShortcutMargin", "MenuSeparatorMargin", "MenuSeparatorHeight", "MenuItemStyle",
         "MenuShortcutText", "SaveProgressLineHeight", "SaveProgressBarFraction", "SaveProgressCycleDuration",
         "SaveProgressBarBrush", "TopOverlaysMargin", "NoticeBarMargin", "NoticeBarPadding", "NoticeBarMaxWidth",
+        "StartMargin", "StartMaxWidth", "StartTitleSize", "StartHeaderMargin", "StartCardWidth", "StartCoverHeight", "StartCardGap", "StartCardMargin", "StartCardTextMargin", "StartCardSubtextMargin", "StartCardTextSize", "StartProgressHeight", "StartProgressMargin", "StartCardButtonStyle", "ErrorLineMargin", "DialogButtonStyle",
         "NoticeTextMargin", "FlyoutFirstHeaderMargin", "ColorPickerHexMargin", "ColorPickerButtonMargin",
     ];
 

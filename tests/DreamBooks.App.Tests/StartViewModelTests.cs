@@ -126,6 +126,107 @@ public sealed class StartViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task A_new_card_asks_for_its_cover_once_and_keeps_it_across_refreshes()
+    {
+        var (service, start) = Create();
+        var asked = new List<string>();
+        var image = new System.Windows.Media.Imaging.BitmapImage();
+        start.CoverProvider = (path, _) =>
+        {
+            asked.Add(path);
+            return Task.FromResult<System.Windows.Media.ImageSource?>(image);
+        };
+
+        service.Opened(@"C:\a.pdf", 0, 1);
+        await WaitUntilAsync(() => start.Cards[0].Cover is not null);
+        service.Opened(@"C:\b.pdf", 0, 1); // the list changes: a.pdf keeps its card and its cover
+        await WaitUntilAsync(() => start.Cards.All(c => c.Cover is not null));
+
+        Assert.Equal([@"C:\a.pdf", @"C:\b.pdf"], asked);
+        Assert.Same(image, start.Cards[1].Cover);
+    }
+
+    [Fact]
+    public async Task ReloadCover_asks_again_for_one_document()
+    {
+        var (service, start) = Create();
+        var calls = 0;
+        start.CoverProvider = (_, _) =>
+        {
+            calls++;
+            return Task.FromResult<System.Windows.Media.ImageSource?>(null);
+        };
+        service.Opened(@"C:\a.pdf", 0, 1);
+        await WaitUntilAsync(() => calls == 1);
+
+        start.ReloadCover(@"C:\A.PDF");
+        await WaitUntilAsync(() => calls == 2);
+    }
+
+    [Fact]
+    public void A_wider_window_shows_more_cards()
+    {
+        var (service, start) = Create(fit: 2);
+        foreach (var name in new[] { "a", "b", "c", "d" })
+        {
+            service.Opened($@"C:\{name}.pdf", 0, 1);
+        }
+
+        Assert.Equal(2, start.Cards.Count);
+        start.FitCount = 3;
+
+        Assert.Equal(3, start.Cards.Count);
+        Assert.True(start.ShowMore);
+        start.FitCount = 10;
+        Assert.Equal(4, start.Cards.Count);
+        Assert.False(start.ShowMore);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        var until = DateTime.UtcNow.AddSeconds(5);
+        while (!condition())
+        {
+            Assert.True(DateTime.UtcNow < until, "the condition did not become true");
+            await Task.Delay(10);
+        }
+    }
+
+    [Fact]
+    public void Altri_shows_every_recent_until_everything_fits_again()
+    {
+        var (service, start) = Create(fit: 2);
+        foreach (var name in new[] { "a", "b", "c", "d" })
+        {
+            service.Opened($@"C:\{name}.pdf", 0, 1);
+        }
+
+        Assert.True(start.ShowMore);
+        start.ShowAllCommand.Execute(null);
+
+        Assert.Equal(4, start.Cards.Count);
+        Assert.False(start.ShowMore);
+        Assert.Equal(4, start.TotalCount);
+        service.Remove(@"C:\a.pdf");
+        service.Remove(@"C:\b.pdf");
+        Assert.Equal(2, start.Cards.Count);
+        service.Opened(@"C:\e.pdf", 0, 1); // 3 recents, 2 fit: "Altri…" is back
+        Assert.Equal(2, start.Cards.Count);
+        Assert.True(start.ShowMore);
+    }
+
+    [Fact]
+    public void A_card_has_one_phrase_for_a_screen_reader()
+    {
+        var (service, start) = Create();
+        service.Opened(@"C:\Libri\Mondo.pdf", 4, 40);
+
+        Assert.Equal(
+            string.Format(Strings.StartCardNameFormat, "Mondo", Strings.WhenToday, string.Format(Strings.StartPageFormat, 5)),
+            start.Cards[0].AutomationName);
+    }
+
+    [Fact]
     public void A_zero_page_count_gives_no_progress_instead_of_dividing_by_zero()
     {
         var (service, start) = Create();

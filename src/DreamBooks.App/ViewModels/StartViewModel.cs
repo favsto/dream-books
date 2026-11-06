@@ -1,3 +1,4 @@
+using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DreamBooks.App.Services;
@@ -12,10 +13,12 @@ public sealed class StartViewModel : ObservableObject
 {
     private readonly RecentFilesService _recents;
     private readonly Func<DateTime> _utcNow;
-    private readonly int _fitCount;
     private readonly Dictionary<string, RecentCardViewModel> _known = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyList<RecentCardViewModel> _cards = [];
     private bool _showMore;
+    private Func<string, CancellationToken, Task<ImageSource?>>? _coverProvider;
+    private int _fitCount;
+    private bool _showAll;
 
     internal StartViewModel(
         RecentFilesService recents,
@@ -47,6 +50,11 @@ public sealed class StartViewModel : ObservableObject
             {
                 await openRecent(card.DocumentPath);
             }
+        });
+        ShowAllCommand = new RelayCommand(() =>
+        {
+            _showAll = true;
+            Refresh();
         });
         RemoveCommand = new RelayCommand<RecentCardViewModel>(card =>
         {
@@ -81,17 +89,91 @@ public sealed class StartViewModel : ObservableObject
 
     public IRelayCommand<RecentCardViewModel> RemoveCommand { get; }
 
+    /// <summary>"Altri…": shows every recent, in as many rows as needed.</summary>
+    public IRelayCommand ShowAllCommand { get; }
+
+    /// <summary>How many recent documents there are, shown or not.</summary>
+    public int TotalCount => _recents.Entries.Count;
+
+    /// <summary>How many cards fit on the screen now (the view sets it from its width); the older recents are behind "Altri…".</summary>
+    public int FitCount
+    {
+        get => _fitCount;
+        set
+        {
+            var fit = Math.Max(1, value);
+            if (fit != _fitCount)
+            {
+                _fitCount = fit;
+                Refresh();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Where a card gets its cover (the cover cache): asked once when the card first appears, off the UI thread. A
+    /// provider set later is asked for the cards already there.
+    /// </summary>
+    internal Func<string, CancellationToken, Task<ImageSource?>>? CoverProvider
+    {
+        get => _coverProvider;
+        set
+        {
+            _coverProvider = value;
+            foreach (var card in _known.Values)
+            {
+                _ = LoadCoverAsync(card);
+            }
+        }
+    }
+
+    /// <summary>A cover was stored for this document: its card loads it.</summary>
+    internal void ReloadCover(string documentPath)
+    {
+        if (_known.TryGetValue(documentPath, out var card))
+        {
+            _ = LoadCoverAsync(card);
+        }
+    }
+
+    private async Task LoadCoverAsync(RecentCardViewModel card)
+    {
+        if (_coverProvider is not { } provider)
+        {
+            return;
+        }
+
+        try
+        {
+            if (await provider(card.DocumentPath, CancellationToken.None) is { } cover)
+            {
+                card.Cover = cover;
+            }
+        }
+#pragma warning disable CA1031 // A card whose cover cannot be read keeps its placeholder.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+        }
+    }
+
     private void Refresh()
     {
         var now = _utcNow();
         var entries = _recents.Entries;
         var cards = new List<RecentCardViewModel>();
-        foreach (var entry in entries.Take(_fitCount))
+        if (entries.Count <= _fitCount)
+        {
+            _showAll = false; // everything fits again: nothing is behind "Altri…"
+        }
+
+        foreach (var entry in entries.Take(_showAll ? entries.Count : _fitCount))
         {
             if (!_known.TryGetValue(entry.Path, out var card))
             {
                 card = new RecentCardViewModel(entry.Path);
                 _known[entry.Path] = card;
+                _ = LoadCoverAsync(card);
             }
 
             card.Update(entry, now);
@@ -105,7 +187,8 @@ public sealed class StartViewModel : ObservableObject
         }
 
         Cards = cards;
-        ShowMore = entries.Count > _fitCount;
+        ShowMore = !_showAll && entries.Count > _fitCount;
+        OnPropertyChanged(nameof(TotalCount));
         OnPropertyChanged(nameof(HasRecents));
     }
 }
