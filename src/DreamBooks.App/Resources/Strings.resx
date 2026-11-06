@@ -45,9 +45,7 @@
   <data name="EraserSize" xml:space="preserve"><value>Dimensione gomma</value></data>
   <data name="Undo" xml:space="preserve"><value>Annulla</value></data>
   <data name="Redo" xml:space="preserve"><value>Ripristina</value></data>
-  <data name="Zoom" xml:space="preserve"><value>Zoom</value></data>
   <data name="FitWidth" xml:space="preserve"><value>Adatta larghezza</value></data>
-  <data name="Panel" xml:space="preserve"><value>Pannello di prova</value></data>
   <data name="ErrorFileNotFound" xml:space="preserve"><value>Il file non è stato trovato.</value></data>
   <data name="ErrorInvalidFormat" xml:space="preserve"><value>Il file non è un PDF valido o è danneggiato.</value></data>
   <data name="ErrorPassword" xml:space="preserve"><value>Il PDF è protetto da password: non ancora supportato.</value></data>
@@ -105,7 +103,6 @@
   <data name="RailPreviewLabel" xml:space="preserve"><value>Anteprima della pagina</value></data>
   <data name="RailPreviewPageFormat" xml:space="preserve"><value>pag. {0}</value></data>
   <data name="PageIndicatorLabel" xml:space="preserve"><value>Pagina e zoom: tocca per andare a una pagina</value></data>
-  <data name="GoToPage" xml:space="preserve"><value>Vai alla pagina</value></data>
   <data name="GoToPageIndicatorField" xml:space="preserve"><value>Vai alla pagina dall'indicatore</value></data>
   <data name="GoToPageHint" xml:space="preserve"><value>Scrivi il numero della pagina e premi Invio (Esc per annullare)</value></data>
   <data name="Back" xml:space="preserve"><value>Indietro</value></data>
@@ -130,7 +127,6 @@
   <data name="SearchHint" xml:space="preserve"><value>Scrivi il testo da cercare (Ctrl+F). Invio: risultato successivo, Maiusc+Invio: precedente, Esc: annulla</value></data>
   <data name="PreviousResult" xml:space="preserve"><value>Risultato precedente</value></data>
   <data name="NextResult" xml:space="preserve"><value>Risultato successivo</value></data>
-  <data name="ClearSearch" xml:space="preserve"><value>Annulla la ricerca</value></data>
   <data name="SearchCountLabel" xml:space="preserve"><value>Risultati della ricerca</value></data>
   <data name="SearchInProgress" xml:space="preserve"><value>Ricerca in corso…</value></data>
   <data name="SearchNoResults" xml:space="preserve"><value>Nessun risultato</value></data>
@@ -166,4 +162,66 @@
   <data name="HighlighterPink" xml:space="preserve"><value>Rosa</value></data>
   <data name="HighlighterOrange" xml:space="preserve"><value>Arancio</value></data>
   <data name="HighlighterPurple" xml:space="preserve"><value>Viola</value></data>
+  <data name="ToolSelection" xml:space="preserve"><value>Selezione (lazo)</value></data>
+  <data name="ToolBookmark" xml:space="preserve"><value>Segnalibro sulla pagina</value></data>
+  <data name="PenBlack" xml:space="preserve"><value>Nero</value></data>
+  <data name="PenDarkBlue" xml:space="preserve"><value>Blu scuro</value></data>
+  <data name="PenBlue" xml:space="preserve"><value>Blu</value></data>
+  <data name="PenRed" xml:space="preserve"><value>Rosso</value></data>
+  <data name="PenGreen" xml:space="preserve"><value>Verde</value></data>
+  <data name="PenOrange" xml:space="preserve"><value>Arancione</value></data>
+  <data name="PenPurple" xml:space="preserve"><value>Viola</value></data>
+  <data name="PenGrey" xml:space="preserve"><value>Grigio</value></data>
+  <data name="PenOptions" xml:space="preserve"><value>Opzioni penna</value></data>
+  <data name="EraserOptions" xml:space="preserve"><value>Opzioni gomma</value></data>
+  <data name="ClearPage" xml:space="preserve"><value>Cancella tutto nella pagina</value></data>
+  <data name="ClearPageConfirm" xml:space="preserve"><value>Cancellare tutti i tratti di questa pagina? Si può annullare.</value></data>
+  <data name="ClearPageConfirmYes" xml:space="preserve"><value>Cancella tutto</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Annulla operazione</value></data>
+  <data name="AddCustomColor" xml:space="preserve"><value>Aggiungi colore</value></data>
+  <data name="RemoveCustomColor" xml:space="preserve"><value>Rimuovi colore</value></data>
+  <data name="WarnSettingsNotSaved" xml:space="preserve"><value>Le impostazioni non sono state salvate.</value></data>
+  <data name="SettingsWarningLabel" xml:space="preserve"><value>Avviso sulle impostazioni</value></data>
+  <data name="ToolbarLabel" xml:space="preserve"><value>Barra degli strumenti</value></data>
+  <data name="TitleBarMinimize" xml:space="preserve"><value>Riduci a icona</value></data>
+  <data name="TitleBarMaximize" xml:space="preserve"><value>Ingrandisci</value></data>
+  <data name="TitleBarClose" xml:space="preserve"><value>Chiudi</value></data>
+  <data name="ToolActive" xml:space="preserve"><value>attivo</value></data>
+  <data name="PressurePreview" xml:space="preserve"><value>Anteprima del tratto con pressione</value></data>
+  <data name="WidthPresetNameFormat" xml:space="preserve"><value>Spessore {0} mm</value></data>
+  <data name="CustomColorNameFormat" xml:space="preserve"><value>Colore personalizzato {0}</value></data>
+  <data name="CustomColorHelp" xml:space="preserve"><value>Tieni premuto o premi Canc per rimuoverlo</value></data>
+  <data name="ColorPicker" xml:space="preserve"><value>Selettore colore</value></data>
+  <data name="ColorPickerHue" xml:space="preserve"><value>Tonalità</value></data>
+  <data name="ColorPickerSquare" xml:space="preserve"><value>Saturazione e luminosità</value></data>
+  <data name="ColorPickerHex" xml:space="preserve"><value>Codice colore</value></data>
+  <data name="ColorPickerHexHint" xml:space="preserve"><value>Sei cifre esadecimali, per esempio #1F5BD8</value></data>
+  <data name="ColorPickerConfirm" xml:space="preserve"><value>Conferma colore</value></data>
+  <data name="HighlighterTip" xml:space="preserve"><value>Punta</value></data>
+  <data name="SwatchChosen" xml:space="preserve"><value>scelto</value></data>
+  <data name="PageIndicatorChipLabel" xml:space="preserve"><value>Indicatore di pagina e zoom</value></data>
+  <data name="PageIndicatorHelp" xml:space="preserve"><value>Tocca per andare a una pagina; tieni premuto o passa sopra col mouse per i pulsanti dello zoom</value></data>
+  <data name="ZoomIn" xml:space="preserve"><value>Aumenta lo zoom</value></data>
+  <data name="ZoomOut" xml:space="preserve"><value>Riduci lo zoom</value></data>
+  <data name="NavigationLabel" xml:space="preserve"><value>Navigazione</value></data>
+  <data name="SearchPillLabel" xml:space="preserve"><value>Barra di ricerca</value></data>
+  <data name="CloseSearch" xml:space="preserve"><value>Chiudi la ricerca</value></data>
+  <data name="MainMenu" xml:space="preserve"><value>Menu principale</value></data>
+  <data name="MainMenuPanel" xml:space="preserve"><value>Voci del menu principale</value></data>
+  <data name="MenuOpen" xml:space="preserve"><value>Apri…</value></data>
+  <data name="MenuSaveAs" xml:space="preserve"><value>Salva con nome…</value></data>
+  <data name="MenuRecentFiles" xml:space="preserve"><value>File recenti</value></data>
+  <data name="MenuExport" xml:space="preserve"><value>Esporta</value></data>
+  <data name="MenuSearchName" xml:space="preserve"><value>Apri la ricerca nel documento</value></data>
+  <data name="MenuSettings" xml:space="preserve"><value>Impostazioni</value></data>
+  <data name="MenuNotYetAvailable" xml:space="preserve"><value>Non ancora disponibile</value></data>
+  <data name="ShortcutOpen" xml:space="preserve"><value>Ctrl+O</value></data>
+  <data name="ShortcutSave" xml:space="preserve"><value>Ctrl+S</value></data>
+  <data name="ShortcutSaveAs" xml:space="preserve"><value>Ctrl+Maiusc+S</value></data>
+  <data name="ShortcutMarks" xml:space="preserve"><value>Ctrl+M</value></data>
+  <data name="ShortcutPages" xml:space="preserve"><value>Ctrl+Maiusc+P</value></data>
+  <data name="ShortcutSearch" xml:space="preserve"><value>Ctrl+F</value></data>
+  <data name="DocumentTitleDirtyFormat" xml:space="preserve"><value>{0} *</value></data>
+  <data name="NoticeBarLabel" xml:space="preserve"><value>Avvisi</value></data>
+  <data name="CloseNotice" xml:space="preserve"><value>Chiudi l'avviso</value></data>
 </root>

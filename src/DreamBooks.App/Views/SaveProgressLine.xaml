@@ -1,0 +1,17 @@
+<UserControl x:Class="DreamBooks.App.Views.SaveProgressLine"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="clr-namespace:DreamBooks.App.Resources"
+             VerticalAlignment="Top" Height="{StaticResource SaveProgressLineHeight}"
+             IsHitTestVisible="False" Focusable="False" IsTabStop="False" Visibility="Collapsed"
+             AutomationProperties.Name="{x:Static res:Strings.Saving}">
+    <!-- The save progress line (FR-89): a thin accent line under the title bar while a save runs, a segment sliding
+         across; still and full with Windows animations off (NFR-32). It never takes input: the pen writes under it. -->
+    <Grid x:Name="Track" ClipToBounds="True">
+        <Border x:Name="Bar" Background="{DynamicResource SaveProgressBarBrush}">
+            <Border.RenderTransform>
+                <TranslateTransform x:Name="Slide" />
+            </Border.RenderTransform>
+        </Border>
+    </Grid>
+</UserControl>

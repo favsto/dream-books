@@ -1,3 +1,4 @@
+using DreamBooks.App.Resources;
 using System.ComponentModel;
 using System.IO;
 using System.Windows;
@@ -6,25 +7,36 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
+using CommunityToolkit.Mvvm.Input;
 using DreamBooks.App.Services;
 using DreamBooks.App.ViewModels;
 using DreamBooks.App.Views;
 using DreamBooks.Pdf;
+using Microsoft.Win32;
+using Wpf.Ui.Appearance;
+using FluentWindow = Wpf.Ui.Controls.FluentWindow;
+using WindowBackdrop = Wpf.Ui.Controls.WindowBackdrop;
+using WindowBackdropType = Wpf.Ui.Controls.WindowBackdropType;
 
 namespace DreamBooks.App;
 
-public partial class MainWindow : Window
+public partial class MainWindow : FluentWindow
 {
     /// <summary>The left-edge panel's tabs: the marks list and the page thumbnails.</summary>
     internal const int MarksTab = 0;
 
     internal const int PagesTab = 1;
 
+    /// <summary>The non-client hit test answer "client" (HTCLIENT).</summary>
+    internal const int HitTestClient = 1;
+
+    private const int _wmNcHitTest = 0x0084;
+
     private readonly MainViewModel _viewModel = new(
         new FileDialogService(), new RecoveryStore(RecoveryRoot()), new ViewPositionStore(PositionsRoot()));
 
-    private static readonly DependencyPropertyDescriptor _statusText =
-        DependencyPropertyDescriptor.FromProperty(TextBlock.TextProperty, typeof(TextBlock));
+    private readonly ThemeService? _theme;
 
     private int? _dismissTouchId;
 
@@ -33,12 +45,59 @@ public partial class MainWindow : Window
     private bool _closeCheckRunning;
 
     public MainWindow()
+        : this(null)
     {
+    }
+
+    /// <summary>
+    /// The window with the app's theme service (null in tests that do not switch themes): after each theme change the
+    /// backdrop is applied again, as WPF UI's theme manager re-applies the main window's backdrop itself.
+    /// </summary>
+    /// <param name="theme">The app's theme service, or null.</param>
+    /// <param name="settings">
+    /// The app settings (FR-110): the tools and the toolbar take the remembered values and every change is remembered;
+    /// null in tests that do not use the settings file.
+    /// </param>
+    internal MainWindow(ThemeService? theme, SettingsService? settings = null)
+    {
+        _theme = theme;
         InitializeComponent();
         DataContext = _viewModel;
+        if (settings is not null)
+        {
+            settings.AttachTools(_viewModel.Tools);
+            settings.AttachToolbar(_viewModel.Toolbar);
+
+            // A settings file that cannot be written shows a notice until a later write works (FR-110). Raised on a
+            // thread-pool thread, like the journal's faults: shown on this window's thread.
+            void OnSettingsSaveStatus(object? sender, EventArgs e) =>
+                Dispatcher.BeginInvoke(() => CurrentViewModel.SettingsWarning = settings.Warning);
+            settings.SaveStatusChanged += OnSettingsSaveStatus;
+            Closed += (_, _) => settings.SaveStatusChanged -= OnSettingsSaveStatus;
+            _viewModel.SettingsWarning = settings.Warning;
+        }
+
         Loaded += OnLoaded;
+        ApplyBackdrop();
+        if (theme is not null)
+        {
+            theme.ThemeChanged += OnThemeChanged;
+            Closed += (_, _) => theme.ThemeChanged -= OnThemeChanged;
+        }
+
+        // Windows "Transparency effects" (NFR-32) switched while the app runs: Mica or the solid brush.
+        SourceInitialized += (_, _) =>
+        {
+            SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+
+            // The theme was applied before this window had a handle: give it the theme's dark or light frame and
+            // Mica tint now (WPF UI does it itself on later theme changes).
+            WindowBackgroundManager.UpdateBackground(this, ApplicationThemeManager.GetAppTheme(), WindowBackdropType);
+        };
+        Closed += (_, _) => SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         PreviewKeyDown += OnPreviewKeyDown;
         DocumentViewer.LeftEdgeSwiped += (_, _) => MarksPanel.Open(); // a finger swipe from the left edge (UI-04)
+        DocumentViewer.SingleTapped += (_, position) => OnDocumentSingleTap(position);
 
         // Ctrl+M opens and closes the marks list (FR-103; free in 3a), Ctrl+Shift+P the page thumbnails (UI-04; Ctrl+P is
         // left to printing, the shortcut every Windows reader expects for it). Each switches to its tab when the other is
@@ -49,6 +108,14 @@ public partial class MainWindow : Window
             CommandParameter = PagesTab,
         });
 
+        // The main menu's entries for the left-edge panel's tabs and the search (UI-03): the same commands as Ctrl+M,
+        // Ctrl+Shift+P and Ctrl+F. Open, Save and Save as bind the view model's commands in XAML.
+        MainMenu.MarksItem.Command = MarksPanel.OpenTabCommand;
+        MainMenu.MarksItem.CommandParameter = MarksTab;
+        MainMenu.PagesItem.Command = MarksPanel.OpenTabCommand;
+        MainMenu.PagesItem.CommandParameter = PagesTab;
+        MainMenu.SearchItem.Command = new RelayCommand(() => FocusSearchField(CurrentViewModel.Search));
+
         // The page thumbnails: bitmaps from the document view's coordinator (the current one), the ink as the marks list
         // and the rail read it (FR-103); both in the coordinator's low-priority queue, never ahead of a page render.
         var thumbnails = new PageThumbnailCache(
@@ -58,16 +125,93 @@ public partial class MainWindow : Window
                 : Task.FromResult<PageInk?>(null));
         thumbnails.SetPaused(true); // until the Pages tab is shown
         PagesList.Thumbnails = thumbnails;
+        MarksList.PageBitmaps = thumbnails; // the marks rows draw the page under their ink from the same queue and cache
         DocumentViewer.ThumbnailScaleChanged += (_, _) => thumbnails.ClearBitmaps(); // rendered for the old scale
         DocumentViewer.ThumbnailRetryRequested += (_, _) => thumbnails.RetryMissing(); // the file is back after a save
 
-        // "Nessun altro segno" is a live region: Narrator reads it when it appears (NFR-31).
-        _statusText.AddValueChanged(MarkStatusText, OnMarkStatusTextChanged);
-        Closed += (_, _) => _statusText.RemoveValueChanged(MarkStatusText, OnMarkStatusTextChanged);
+        // The indicator chip and the navigation buttons (UI-05, FR-09, FR-102) show and hide with the rail, and keep it
+        // shown while they are used. "Nessun altro segno" beside the buttons is a live region: Narrator reads it when it
+        // appears (NFR-31), and it shows the buttons.
+        DocumentViewer.Rail.ShownChanged += (_, _) => OnRailShownChanged();
+        IndicatorChip.HoldChanged += (_, _) => OnOverlayHoldChanged();
+        NavButtons.HoldChanged += (_, _) => OnOverlayHoldChanged();
+        NavButtons.StatusShown += (_, _) => OnMarkStatusShown();
+        OnRailShownChanged();
 
         // Esc or the clear button emptied the search: the keyboard goes back to the document (FR-13).
         _viewModel.Search.FocusDocumentRequested += (_, _) => FocusDocument();
+
+        // The pen on the title bar writes instead of dragging the window (UI-06, FR-30): the bar's parts let the pen
+        // through, and the window's hook answers the non-client hit test for the pen before WPF UI's (added on the first
+        // render; hooks added later run first). The parts are changed once laid out, when every part of its template (the
+        // window buttons among them) is in the tree.
+        // Also when it is loaded, and when its template is applied again (a new style builds new parts at the same size,
+        // which SizeChanged would miss).
+        AppTitleBar.SizeChanged += (_, _) => { TitleBarPenInput.LetPenThrough(AppTitleBar); StyleWindowButtons(); };
+        AppTitleBar.Loaded += (_, _) => { TitleBarPenInput.LetPenThrough(AppTitleBar); StyleWindowButtons(); };
+        var titleBarTemplate = DependencyPropertyDescriptor.FromProperty(Control.TemplateProperty, typeof(Control));
+        void OnTitleBarTemplateChanged(object? sender, EventArgs e)
+        {
+            AppTitleBar.ApplyTemplate(); // the new parts now, so they let the pen through before the next press
+            TitleBarPenInput.LetPenThrough(AppTitleBar);
+            StyleWindowButtons();
+        }
+
+        titleBarTemplate.AddValueChanged(AppTitleBar, OnTitleBarTemplateChanged);
+        Closed += (_, _) => titleBarTemplate.RemoveValueChanged(AppTitleBar, OnTitleBarTemplateChanged); // a static table
+        AppTitleBar.MaximizeActionOverride = (_, _) => ToggleMaximize();
+        ContentRendered += OnFirstContentRendered;
     }
+
+    /// <summary>
+    /// Gives the three window buttons of the title bar their Italian names and the full height of the bar (a target at least 40 DIP, running to the window's top edge),
+    /// lined up with the pill behind them (UI-06, NFR-31). WPF UI names them PART_MinimizeButton, PART_MaximizeButton and
+    /// PART_CloseButton.
+    /// </summary>
+    internal void StyleWindowButtons()
+    {
+        var height = (double)FindResource("TitleBarHeight");
+        foreach (var button in TitleBarPenInput.Buttons(AppTitleBar))
+        {
+            var name = button.Name switch
+            {
+                "PART_MinimizeButton" => Strings.TitleBarMinimize,
+                "PART_MaximizeButton" => Strings.TitleBarMaximize,
+                "PART_CloseButton" => Strings.TitleBarClose,
+                _ => null,
+            };
+            if (name is null)
+            {
+                continue;
+            }
+
+            System.Windows.Automation.AutomationProperties.SetName(button, name);
+            button.Height = height;
+            button.VerticalAlignment = VerticalAlignment.Top;
+            button.Margin = new Thickness(0); // the targets run to the top and right edges of the window (the corner convention)
+        }
+    }
+
+    private long _lastMaximizeToggle;
+
+    /// <summary>
+    /// The maximise button: maximises or restores, once per click. The device test saw the button maximise and fall back
+    /// (and later do nothing): one click reached WPF UI's action twice, through the button and through the non-client
+    /// hit test. A second call within <see cref="MaximizeDebounce"/> of the first is the same click.
+    /// </summary>
+    internal void ToggleMaximize()
+    {
+        var now = Environment.TickCount64;
+        if (now - _lastMaximizeToggle < MaximizeDebounce.TotalMilliseconds)
+        {
+            return;
+        }
+
+        _lastMaximizeToggle = now;
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    }
+
+    internal static readonly TimeSpan MaximizeDebounce = TimeSpan.FromMilliseconds(500);
 
     /// <summary>The marks list hosted by <see cref="MarksPanel"/> (not named in XAML: the panel is a user control).</summary>
     internal MarksListView MarksList => (MarksListView)MarksPanel.Body!;
@@ -83,6 +227,119 @@ public partial class MainWindow : Window
 
     /// <summary>How many times the marks status was announced as a live region (tests).</summary>
     internal int StatusAnnouncements { get; private set; }
+
+    /// <summary>The Windows "Transparency effects" setting (NFR-32); replaceable by tests.</summary>
+    internal Func<bool> TransparencyEnabled { get; set; } = TransparencySetting.IsEnabled;
+
+    /// <summary>Whether Windows can draw Mica (Windows 11); replaceable by tests.</summary>
+    internal Func<bool> MicaSupported { get; set; } = () => WindowBackdrop.IsSupported(WindowBackdropType.Mica);
+
+    /// <summary>
+    /// The window's backdrop (section 3, NFR-32): Mica behind a transparent window and a translucent grey around the
+    /// pages; with Windows "Transparency effects" off, or without Mica (Windows 10), no backdrop and solid theme brushes
+    /// instead (window and the area around the pages). The theme service learns the backdrop, as WPF UI's theme manager
+    /// re-applies it on each theme change.
+    /// </summary>
+    internal void ApplyBackdrop()
+    {
+        var transparent = TransparencyEnabled() && MicaSupported();
+        var backdrop = transparent ? WindowBackdropType.Mica : WindowBackdropType.None;
+        if (_theme is not null)
+        {
+            _theme.Backdrop = backdrop;
+        }
+
+        // The background first: FluentWindow applies the backdrop when the type changes (with a handle), and Mica needs
+        // the window transparent (WPF UI's style background is opaque).
+        if (transparent)
+        {
+            Background = Brushes.Transparent;
+        }
+        else
+        {
+            SetResourceReference(BackgroundProperty, "WindowBackgroundOpaqueBrush");
+        }
+
+        WindowBackdropType = backdrop;
+        DocumentViewer.ApplyTransparency(transparent);
+        TitleNamePill.IsOpaque = !TransparencyEnabled();
+        TitleButtonsPill.IsOpaque = !TransparencyEnabled();
+    }
+
+    /// <summary>
+    /// The window's answer to the non-client hit test at <paramref name="position"/> (in the window content's
+    /// coordinates): "client" for the pen on the title bar's drag area, so the pen writes there instead of dragging the
+    /// window (UI-06, FR-30); null otherwise (the mouse and fingers, the window buttons, the rest of the window), left
+    /// to WPF UI and Windows.
+    /// </summary>
+    internal int? TitleBarHitTest(Point position, bool isPen)
+    {
+        if (!isPen || AppTitleBar.ActualWidth <= 0)
+        {
+            return null;
+        }
+
+        var bar = AppTitleBar.TransformToAncestor(ShellRoot).TransformBounds(new Rect(AppTitleBar.RenderSize));
+        if (!bar.Contains(position))
+        {
+            return null;
+        }
+
+        foreach (var button in TitleBarPenInput.Buttons(AppTitleBar))
+        {
+            if (button.TransformToAncestor(ShellRoot).TransformBounds(new Rect(button.RenderSize)).Contains(position))
+            {
+                return null; // the window buttons work for the pen too
+            }
+        }
+
+        return HitTestClient;
+    }
+
+    private void OnFirstContentRendered(object? sender, EventArgs e)
+    {
+        ContentRendered -= OnFirstContentRendered;
+
+        // After every ContentRendered handler, WPF UI's title bar hook among them: WPF UI 4.3.0 adds its hook once, in
+        // TitleBar.OnWindowContentRendered, and HwndSource calls the hooks added last first. Check this again when
+        // WPF UI is updated: if it adds its hook later or again, ours would no longer run first.
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+            (System.Windows.Interop.HwndSource.FromVisual(this) as System.Windows.Interop.HwndSource)?.AddHook(OnTitleBarHitTest));
+    }
+
+    private IntPtr OnTitleBarHitTest(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg != _wmNcHitTest || !TitleBarPenInput.IsPenInput())
+        {
+            return IntPtr.Zero;
+        }
+
+        // The screen point in lParam: signed 16-bit x and y (negative on monitors left of or above the primary one).
+        var value = lParam.ToInt64();
+        var screen = new Point((short)(value & 0xFFFF), (short)((value >> 16) & 0xFFFF));
+        Point position;
+        try
+        {
+            position = ShellRoot.PointFromScreen(screen);
+        }
+        catch (InvalidOperationException)
+        {
+            return IntPtr.Zero; // no presentation source yet
+        }
+
+        if (TitleBarHitTest(position, isPen: true) is not { } answer)
+        {
+            return IntPtr.Zero;
+        }
+
+        handled = true;
+        return answer;
+    }
+
+    private void OnThemeChanged(object? sender, EventArgs e) => ApplyBackdrop();
+
+    private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e) =>
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, ApplyBackdrop); // raised on another thread
 
     /// <summary>The finger that closed the panel from outside, held by the page host until it lifts; null otherwise.</summary>
     internal int? DismissTouchId => _dismissTouchId;
@@ -208,12 +465,30 @@ public partial class MainWindow : Window
     /// document, or Esc for the open left-edge panel (it closes). Keys pressed inside the open panel (arrows, PgUp/PgDn,
     /// Home/End in the list) stay the panel's. Everything else (Alt+Left for Back, Alt+Up/Alt+Down for the marks, the
     /// shortcuts) is left to the key bindings.
-    /// The search keys (FR-13, FR-105) come first: Ctrl+F focuses the search field and F3 / Shift+F3 go to the next /
-    /// previous result from anywhere; in the search field Enter / Shift+Enter do the same and Esc clears the search
-    /// (the keyboard goes back to the document), as does Esc elsewhere outside a text field while a search is shown.
+    /// The search keys (FR-13, FR-105) come first: Ctrl+F opens the search pill and gives its field the keyboard, and
+    /// F3 / Shift+F3 go to the next / previous result from anywhere; in the search pill's field Enter / Shift+Enter do
+    /// the same and Esc clears the search and closes the pill (the keyboard goes back to the document), as does Esc
+    /// elsewhere outside a text field while a search is shown or the pill is open. The indicator chip's page field keeps
+    /// its own Enter and Esc. Before all of them, Esc closes the open main menu (UI-03).
     /// </summary>
     internal bool RouteKey(Key key, ModifierKeys modifiers, object? source)
     {
+        if (key == Key.Escape && modifiers == ModifierKeys.None && MainMenu.IsOpen)
+        {
+            MainMenu.Close();
+            return true;
+        }
+
+        // Esc closes the open toolbar flyout first (UI-02), except in the search field and the chip's page field, which
+        // keep their own Esc.
+        var viewModel = CurrentViewModel;
+        if (key == Key.Escape && modifiers == ModifierKeys.None && viewModel.Toolbar.OpenPanel != OptionsPanel.None
+            && !(source is DependencyObject origin && (IsInSearchField(origin) || IsWithin(origin, IndicatorChip.GoToPageBox))))
+        {
+            viewModel.Toolbar.ClosePanel();
+            return true;
+        }
+
         if (RouteSearchKey(key, modifiers, source, panelOpen: MarksPanel.IsOpen))
         {
             return true;
@@ -239,12 +514,12 @@ public partial class MainWindow : Window
 
     private bool RouteSearchKey(Key key, ModifierKeys modifiers, object? source, bool panelOpen)
     {
-        var search = _viewModel.Search;
-        var inField = source is DependencyObject element && IsWithin(element, SearchField); // also a part of its template
+        var search = CurrentViewModel.Search;
+        var inField = source is DependencyObject element && IsInSearchField(element); // also a part of its template
         switch (key)
         {
             case Key.F when modifiers == ModifierKeys.Control:
-                FocusSearchField();
+                FocusSearchField(search);
                 return true;
             case Key.F3 when modifiers is ModifierKeys.None or ModifierKeys.Shift:
                 Run(modifiers == ModifierKeys.Shift ? search.PreviousCommand : search.NextCommand);
@@ -253,8 +528,10 @@ public partial class MainWindow : Window
                 Run(modifiers == ModifierKeys.Shift ? search.PreviousCommand : search.NextCommand);
                 return true;
             case Key.Escape when modifiers == ModifierKeys.None
-                                 && (inField || (!panelOpen && source is not TextBoxBase && search.QueryText.Length > 0)):
-                search.ClearCommand.Execute(null); // empties the field; the view model asks for the document's focus
+                                 && (inField || (!panelOpen && source is not TextBoxBase
+                                                 && (search.QueryText.Length > 0 || search.IsOpen))):
+                // Empties the field and closes the pill; the view model asks for the document's focus.
+                search.ClearCommand.Execute(null);
                 return true;
             default:
                 return false;
@@ -269,12 +546,19 @@ public partial class MainWindow : Window
         }
     }
 
-    private void FocusSearchField()
+    /// <summary>Ctrl+F: the search pill opens and its field takes the keyboard, the text selected (FR-13).</summary>
+    private void FocusSearchField(SearchViewModel search)
     {
         SearchFocusRequests++;
-        SearchField.Focus();
-        SearchField.SelectAll();
+        search.Open();
+        SearchBar.FocusField();
     }
+
+    /// <summary>The window's view model as bound now (tests may give the window another one).</summary>
+    private MainViewModel CurrentViewModel => DataContext as MainViewModel ?? _viewModel;
+
+    /// <summary>True inside the search pill's field (also a part of its template).</summary>
+    private bool IsInSearchField(DependencyObject element) => IsWithin(element, SearchBar.Field);
 
     private void FocusDocument()
     {
@@ -301,7 +585,7 @@ public partial class MainWindow : Window
     /// <summary>A real mouse press over the document while the left-edge panel is open (FR-30: the pen has its own).</summary>
     private void OnPageHostMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.StylusDevice is null && MarksPanel.RoutePress(e.GetPosition(MarksPanel), PointerKind.Mouse))
+        if (e.StylusDevice is null && RoutePagePress(e.GetPosition(PageHost), PointerKind.Mouse))
         {
             e.Handled = true;
         }
@@ -320,7 +604,7 @@ public partial class MainWindow : Window
         }
 
         var device = e.TouchDevice;
-        if (RouteDismissTouchDown(e.GetTouchPoint(MarksPanel).Position, device.Id, () => PageHost.CaptureTouch(device)))
+        if (RouteDismissTouchDown(e.GetTouchPoint(PageHost).Position, device.Id, () => PageHost.CaptureTouch(device)))
         {
             e.Handled = true; // not promoted to the mouse
         }
@@ -352,13 +636,14 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// A finger down at <paramref name="position"/> (panel coordinates): when it closes the open panel from outside,
-    /// <paramref name="capture"/> holds it on the page host and the press is taken (true). Separate so tests can drive it.
+    /// A finger down at <paramref name="position"/> (page host coordinates, the panel's too): when it closes the open panel
+    /// or an open flyout from outside, <paramref name="capture"/> holds it on the page host and the press is taken (true).
+    /// Separate so tests can drive it.
     /// </summary>
     internal bool RouteDismissTouchDown(Point position, int touchId, Func<bool> capture)
     {
         ArgumentNullException.ThrowIfNull(capture);
-        if (!MarksPanel.RoutePress(position, PointerKind.Finger))
+        if (!RoutePagePress(position, PointerKind.Finger))
         {
             return false;
         }
@@ -388,57 +673,119 @@ public partial class MainWindow : Window
         return true;
     }
 
-    /// <summary>The status line's text changed: announced as a live region when it says something.</summary>
-    private void OnMarkStatusTextChanged(object? sender, EventArgs e)
+    /// <summary>
+    /// A finger's single tap on the document (<see cref="DocumentView.SingleTapped"/>, viewport coordinates): on an empty
+    /// area it shows or hides the toolbar and closes its option panel (section 4); on a floating element it does
+    /// nothing. A press that closed a panel from outside never gets here (it is taken), nor does the pen.
+    /// </summary>
+    internal void OnDocumentSingleTap(Point viewportPoint)
     {
-        if (string.IsNullOrEmpty(MarkStatusText.Text))
+        var point = DocumentViewer.Viewport.TranslatePoint(viewportPoint, PageHost);
+        if (InputTargetAt(PageHost, point) is not { } hit || !IsWithin(hit, DocumentViewer))
         {
-            return;
+            return; // on a floating element (toolbar, chip, buttons, menu, notices), or outside the document
         }
 
-        StatusAnnouncements++;
-        var peer = UIElementAutomationPeer.FromElement(MarkStatusText) ?? UIElementAutomationPeer.CreatePeerForElement(MarkStatusText);
-        peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+        CurrentViewModel.Toolbar.FingerTapOnEmptyArea();
     }
 
-    /// <summary>The pen's press: outside the open panel it closes it and inks; on it, it closes it and is taken.</summary>
+    /// <summary>
+    /// The visual input would reach at <paramref name="point"/>: a hit test that skips what input routing skips
+    /// (elements that are not hit-testable or not visible, with their children).
+    /// </summary>
+    private static DependencyObject? InputTargetAt(Visual root, Point point)
+    {
+        DependencyObject? hit = null;
+        VisualTreeHelper.HitTest(
+            root,
+            candidate => candidate is UIElement { IsHitTestVisible: false } or UIElement { Visibility: not Visibility.Visible }
+                ? HitTestFilterBehavior.ContinueSkipSelfAndChildren
+                : HitTestFilterBehavior.Continue,
+            result =>
+            {
+                hit = result.VisualHit;
+                return HitTestResultBehavior.Stop;
+            },
+            new PointHitTestParameters(point));
+        return hit;
+    }
+
+    /// <summary>The marks' status says something: announced as a live region, and shown with the buttons and the rail.</summary>
+    private void OnMarkStatusShown()
+    {
+        StatusAnnouncements++;
+        var status = NavButtons.StatusText;
+        var peer = UIElementAutomationPeer.FromElement(status) ?? UIElementAutomationPeer.CreatePeerForElement(status);
+        peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+        DocumentViewer.Rail.NotifyActivity();
+    }
+
+    /// <summary>The rail showed, started to fade out, hid, or got or lost a document: the chip and the buttons follow.</summary>
+    private void OnRailShownChanged()
+    {
+        var rail = DocumentViewer.Rail;
+        IndicatorChip.SetShown(rail.IsShownForOverlays, rail.HasDocument);
+        NavButtons.SetShown(rail.IsShownForOverlays, rail.HasDocument);
+    }
+
+    /// <summary>The chip or the buttons are in use (hovered, the page field open, the keyboard on them): the rail stays.</summary>
+    private void OnOverlayHoldChanged() =>
+        DocumentViewer.Rail.SetExternalHold(IndicatorChip.IsHolding || NavButtons.IsHolding);
+
+    /// <summary>
+    /// A press at <paramref name="position"/> (page host coordinates) over the document: the open left-edge panel, the
+    /// open toolbar flyout and the open main menu each decide (<see cref="EdgePanel.RoutePress"/>,
+    /// <see cref="ToolbarView.RoutePress"/>, <see cref="MainMenuButton.RoutePress"/>); true when any takes it. Outside
+    /// them they close; fingers and the mouse are taken, the pen inks. On the left-edge panel's sheet the pen closes it
+    /// and is taken (no stroke); on the flyout, the toolbar and the menu the pen presses the controls like a finger, on
+    /// purpose (UI-02, UI-03). Separate so tests can drive it.
+    /// </summary>
+    internal bool RoutePagePress(Point position, PointerKind kind)
+    {
+        var panel = MarksPanel.RoutePress(PageHost.TranslatePoint(position, MarksPanel), kind);
+        var flyout = FloatingToolbar.RoutePress(PageHost.TranslatePoint(position, FloatingToolbar), kind);
+        var menu = MainMenu.RoutePress(PageHost.TranslatePoint(position, MainMenu), kind);
+        var chip = IndicatorChip.RoutePress(PageHost.TranslatePoint(position, IndicatorChip), kind); // closes its open field
+        if (!(panel || flyout || menu || chip))
+        {
+            return false;
+        }
+
+        // The dismissing press that lands on another floating control (the toolbar, the navigation buttons, the chip, the
+        // menu button) has closed what was open and then goes on to that control: the first press acts (device test of
+        // 4a). The pen on the left-edge panel's sheet keeps its own rule (it closes it and is taken, no stroke).
+        return (panel && kind == PointerKind.Pen) || !IsOnFloatingControl(position);
+    }
+
+    /// <summary>True when the topmost element at <paramref name="position"/> (page host coordinates) is part of a floating surface.</summary>
+    private bool IsOnFloatingControl(Point position)
+    {
+        for (DependencyObject? current = VisualTreeHelper.HitTest(PageHost, position)?.VisualHit;
+             current is not null && !ReferenceEquals(current, PageHost);
+             current = current is Visual or System.Windows.Media.Media3D.Visual3D
+                 ? VisualTreeHelper.GetParent(current) ?? LogicalTreeHelper.GetParent(current)
+                 : LogicalTreeHelper.GetParent(current))
+        {
+            if (current is FloatingSurface)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The pen's press: outside the open panel or flyout it closes it and inks; on the panel's sheet it closes it and is
+    /// taken; on the flyout it is left to the flyout's controls.
+    /// </summary>
     private void OnPageHostStylusDown(object sender, StylusDownEventArgs e)
     {
         if (e.StylusDevice.TabletDevice?.Type == TabletDeviceType.Stylus
-            && MarksPanel.RoutePress(e.GetPosition(MarksPanel), PointerKind.Pen))
+            && RoutePagePress(e.GetPosition(PageHost), PointerKind.Pen))
         {
             e.Handled = true;
         }
     }
 
-    /// <summary>The panel's go-to-page field (FR-09): Enter jumps to a valid page and clears it; Esc clears it.</summary>
-    private void OnGoToPageFieldKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter)
-        {
-            e.Handled = true;
-            if (_viewModel.Viewport.TryGoToPage(GoToPageField.Text))
-            {
-                GoToPageField.Clear();
-            }
-            else
-            {
-                GoToPageField.SelectAll(); // invalid input is ignored
-            }
-        }
-        else if (e.Key == Key.Escape)
-        {
-            e.Handled = true;
-            GoToPageField.Clear();
-        }
-    }
-
-    /// <summary>Fit width (FR-07): turns the mode on, fitting the widest page; nothing to do when it is already on.</summary>
-    private void OnFitWidthClick(object sender, RoutedEventArgs e)
-    {
-        if (!_viewModel.Viewport.IsFitWidth)
-        {
-            _viewModel.Viewport.ToggleFitWidth(null);
-        }
-    }
 }

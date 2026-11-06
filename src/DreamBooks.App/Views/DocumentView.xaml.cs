@@ -88,6 +88,9 @@ public partial class DocumentView : UserControl
     private Vector _panRemainder;
     private (Point Position, int Time)? _tapStart;
     private (Point Position, int Time)? _lastTap;
+    private IDisposable? _pendingSingleTap;
+    private bool _touchStoppedGlide;
+    private bool _tapStoppedGlide;
     private int? _railTouchId;
     private StylusDevice? _railStylus;
     private TouchDevice? _edgeTouch;
@@ -121,6 +124,7 @@ public partial class DocumentView : UserControl
         {
             StopGlide();
             _editorTimer.Stop();
+            CancelPendingSingleTap();
 
             // Renders stop and the cache (up to its budget) is released; the surfaces keep what they show. A view that
             // is loaded again starts a new coordinator (Loaded), whose previews never replace those bitmaps.
@@ -174,6 +178,13 @@ public partial class DocumentView : UserControl
     /// <summary>Gives the keyboard to the document (its scroll viewer), e.g. after Esc in the search field.</summary>
     internal void FocusDocument() => Viewport.Focus();
 
+    /// <summary>
+    /// The area around the pages (section 3): a translucent grey over the window's Mica, or the opaque grey with Windows
+    /// transparency effects off (NFR-32). Both are theme brushes, so a theme switch repaints them.
+    /// </summary>
+    internal void ApplyTransparency(bool transparent) =>
+        Viewport.SetResourceReference(BackgroundProperty, transparent ? "PageBackdropBrush" : "PageBackdropBrushOpaque");
+
     /// <summary>The surface showing a page, or null when the page is outside the window.</summary>
     internal InkSurface? SurfaceFor(int pageIndex) => _slots.TryGetValue(pageIndex, out var slot) ? slot.Surface : null;
 
@@ -200,8 +211,15 @@ public partial class DocumentView : UserControl
     /// A one-finger tap at a viewport point (DIPs). The second of two taps within <see cref="DoubleTapTimeMs"/> and
     /// <see cref="DoubleTapDistanceDip"/> toggles fit width and 200% around it (FR-07). Separate so tests can drive it.
     /// </summary>
-    internal void RegisterTap(Point position, int timestamp)
+    /// <remarks>
+    /// A tap that is not the second of a double tap waits <see cref="DoubleTapTimeMs"/> (through
+    /// <see cref="TapScheduler"/>) and is then a single tap (<see cref="SingleTapped"/>, the window shows or hides the
+    /// toolbar, section 4), unless a finger came down again meanwhile (<see cref="CancelPendingSingleTap"/>) or
+    /// <paramref name="stoppedGlide"/> (the tap only stopped a glide). A double tap is never also a single tap.
+    /// </remarks>
+    internal void RegisterTap(Point position, int timestamp, bool stoppedGlide = false)
     {
+        CancelPendingSingleTap();
         if (_lastTap is { } last
             && unchecked(timestamp - last.Time) is >= 0 and <= DoubleTapTimeMs
             && (position - last.Position).Length <= DoubleTapDistanceDip)
@@ -217,7 +235,35 @@ public partial class DocumentView : UserControl
         }
 
         _lastTap = (position, timestamp);
+        if (!stoppedGlide)
+        {
+            _pendingSingleTap = TapScheduler.Schedule(TimeSpan.FromMilliseconds(DoubleTapTimeMs), () =>
+            {
+                _pendingSingleTap = null;
+                if (!AnyInking())
+                {
+                    SingleTapped?.Invoke(this, position);
+                }
+            });
+        }
     }
+
+    /// <summary>A finger came down: the tap waiting to become a single tap is dropped (it may still start a double tap).</summary>
+    internal void CancelPendingSingleTap()
+    {
+        _pendingSingleTap?.Dispose();
+        _pendingSingleTap = null;
+    }
+
+    /// <summary>
+    /// A one-finger tap on the document that did not move, was not half of a double tap and did not just stop a glide,
+    /// at its viewport point (DIPs); raised <see cref="DoubleTapTimeMs"/> after the lift. Only fingers tap: the pen and
+    /// the rail's presses never get here.
+    /// </summary>
+    internal event EventHandler<Point>? SingleTapped;
+
+    /// <summary>Waits for a tap to become a single tap (the dispatcher's timer; tests drive it by hand).</summary>
+    internal IDelayScheduler TapScheduler { get; set; } = new DispatcherDelayScheduler();
 
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
     {
@@ -1054,21 +1100,16 @@ public partial class DocumentView : UserControl
     }
 
     /// <summary>
-    /// A press at <paramref name="position"/> (rail coordinates, the same as this view's). Any press outside the open
-    /// page field closes it. The pen is taken only on the shown rail's knob (true: it grabs it, unless
-    /// <paramref name="mayGrab"/> is false, e.g. the back end); anywhere else it inks on the page under it (false,
-    /// FR-30). A finger or the mouse on the knob's wider zone grabs it, in the strip presses it (a tap jumps on lift), on its indicator
-    /// opens the page field (true: the press is the rail's); a palm-sized <paramref name="contact"/> there is taken and
-    /// does nothing; a finger near the edge of a hidden rail shows it and still pans (false).
+    /// A press at <paramref name="position"/> (rail coordinates, the same as this view's). The pen is taken only on the
+    /// shown rail's knob (true: it grabs it, unless <paramref name="mayGrab"/> is false, e.g. the back end); anywhere
+    /// else it inks on the page under it (false, FR-30). A finger or the mouse on the knob's wider zone grabs it, in the
+    /// strip presses it (a tap jumps on lift; true: the press is the rail's); a palm-sized <paramref name="contact"/>
+    /// there is taken and does nothing; a finger near the edge of a hidden rail shows it and still pans (false). The
+    /// page indicator is the window's chip, outside this view.
     /// </summary>
     internal bool RoutePointerDown(Point position, PointerKind kind, Size contact = default, bool mayGrab = true)
     {
         StopGlide(); // any press, anywhere (the rail included), stops a glide
-        if (Rail.IsEditing && !Rail.IsOnGoToPageBox(position))
-        {
-            Rail.CancelGoToPage();
-        }
-
         if (kind == PointerKind.Pen)
         {
             // The pen only grabs the knob of the shown rail (UI-07); anywhere else, the strip and the ticks included,
@@ -1090,9 +1131,6 @@ public partial class DocumentView : UserControl
                 return Rail.PointerDown(Rail.TrackYAt(position), onKnob: true) || AnyInking();
             case RailZone.Strip:
                 return Rail.PointerDown(Rail.TrackYAt(position)) || AnyInking(); // while inking: taken, nothing moves
-            case RailZone.Indicator:
-                Rail.OpenGoToPage();
-                return true;
             default:
                 if (IsNearRail(position))
                 {
@@ -1294,9 +1332,10 @@ public partial class DocumentView : UserControl
 
     private void OnHostMouseLeave(object sender, MouseEventArgs e) => Rail.SetHover(false);
 
-    /// <summary>A finger press: in the shown rail's strip or on its indicator it is the rail's (never panned).</summary>
+    /// <summary>A finger press: in the shown rail's strip it is the rail's (never panned).</summary>
     private void OnHostTouchDown(object? sender, TouchEventArgs e)
     {
+        _touchStoppedGlide = IsGliding; // such a tap only stops the glide: it never shows or hides the toolbar
         StopGlide(); // a finger (or the pen's tip) touching down stops a glide, wherever it lands
         var kind = IsPenInput() ? PointerKind.Pen : PointerKind.Finger;
         if (kind == PointerKind.Pen || Rail.IsPressed)
@@ -1375,7 +1414,7 @@ public partial class DocumentView : UserControl
 
     /// <summary>
     /// The pen's press: on the shown rail's knob it grabs it (the stylus is captured by the knob's grip, so the drag
-    /// goes on wherever the pen moves and nothing inks); anywhere else it inks. It closes an open page field.
+    /// goes on wherever the pen moves and nothing inks); anywhere else it inks.
     /// </summary>
     private void OnHostStylusDown(object sender, StylusDownEventArgs e)
     {
@@ -1384,7 +1423,7 @@ public partial class DocumentView : UserControl
             return; // fingers go through the touch events
         }
 
-        // The back end never grabs (it always erases), but it still closes the page field and stops a glide.
+        // The back end never grabs (it always erases), but it still stops a glide.
         if (RoutePointerDown(e.GetPosition(Rail), PointerKind.Pen, mayGrab: !e.StylusDevice.Inverted))
         {
             e.Handled = true; // the page under the grip never sees this press
@@ -1428,8 +1467,10 @@ public partial class DocumentView : UserControl
             return; // only fingers tap; the pen never zooms
         }
 
+        CancelPendingSingleTap(); // a finger came down again: the earlier tap was not alone
         _touches.Add(e.TouchDevice.Id);
         _tapStart = _touches.Count == 1 ? (e.GetTouchPoint(Viewport).Position, e.Timestamp) : null;
+        _tapStoppedGlide = _touches.Count == 1 && _touchStoppedGlide;
         if (_touches.Count > 1)
         {
             _lastTap = null; // a pinch is never half of a double tap
@@ -1448,7 +1489,7 @@ public partial class DocumentView : UserControl
         var position = e.GetTouchPoint(Viewport).Position;
         if (unchecked(e.Timestamp - start.Time) <= DoubleTapTimeMs && (position - start.Position).Length <= DoubleTapDistanceDip)
         {
-            RegisterTap(position, e.Timestamp);
+            RegisterTap(position, e.Timestamp, _tapStoppedGlide);
         }
     }
 

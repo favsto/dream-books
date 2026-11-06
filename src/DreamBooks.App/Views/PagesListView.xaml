@@ -57,7 +57,7 @@
                             </Rectangle.Style>
                         </Rectangle>
                         <Rectangle x:Name="MarkTick" Width="{StaticResource PagesTickWidth}" Height="{StaticResource PagesTickHeight}"
-                                   Fill="{StaticResource RailMarkTickBrushOpaque}" IsHitTestVisible="False">
+                                   Fill="{DynamicResource RailMarkTickBrushOpaque}" IsHitTestVisible="False">
                             <Rectangle.Style>
                                 <Style TargetType="Rectangle">
                                     <Setter Property="Visibility" Value="Hidden" />
@@ -79,7 +79,7 @@
                                     <Setter Property="BorderBrush" Value="Transparent" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsCurrent}" Value="True">
-                                            <Setter Property="BorderBrush" Value="{StaticResource PagesCurrentRingBrush}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource PagesCurrentRingBrush}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>

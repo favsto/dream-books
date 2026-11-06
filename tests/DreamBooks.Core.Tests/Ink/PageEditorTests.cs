@@ -64,4 +64,38 @@ public class PageEditorTests
         Assert.True(editor.CommitStroke([P(10, 10)], InkTool.Pen, _red, 2));
         Assert.Single(Assert.Single(page.Strokes).Points);
     }
+
+    [Fact]
+    public void ClearPage_removes_every_stroke_as_one_undo_step() // UI-02 eraser panel, FR-63
+    {
+        var page = new Page(0, 100, 100);
+        var undo = new UndoManager();
+        var editor = new PageEditor(page, undo);
+        Assert.True(editor.CommitStroke([P(10, 10), P(20, 20)], InkTool.Pen, _red, 2));
+        Assert.True(editor.CommitStroke([P(30, 30), P(40, 40)], InkTool.Highlighter, _red, 12));
+        var before = page.Strokes.ToArray();
+
+        Assert.True(editor.ClearPage());
+
+        Assert.Empty(page.Strokes);
+        var command = Assert.IsType<DreamBooks.Core.Commands.EraseStrokesCommand>(undo.PeekUndo());
+        Assert.Equal(before, command.Before);
+        Assert.Empty(command.After);
+
+        Assert.True(undo.Undo());
+        Assert.Equal(before, page.Strokes);
+        Assert.True(undo.Redo());
+        Assert.Empty(page.Strokes);
+    }
+
+    [Fact]
+    public void ClearPage_on_an_empty_page_does_nothing()
+    {
+        var page = new Page(0, 100, 100);
+        var undo = new UndoManager();
+        var editor = new PageEditor(page, undo);
+
+        Assert.False(editor.ClearPage());
+        Assert.False(undo.CanUndo);
+    }
 }

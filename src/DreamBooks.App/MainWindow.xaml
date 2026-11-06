@@ -1,16 +1,11 @@
-﻿<Window x:Class="DreamBooks.App.MainWindow" UseLayoutRounding="True"
+﻿<ui:FluentWindow x:Class="DreamBooks.App.MainWindow" UseLayoutRounding="True"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:res="clr-namespace:DreamBooks.App.Resources"
-        xmlns:ink="clr-namespace:DreamBooks.App.Ink"
-        xmlns:conv="clr-namespace:DreamBooks.App.Converters"
         xmlns:views="clr-namespace:DreamBooks.App.Views"
-        xmlns:vm="clr-namespace:DreamBooks.App.ViewModels"
-        Title="{Binding WindowTitle}" Height="720" Width="1200">
-    <Window.Resources>
-        <conv:EnumMatchConverter x:Key="EnumMatch" />
-        <conv:InkColorToBrushConverter x:Key="ColorBrush" />
-    </Window.Resources>
+        Title="{Binding WindowTitle}" Height="720" Width="1200"
+        WindowBackdropType="Mica" ExtendsContentIntoTitleBar="True">
     <Window.InputBindings>
         <KeyBinding Key="Z" Modifiers="Ctrl" Command="{Binding UndoCommand}" />
         <KeyBinding Key="Y" Modifiers="Ctrl" Command="{Binding RedoCommand}" />
@@ -29,398 +24,107 @@
         <KeyBinding Key="OemMinus" Modifiers="Ctrl" Command="{Binding ZoomVm.ZoomOutCommand}" />
         <KeyBinding Key="Subtract" Modifiers="Ctrl" Command="{Binding ZoomVm.ZoomOutCommand}" />
     </Window.InputBindings>
-    <DockPanel>
-        <!-- Spartan debug panel (spec section 6); looks come in phase 4. -->
-        <Expander DockPanel.Dock="Left" IsExpanded="True" ExpandDirection="Right"
-                  Header="{x:Static res:Strings.Panel}">
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Width="{StaticResource PanelWidth}" Padding="8">
-                <StackPanel>
-                    <!-- Open and page -->
-                    <Button Content="{x:Static res:Strings.OpenPdf}" Command="{Binding OpenPdfCommand}"
-                            AutomationProperties.Name="{x:Static res:Strings.OpenPdf}" HorizontalAlignment="Left" />
-
-                    <!-- Save (FR-80): the dirty mark is in the window title; the indicator shows while saving (FR-89). -->
-                    <StackPanel Orientation="Horizontal" Margin="{StaticResource Gap}">
-                        <Button x:Name="SaveButton" Content="{x:Static res:Strings.Save}" Command="{Binding SaveCommand}"
-                                AutomationProperties.Name="{x:Static res:Strings.Save}" />
-                        <Button x:Name="SaveAsButton" Content="{x:Static res:Strings.SaveAs}" Command="{Binding SaveAsCommand}"
-                                AutomationProperties.Name="{x:Static res:Strings.SaveAs}" />
-                    </StackPanel>
-                    <StackPanel x:Name="SavingIndicator" Margin="{StaticResource Gap}"
-                                AutomationProperties.Name="{x:Static res:Strings.Saving}">
-                        <StackPanel.Style>
-                            <Style TargetType="StackPanel">
+    <!-- The window shell (UI-01, UI-06): Mica behind everything (a solid brush with transparency effects off, NFR-32,
+         ApplyBackdrop), the document filling the whole window, every command in a floating element over it, and the
+         transparent title bar laid over its top edge with the save progress line under it. -->
+    <Grid x:Name="ShellRoot">
+        <Grid x:Name="ShellContent">
+            <!-- Presses over the document while the left-edge panel, a toolbar flyout or the main menu is open: outside
+                 them they close them (the pen still inks); the pen on the edge panel's sheet never presses its controls
+                 (RoutePagePress). -->
+            <Grid x:Name="PageHost"
+                  PreviewMouseLeftButtonDown="OnPageHostMouseDown" PreviewTouchDown="OnPageHostTouchDown"
+                  PreviewTouchMove="OnPageHostTouchMove" PreviewTouchUp="OnPageHostTouchUp"
+                  LostTouchCapture="OnPageHostLostTouchCapture" PreviewStylusDown="OnPageHostStylusDown">
+                <views:DocumentView x:Name="DocumentViewer" />
+                <!-- Shown until a document is open (4b adds the start screen); the error line stays visible over the page. -->
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
+                    <TextBlock Text="{x:Static res:Strings.NoDocument}" TextAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
                                 <Setter Property="Visibility" Value="Collapsed" />
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsSaving}" Value="True">
+                                    <DataTrigger Binding="{Binding Session}" Value="{x:Null}">
                                         <Setter Property="Visibility" Value="Visible" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
-                        </StackPanel.Style>
-                        <TextBlock Text="{x:Static res:Strings.Saving}" />
-                        <!-- Animated only when Windows allows client-area animations (NFR-32). -->
-                        <ProgressBar Height="{StaticResource ProgressBarHeight}" Margin="{StaticResource Gap}"
-                                     IsIndeterminate="{DynamicResource {x:Static SystemParameters.ClientAreaAnimationKey}}"
-                                     AutomationProperties.Name="{x:Static res:Strings.Saving}" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="{StaticResource Gap}">
-                        <Button Content="&lt;" Command="{Binding PreviousPageCommand}"
-                                AutomationProperties.Name="{x:Static res:Strings.Page}" />
-                        <TextBlock VerticalAlignment="Center" Margin="4,0">
-                            <Run Text="{x:Static res:Strings.Page}" />
-                            <Run Text="{Binding PageNumber, Mode=OneWay}" /> /
-                            <Run Text="{Binding PageCount, Mode=OneWay}" />
-                        </TextBlock>
-                        <Button Content="&gt;" Command="{Binding NextPageCommand}"
-                                AutomationProperties.Name="{x:Static res:Strings.Page}" />
-                    </StackPanel>
-
-                    <!-- Go to page and Back (FR-09): spartan for now, the real placement is phase 4. -->
-                    <TextBlock Text="{x:Static res:Strings.GoToPage}" Style="{StaticResource SectionLabel}" />
-                    <StackPanel Orientation="Horizontal">
-                        <TextBox x:Name="GoToPageField" InputScope="Number"
-                                 MinWidth="{StaticResource GoToPageFieldWidth}" MinHeight="{StaticResource TouchTarget}"
-                                 VerticalContentAlignment="Center" Margin="0,0,4,0"
-                                 ToolTip="{x:Static res:Strings.GoToPageHint}"
-                                 AutomationProperties.Name="{x:Static res:Strings.GoToPage}"
-                                 AutomationProperties.HelpText="{x:Static res:Strings.GoToPageHint}"
-                                 PreviewKeyDown="OnGoToPageFieldKeyDown" />
-                        <Button x:Name="BackButton" Content="{x:Static res:Strings.Back}"
-                                Command="{Binding Viewport.BackCommand}"
-                                AutomationProperties.Name="{x:Static res:Strings.Back}" />
-                    </StackPanel>
-
-                    <!-- Marks (FR-102, FR-103): previous / next mark (Alt+Up / Alt+Down) and the list in the left-edge
-                         panel; "no other mark" shows here for a moment. Spartan, the real placement is phase 4. -->
-                    <TextBlock Text="{x:Static res:Strings.MarksList}" Style="{StaticResource SectionLabel}" />
-                    <StackPanel Orientation="Horizontal">
-                        <Button x:Name="PreviousMarkButton" Command="{Binding Marks.PreviousCommand}"
-                                MinWidth="{StaticResource TouchTarget}" MinHeight="{StaticResource TouchTarget}"
-                                AutomationProperties.Name="{x:Static res:Strings.PreviousMark}"
-                                ToolTip="{x:Static res:Strings.PreviousMark}">
-                            <Path Data="{StaticResource PreviousMarkGlyph}" Stroke="{StaticResource GlyphBrush}"
-                                  StrokeThickness="{StaticResource GlyphStrokeThickness}"
-                                  Width="{StaticResource GlyphSize}" Height="{StaticResource GlyphSize}" />
-                        </Button>
-                        <Button x:Name="NextMarkButton" Command="{Binding Marks.NextCommand}"
-                                MinWidth="{StaticResource TouchTarget}" MinHeight="{StaticResource TouchTarget}"
-                                AutomationProperties.Name="{x:Static res:Strings.NextMark}"
-                                ToolTip="{x:Static res:Strings.NextMark}">
-                            <Path Data="{StaticResource NextMarkGlyph}" Stroke="{StaticResource GlyphBrush}"
-                                  StrokeThickness="{StaticResource GlyphStrokeThickness}"
-                                  Width="{StaticResource GlyphSize}" Height="{StaticResource GlyphSize}" />
-                        </Button>
-                        <Button x:Name="OpenMarksListButton" Content="{x:Static res:Strings.MarksListLabel}"
-                                Command="{Binding OpenTabCommand, ElementName=MarksPanel}" CommandParameter="0"
-                                AutomationProperties.Name="{x:Static res:Strings.OpenMarksList}"
-                                ToolTip="{x:Static res:Strings.OpenMarksList}" />
-                    </StackPanel>
-                    <!-- The page thumbnails in the same panel (FR-103, UI-04; Ctrl+Shift+P). -->
-                    <StackPanel Orientation="Horizontal" Margin="{StaticResource Gap}">
-                        <Button x:Name="OpenPagesListButton" Content="{x:Static res:Strings.PagesListButton}"
-                                Command="{Binding OpenTabCommand, ElementName=MarksPanel}" CommandParameter="1"
-                                AutomationProperties.Name="{x:Static res:Strings.OpenPagesList}"
-                                ToolTip="{x:Static res:Strings.OpenPagesList}" />
-                    </StackPanel>
-                    <TextBlock x:Name="MarkStatusText" Text="{Binding Marks.StatusText}" TextWrapping="Wrap"
-                               Margin="{StaticResource Gap}" AutomationProperties.LiveSetting="Polite">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Marks.StatusText}" Value="{x:Null}">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
                         </TextBlock.Style>
                     </TextBlock>
-
-                    <!-- Text search (FR-13, FR-105): Ctrl+F focuses the field; Enter / Shift+Enter in it and F3 / Shift+F3
-                         anywhere go to the next / previous result; Esc clears (MainWindow.RouteKey). The count, the
-                         "no text" message and the wrap status show below. Spartan, the real placement is phase 4. -->
-                    <TextBlock Text="{x:Static res:Strings.Search}" Style="{StaticResource SectionLabel}" />
-                    <TextBox x:Name="SearchField" Text="{Binding Search.QueryText, UpdateSourceTrigger=PropertyChanged}"
-                             MinHeight="{StaticResource TouchTarget}" VerticalContentAlignment="Center"
-                             ToolTip="{x:Static res:Strings.SearchHint}"
-                             AutomationProperties.Name="{x:Static res:Strings.SearchField}"
-                             AutomationProperties.HelpText="{x:Static res:Strings.SearchHint}" />
-                    <StackPanel Orientation="Horizontal" Margin="{StaticResource Gap}">
-                        <Button x:Name="PreviousResultButton" Command="{Binding Search.PreviousCommand}"
-                                MinWidth="{StaticResource TouchTarget}" MinHeight="{StaticResource TouchTarget}"
-                                AutomationProperties.Name="{x:Static res:Strings.PreviousResult}"
-                                ToolTip="{x:Static res:Strings.PreviousResult}">
-                            <Path Data="{StaticResource PreviousMarkGlyph}" Stroke="{StaticResource GlyphBrush}"
-                                  StrokeThickness="{StaticResource GlyphStrokeThickness}"
-                                  Width="{StaticResource GlyphSize}" Height="{StaticResource GlyphSize}" />
-                        </Button>
-                        <Button x:Name="NextResultButton" Command="{Binding Search.NextCommand}"
-                                MinWidth="{StaticResource TouchTarget}" MinHeight="{StaticResource TouchTarget}"
-                                AutomationProperties.Name="{x:Static res:Strings.NextResult}"
-                                ToolTip="{x:Static res:Strings.NextResult}">
-                            <Path Data="{StaticResource NextMarkGlyph}" Stroke="{StaticResource GlyphBrush}"
-                                  StrokeThickness="{StaticResource GlyphStrokeThickness}"
-                                  Width="{StaticResource GlyphSize}" Height="{StaticResource GlyphSize}" />
-                        </Button>
-                        <Button x:Name="ClearSearchButton" Command="{Binding Search.ClearCommand}"
-                                MinWidth="{StaticResource TouchTarget}" MinHeight="{StaticResource TouchTarget}"
-                                AutomationProperties.Name="{x:Static res:Strings.ClearSearch}"
-                                ToolTip="{x:Static res:Strings.ClearSearch}">
-                            <Path Data="{StaticResource CloseGlyph}" Stroke="{StaticResource GlyphBrush}"
-                                  StrokeThickness="{StaticResource GlyphStrokeThickness}"
-                                  Width="{StaticResource GlyphSize}" Height="{StaticResource GlyphSize}" />
-                        </Button>
-                        <TextBlock x:Name="SearchCountText" Text="{Binding Search.CountText}" VerticalAlignment="Center"
-                                   Margin="4,0" AutomationProperties.Name="{x:Static res:Strings.SearchCountLabel}"
-                                   AutomationProperties.LiveSetting="Polite" />
-                    </StackPanel>
-                    <TextBlock x:Name="SearchFailedPagesText" Text="{Binding Search.FailedPagesText}" TextWrapping="Wrap"
-                               Margin="{StaticResource Gap}">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Search.FailedPagesText}" Value="{x:Null}">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                    <TextBlock x:Name="SearchNoTextText" Text="{Binding Search.NoTextLayerMessage}" TextWrapping="Wrap"
-                               Margin="{StaticResource Gap}" AutomationProperties.LiveSetting="Polite">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Search.NoTextLayerMessage}" Value="{x:Null}">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                    <TextBlock x:Name="SearchStatusText" Text="{Binding Search.StatusText}" TextWrapping="Wrap"
-                               Margin="{StaticResource Gap}" AutomationProperties.LiveSetting="Polite">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Search.StatusText}" Value="{x:Null}">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-
-                    <!-- Journal warning (FR-84): unsaved changes are not being recorded for recovery -->
-                    <TextBlock x:Name="JournalWarningText" Text="{Binding JournalWarning}" TextWrapping="Wrap"
-                               Margin="{StaticResource Gap}" FontWeight="SemiBold"
-                               AutomationProperties.Name="{x:Static res:Strings.JournalWarningLabel}">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding JournalWarning}" Value="{x:Null}">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-
-                    <!-- Notice: annotations the app cannot edit, restored changes, journaling off (one line per document) -->
-                    <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" Margin="{StaticResource Gap}"
-                               AutomationProperties.Name="{x:Static res:Strings.NoticeLabel}">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Notice}" Value="{x:Null}">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-
-                    <!-- Tool -->
-                    <StackPanel Orientation="Horizontal" Margin="{StaticResource SectionGap}">
-                        <RadioButton GroupName="Tool" Content="{x:Static res:Strings.ToolPen}"
-                                     IsChecked="{Binding Tools.ActiveTool, Converter={StaticResource EnumMatch}, ConverterParameter=Pen}" />
-                        <RadioButton GroupName="Tool" Content="{x:Static res:Strings.ToolHighlighter}"
-                                     AutomationProperties.Name="{x:Static res:Strings.ToolHighlighter}"
-                                     IsChecked="{Binding Tools.ActiveTool, Converter={StaticResource EnumMatch}, ConverterParameter=Highlighter}" />
-                        <RadioButton GroupName="Tool" Content="{x:Static res:Strings.ToolEraser}"
-                                     IsChecked="{Binding Tools.ActiveTool, Converter={StaticResource EnumMatch}, ConverterParameter=Eraser}" />
-                    </StackPanel>
-
-                    <!-- Pressure curve and smoothing -->
-                    <StackPanel>
-                        <TextBlock Text="{x:Static res:Strings.PressureCurve}" Style="{StaticResource SectionLabel}" />
-                        <StackPanel Orientation="Horizontal">
-                            <RadioButton GroupName="Curve" Content="{x:Static res:Strings.CurveLinear}"
-                                         IsChecked="{Binding Tools.Curve, Converter={StaticResource EnumMatch}, ConverterParameter=Linear}" />
-                            <RadioButton GroupName="Curve" Content="{x:Static res:Strings.CurveSoft}"
-                                         IsChecked="{Binding Tools.Curve, Converter={StaticResource EnumMatch}, ConverterParameter=Soft}" />
-                            <RadioButton GroupName="Curve" Content="{x:Static res:Strings.CurveFirm}"
-                                         IsChecked="{Binding Tools.Curve, Converter={StaticResource EnumMatch}, ConverterParameter=Firm}" />
-                        </StackPanel>
-                        <TextBlock Text="{x:Static res:Strings.Smoothing}" Style="{StaticResource SectionLabel}" />
-                        <StackPanel Orientation="Horizontal">
-                            <RadioButton GroupName="Smoothing" Content="{x:Static res:Strings.SmoothingOff}"
-                                         IsChecked="{Binding Tools.Smoothing, Converter={StaticResource EnumMatch}, ConverterParameter=Off}" />
-                            <RadioButton GroupName="Smoothing" Content="{x:Static res:Strings.SmoothingLight}"
-                                         IsChecked="{Binding Tools.Smoothing, Converter={StaticResource EnumMatch}, ConverterParameter=Light}" />
-                            <RadioButton GroupName="Smoothing" Content="{x:Static res:Strings.SmoothingStrong}"
-                                         IsChecked="{Binding Tools.Smoothing, Converter={StaticResource EnumMatch}, ConverterParameter=Strong}" />
-                        </StackPanel>
-                    </StackPanel>
-
-                    <!-- Base width (mm) -->
-                    <StackPanel Orientation="Horizontal" Margin="{StaticResource SectionGap}">
-                        <TextBlock Text="{x:Static res:Strings.Width}" Style="{StaticResource SectionLabel}" Margin="0" />
-                        <TextBlock Text="{Binding Tools.BaseWidthMm, StringFormat={}{0:0.00} mm}" Margin="8,0,0,0" />
-                    </StackPanel>
-                    <Slider Minimum="0.25" Maximum="5" Value="{Binding Tools.BaseWidthMm}"
-                            MinHeight="{StaticResource TouchTarget}"
-                            AutomationProperties.Name="{x:Static res:Strings.Width}" />
-
-                    <!-- Colour swatches -->
-                    <TextBlock Text="{x:Static res:Strings.Color}" Style="{StaticResource SectionLabel}" />
-                    <ItemsControl ItemsSource="{x:Static ink:Palette.Colors}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Button Background="{Binding Converter={StaticResource ColorBrush}}"
-                                        Command="{Binding DataContext.Tools.SelectColorCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                        CommandParameter="{Binding}"
-                                        AutomationProperties.Name="{x:Static res:Strings.Color}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <Border Height="8" Margin="{StaticResource Gap}"
-                            Background="{Binding Tools.Color, Converter={StaticResource ColorBrush}}" />
-
-                    <!-- Highlighter options (FR-41, FR-44, FR-46) -->
-                    <TextBlock Text="{x:Static res:Strings.HighlighterOptions}" Style="{StaticResource SectionLabel}" />
-                    <ItemsControl ItemsSource="{Binding Tools.Highlighter.Swatches}" Focusable="False">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Button Background="{Binding Color, Converter={StaticResource ColorBrush}}"
-                                        Command="{Binding DataContext.Tools.Highlighter.SelectColorCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                        CommandParameter="{Binding Color}"
-                                        ToolTip="{Binding Name}"
-                                        AutomationProperties.Name="{Binding Name}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <StackPanel Orientation="Horizontal">
-                        <RadioButton GroupName="HighlighterTip" Content="{x:Static res:Strings.HighlighterTipRound}"
-                                     AutomationProperties.Name="{x:Static res:Strings.HighlighterTipRound}"
-                                     IsChecked="{Binding Tools.Highlighter.IsRound}" />
-                        <RadioButton GroupName="HighlighterTip" Content="{x:Static res:Strings.HighlighterTipChisel}"
-                                     AutomationProperties.Name="{x:Static res:Strings.HighlighterTipChisel}"
-                                     IsChecked="{Binding Tools.Highlighter.IsChisel}" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="{StaticResource Gap}">
-                        <TextBlock Text="{x:Static res:Strings.HighlighterAngle}" />
-                        <TextBlock Text="{Binding Tools.Highlighter.ChiselAngleDeg, StringFormat={}{0:0}°}" Margin="8,0,0,0" />
-                    </StackPanel>
-                    <Slider Minimum="{x:Static vm:HighlighterOptionsViewModel.MinChiselAngleDeg}"
-                            Maximum="{x:Static vm:HighlighterOptionsViewModel.MaxChiselAngleDeg}"
-                            Value="{Binding Tools.Highlighter.ChiselAngleDeg}"
-                            SmallChange="{StaticResource ChiselAngleSmallChange}"
-                            LargeChange="{StaticResource ChiselAngleLargeChange}"
-                            MinHeight="{StaticResource TouchTarget}"
-                            IsEnabled="{Binding Tools.Highlighter.IsChisel}"
-                            AutomationProperties.Name="{x:Static res:Strings.HighlighterAngle}" />
-                    <CheckBox Content="{x:Static res:Strings.HighlighterStraightLine}"
-                              AutomationProperties.Name="{x:Static res:Strings.HighlighterStraightLine}"
-                              IsChecked="{Binding Tools.Highlighter.IsStraightLine}" />
-
-                    <!-- Eraser -->
-                    <TextBlock Text="{x:Static res:Strings.EraserMode}" Style="{StaticResource SectionLabel}" />
-                    <StackPanel Orientation="Horizontal">
-                        <RadioButton GroupName="EraserMode" Content="{x:Static res:Strings.EraseWhole}"
-                                     IsChecked="{Binding Tools.EraserMode, Converter={StaticResource EnumMatch}, ConverterParameter=WholeStroke}" />
-                        <RadioButton GroupName="EraserMode" Content="{x:Static res:Strings.ErasePartial}"
-                                     IsChecked="{Binding Tools.EraserMode, Converter={StaticResource EnumMatch}, ConverterParameter=Partial}" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="{StaticResource Gap}">
-                        <TextBlock Text="{x:Static res:Strings.EraserSize}" />
-                        <TextBlock Text="{Binding Tools.EraserSizeMm, StringFormat={}{0:0.0} mm}" Margin="8,0,0,0" />
-                    </StackPanel>
-                    <Slider Minimum="2" Maximum="20" Value="{Binding Tools.EraserSizeMm}"
-                            MinHeight="{StaticResource TouchTarget}"
-                            AutomationProperties.Name="{x:Static res:Strings.EraserSize}" />
-
-                    <!-- Undo / redo -->
-                    <StackPanel Orientation="Horizontal" Margin="{StaticResource SectionGap}">
-                        <Button Content="{x:Static res:Strings.Undo}" Command="{Binding UndoCommand}"
-                                AutomationProperties.Name="{x:Static res:Strings.Undo}" />
-                        <Button Content="{x:Static res:Strings.Redo}" Command="{Binding RedoCommand}"
-                                AutomationProperties.Name="{x:Static res:Strings.Redo}" />
-                    </StackPanel>
-
-                    <!-- Zoom -->
-                    <TextBlock Text="{x:Static res:Strings.Zoom}" Style="{StaticResource SectionLabel}" />
-                    <StackPanel Orientation="Horizontal">
-                        <Button Content="-" Command="{Binding ZoomVm.ZoomOutCommand}"
-                                AutomationProperties.Name="{x:Static res:Strings.Zoom}" />
-                        <TextBlock Text="{Binding ZoomVm.Zoom, StringFormat={}{0:P0}}" VerticalAlignment="Center"
-                                   MinWidth="48" TextAlignment="Center" />
-                        <Button Content="+" Command="{Binding ZoomVm.ZoomInCommand}"
-                                AutomationProperties.Name="{x:Static res:Strings.Zoom}" />
-                        <Button Content="{x:Static res:Strings.FitWidth}" Click="OnFitWidthClick"
-                                AutomationProperties.Name="{x:Static res:Strings.FitWidth}" />
-                    </StackPanel>
+                    <TextBlock Text="{Binding ErrorMessage}" TextAlignment="Center" Margin="{StaticResource Gap}" />
                 </StackPanel>
-            </ScrollViewer>
-        </Expander>
 
-        <!-- Presses over the document while the left-edge panel is open: outside it they close it (the pen still
-             inks), the pen on it never presses its controls (MarksPanel.RoutePress). -->
-        <Grid x:Name="PageHost"
-              PreviewMouseLeftButtonDown="OnPageHostMouseDown" PreviewTouchDown="OnPageHostTouchDown"
-              PreviewTouchMove="OnPageHostTouchMove" PreviewTouchUp="OnPageHostTouchUp"
-              LostTouchCapture="OnPageHostLostTouchCapture" PreviewStylusDown="OnPageHostStylusDown">
-            <views:DocumentView x:Name="DocumentViewer" />
-            <!-- Shown until a document is open; the error line stays visible over the page. -->
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
-                <TextBlock Text="{x:Static res:Strings.NoDocument}" TextAlignment="Center">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Session}" Value="{x:Null}">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
-                <TextBlock Text="{Binding ErrorMessage}" TextAlignment="Center" Margin="{StaticResource Gap}" />
-            </StackPanel>
+                <!-- The floating toolbar and its option flyouts (UI-02), bottom centre over the document. Only the pill and
+                     the open flyout hit-test: the pen around them writes on the page; presses over the document close
+                     an open flyout (RoutePagePress). -->
+                <views:ToolbarView x:Name="FloatingToolbar" DataContext="{Binding Toolbar}" />
 
-            <!-- The left-edge panel (UI-04) with two tabs: the marks list (FR-103, Ctrl+M) and the page thumbnails
-                 (Ctrl+Shift+P). It opens with a finger swipe from the left edge (on the last tab shown) or the menu
-                 entries; it closes with the close button, Esc, a swipe, a press outside and after a jump to a mark (a jump
-                 to a page leaves it open). -->
-            <views:EdgePanel x:Name="MarksPanel" Title="{x:Static res:Strings.MarksList}"
-                             FirstTabHeader="{x:Static res:Strings.MarksList}" FirstTabName="{x:Static res:Strings.MarksTabName}"
-                             SecondTabHeader="{x:Static res:Strings.PagesTab}" SecondTabName="{x:Static res:Strings.PagesTabName}"
-                             HeaderDetail="{Binding Marks.Count}" HeaderDetailNameFormat="{x:Static res:Strings.MarksCountNameFormat}">
-                <views:MarksListView DataContext="{Binding Marks}" />
-                <views:EdgePanel.SecondBody>
-                    <views:PagesListView DataContext="{Binding Pages}" />
-                </views:EdgePanel.SecondBody>
-            </views:EdgePanel>
+                <!-- Bottom right, left of the rail's strip (UI-05, FR-09, FR-102): the navigation buttons (Back, previous
+                     and next mark, the marks' status) above the page indicator chip ("12 / 48 · 125%": tap = go to page,
+                     long press or hover = zoom − / + and fit width). Both show and hide with the rail and keep it shown
+                     while used (OnRailShownChanged, OnOverlayHoldChanged). The panel has no background: only their
+                     surfaces hit-test, so the pen around them writes on the page. -->
+                <StackPanel x:Name="NavigationCorner" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                            Margin="{StaticResource IndicatorChipMargin}">
+                    <views:NavigationButtons x:Name="NavButtons" Margin="{StaticResource NavigationButtonsMargin}" />
+                    <views:PageIndicatorChip x:Name="IndicatorChip" />
+                </StackPanel>
+
+                <!-- Top centre, below the title bar: the search pill (FR-13, FR-105: Ctrl+F or the menu open it, Esc closes
+                     it and clears the search, RouteKey; F3 / Shift+F3 anywhere) and under it the notices (FR-84, FR-86).
+                     No background: only their surfaces hit-test. -->
+                <StackPanel x:Name="TopOverlays" HorizontalAlignment="Center" VerticalAlignment="Top"
+                            Margin="{StaticResource TopOverlaysMargin}">
+                    <views:SearchPill x:Name="SearchBar" Margin="0" DataContext="{Binding Search}" IsOpen="{Binding IsOpen, Mode=OneWay}" />
+                    <views:NoticeBar x:Name="Notices" />
+                </StackPanel>
+
+                <!-- The main menu (UI-03): the round button at the top left, below the title bar, and its panel. Under the
+                     left-edge panel, which covers it while open. -->
+                <views:MainMenuButton x:Name="MainMenu" />
+
+                <!-- The left-edge panel (UI-04) with two tabs: the marks list (FR-103, Ctrl+M) and the page thumbnails
+                     (Ctrl+Shift+P). It opens with a finger swipe from the left edge (on the last tab shown) or the menu
+                     entries; it closes with the close button, Esc, a swipe, a press outside and after a jump to a mark (a jump
+                     to a page leaves it open). -->
+                <views:EdgePanel x:Name="MarksPanel" Title="{x:Static res:Strings.MarksList}"
+                                 FirstTabHeader="{x:Static res:Strings.MarksList}" FirstTabName="{x:Static res:Strings.MarksTabName}"
+                                 SecondTabHeader="{x:Static res:Strings.PagesTab}" SecondTabName="{x:Static res:Strings.PagesTabName}"
+                                 HeaderDetail="{Binding Marks.Count}" HeaderDetailNameFormat="{x:Static res:Strings.MarksCountNameFormat}">
+                    <views:MarksListView DataContext="{Binding Marks}" />
+                    <views:EdgePanel.SecondBody>
+                        <views:PagesListView DataContext="{Binding Pages}" />
+                    </views:EdgePanel.SecondBody>
+                </views:EdgePanel>
+            </Grid>
         </Grid>
-    </DockPanel>
-</Window>
+
+        <!-- The title bar (UI-06): only the file name, small, with the dirty mark (DocumentTitle; the window's own title
+             keeps the app name for the taskbar), and the window buttons, over the document. WPF UI drives the drag area
+             and the window buttons through the non-client hit test. For the pen the drag area is client area
+             (TitleBarHitTest) and its parts let the pen through (TitleBarPenInput), so the pen writes on the page under
+             it; the mouse and fingers drag the window and every pointer presses the buttons as before. -->
+        <!-- The two pills behind the title bar (UI-06): the file name with the dirty mark, and the window buttons. They
+             never take input (the bar's own parts do) and follow the theme; opaque with transparency effects off. -->
+        <views:FloatingSurface x:Name="TitleNamePill" Panel.ZIndex="0" HorizontalAlignment="Left" VerticalAlignment="Top"
+                               Height="{StaticResource TitleBarPillHeight}" Margin="{StaticResource TitleBarPillMargin}"
+                               IsHitTestVisible="False" CornerRadius="{StaticResource PillCornerRadius}">
+            <TextBlock x:Name="TitleNameText" Text="{Binding DocumentTitle}" VerticalAlignment="Center"
+                       Padding="{StaticResource TitleBarNamePadding}" MaxWidth="{StaticResource TitleBarNameMaxWidth}"
+                       TextTrimming="CharacterEllipsis" Foreground="{DynamicResource GlyphBrush}" />
+        </views:FloatingSurface>
+        <views:FloatingSurface x:Name="TitleButtonsPill" Panel.ZIndex="0" HorizontalAlignment="Right" VerticalAlignment="Top"
+                               Width="{StaticResource TitleBarButtonsPillWidth}" Height="{StaticResource TitleBarPillHeight}"
+                               Margin="{StaticResource TitleBarButtonsPillMargin}" IsHitTestVisible="False"
+                               CornerRadius="{StaticResource PillCornerRadius}" />
+        <ui:TitleBar x:Name="AppTitleBar" VerticalAlignment="Top" Panel.ZIndex="1"
+                     Foreground="{DynamicResource GlyphBrush}" ButtonsForeground="{DynamicResource GlyphBrush}"
+                     ButtonsBackground="Transparent"
+                     Height="{StaticResource TitleBarHeight}"
+                     ShowHelp="False" />
+
+        <!-- The save progress line (FR-89) right under the title bar while a save runs; it never takes input. -->
+        <views:SaveProgressLine x:Name="SaveLine" Panel.ZIndex="1" Margin="{StaticResource TitleBarClearance}"
+                                IsActive="{Binding IsSaving, Mode=OneWay}" />
+    </Grid>
+</ui:FluentWindow>

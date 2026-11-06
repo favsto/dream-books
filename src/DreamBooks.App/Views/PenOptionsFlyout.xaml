@@ -1,0 +1,66 @@
+<UserControl x:Class="DreamBooks.App.Views.PenOptionsFlyout"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="clr-namespace:DreamBooks.App.Resources"
+             xmlns:conv="clr-namespace:DreamBooks.App.Converters"
+             xmlns:views="clr-namespace:DreamBooks.App.Views"
+             AutomationProperties.Name="{x:Static res:Strings.PenOptions}"
+             Focusable="False" IsTabStop="False">
+    <!-- The pen's option panel (UI-02, FR-21, FR-22, FR-25), above the toolbar: colours (8 presets, the shared custom
+         palette, "+" for the free picker), the three preset widths and the width slider, the stroke preview with
+         pressure, the pressure curve and the smoothing (FR-23; the debug panel had them, the settings window of 4b
+         will too). The data context is the ToolbarViewModel. -->
+    <UserControl.Resources>
+        <conv:EnumMatchConverter x:Key="EnumMatch" />
+    </UserControl.Resources>
+    <views:FloatingSurface x:Name="Surface" Width="{StaticResource FlyoutWidth}" CornerRadius="{StaticResource PanelCornerRadius}">
+        <!-- Scrolls when the window is too short for the panel (ToolbarView bounds its height), with the scroll bar and
+             the wheel. It never pans: a panning scroll viewer turns manipulation on, and WPF then holds back the press a
+             finger or the pen gives the colour square, a slider or a swatch's long press. -->
+        <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      PanningMode="None" Focusable="False">
+        <StackPanel Margin="{StaticResource FlyoutPadding}" KeyboardNavigation.TabNavigation="Cycle">
+            <TextBlock Text="{x:Static res:Strings.Color}" Style="{StaticResource FlyoutHeader}" Margin="{StaticResource FlyoutFirstHeaderMargin}" />
+            <views:ColorSwatches x:Name="Swatches"
+                                 Presets="{Binding Pen.Presets}" CustomColors="{Binding Pen.CustomColors}"
+                                 SelectedColor="{Binding Pen.Color, Mode=OneWay}"
+                                 SelectCommand="{Binding Pen.SelectColorCommand}"
+                                 AddCommand="{Binding Pen.AddCustomColorCommand}"
+                                 RemoveCommand="{Binding Pen.RemoveCustomColorCommand}" />
+
+            <TextBlock Text="{x:Static res:Strings.Width}" Style="{StaticResource FlyoutHeader}" />
+            <StackPanel x:Name="WidthPresetPanel" Orientation="Horizontal" />
+            <Slider x:Name="WidthSlider" Minimum="{Binding Pen.MinWidthMm, Mode=OneWay}" Maximum="{Binding Pen.MaxWidthMm, Mode=OneWay}"
+                    Value="{Binding Pen.WidthMm}" SmallChange="0.05" LargeChange="0.25"
+                    MinHeight="{StaticResource TouchTarget}"
+                    AutomationProperties.Name="{x:Static res:Strings.Width}" />
+            <views:PressurePreview x:Name="Preview" Height="{StaticResource PressurePreviewHeight}"
+                                   Curve="{Binding Tools.Curve}" WidthMm="{Binding Pen.WidthMm}" InkColor="{Binding Pen.Color}"
+                                   AutomationProperties.Name="{x:Static res:Strings.PressurePreview}" />
+
+            <TextBlock Text="{x:Static res:Strings.PressureCurve}" Style="{StaticResource FlyoutHeader}" />
+            <UniformGrid Rows="1">
+                <RadioButton x:Name="CurveLinearRadio" Content="{x:Static res:Strings.CurveLinear}" AutomationProperties.Name="{x:Static res:Strings.CurveLinear}"
+                             IsChecked="{Binding Tools.Curve, Converter={StaticResource EnumMatch}, ConverterParameter=Linear}" />
+                <RadioButton x:Name="CurveSoftRadio" Content="{x:Static res:Strings.CurveSoft}" AutomationProperties.Name="{x:Static res:Strings.CurveSoft}"
+                             IsChecked="{Binding Tools.Curve, Converter={StaticResource EnumMatch}, ConverterParameter=Soft}" />
+                <RadioButton x:Name="CurveFirmRadio" Content="{x:Static res:Strings.CurveFirm}" AutomationProperties.Name="{x:Static res:Strings.CurveFirm}"
+                             IsChecked="{Binding Tools.Curve, Converter={StaticResource EnumMatch}, ConverterParameter=Firm}" />
+            </UniformGrid>
+
+            <TextBlock Text="{x:Static res:Strings.Smoothing}" Style="{StaticResource FlyoutHeader}" />
+            <UniformGrid Rows="1">
+                <RadioButton x:Name="SmoothingOffRadio" GroupName="PenSmoothing" Content="{x:Static res:Strings.SmoothingOff}"
+                             AutomationProperties.Name="{x:Static res:Strings.SmoothingOff}"
+                             IsChecked="{Binding Tools.Smoothing, Converter={StaticResource EnumMatch}, ConverterParameter=Off}" />
+                <RadioButton x:Name="SmoothingLightRadio" GroupName="PenSmoothing" Content="{x:Static res:Strings.SmoothingLight}"
+                             AutomationProperties.Name="{x:Static res:Strings.SmoothingLight}"
+                             IsChecked="{Binding Tools.Smoothing, Converter={StaticResource EnumMatch}, ConverterParameter=Light}" />
+                <RadioButton x:Name="SmoothingStrongRadio" GroupName="PenSmoothing" Content="{x:Static res:Strings.SmoothingStrong}"
+                             AutomationProperties.Name="{x:Static res:Strings.SmoothingStrong}"
+                             IsChecked="{Binding Tools.Smoothing, Converter={StaticResource EnumMatch}, ConverterParameter=Strong}" />
+            </UniformGrid>
+        </StackPanel>
+        </ScrollViewer>
+    </views:FloatingSurface>
+</UserControl>

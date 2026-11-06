@@ -1,42 +1,53 @@
+using System.Runtime.CompilerServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DreamBooks.App.Ink;
 using DreamBooks.Core.Ink;
 using DreamBooks.Core.Model;
+using DreamBooks.Core.Settings;
 
 namespace DreamBooks.App.ViewModels;
 
-/// <summary>Active tool and ink settings shown in the debug panel.</summary>
+/// <summary>
+/// The active tool and the ink settings: pen colour and width, the pressure curve and smoothing, the one eraser mode
+/// and size (used by the eraser tool and by the pen's back end alike, FR-30, FR-31), the highlighter options and the
+/// custom palette shared by the pen and the highlighter (UI-02). The values the settings file remembers (FR-110) come
+/// in through <see cref="Apply"/> and go out through <see cref="CaptureInto"/>; <see cref="RememberedChanged"/> says
+/// when one of them changed.
+/// </summary>
 public sealed class ToolsViewModel : ObservableObject
 {
-    private const double _minWidthMm = 0.25;
-    private const double _maxWidthMm = 5;
-    private const double _minEraserMm = 2;
-    private const double _maxEraserMm = 20;
-
     private AppTool _activeTool = AppTool.Pen;
     private bool _isInverted;
-    private PressureCurve _curve = PressureCurve.Firm;
-    private SmoothingLevel _smoothing = SmoothingLevel.Strong;
-    private double _baseWidthMm = 0.5;
-    private InkColor _color = Palette.Colors[0];
-    private EraserMode _eraserMode = EraserMode.WholeStroke;
-    private double _eraserSizeMm = 6;
+    private PressureCurve _curve = AppSettings.Default.PressureCurve;
+    private SmoothingLevel _smoothing = AppSettings.Default.Smoothing;
+    private double _baseWidthMm = AppSettings.DefaultPenWidthMm;
+    private InkColor _color = Ink.Palette.Colors[0];
+    private EraserMode _eraserMode = AppSettings.Default.EraserMode;
+    private double _eraserSizeMm = AppSettings.DefaultEraserSizeMm;
 
     public ToolsViewModel()
     {
+        Highlighter = new HighlighterOptionsViewModel(Palette);
         SelectColorCommand = new RelayCommand<InkColor>(c => Color = c);
         ToggleHighlighterCommand = new RelayCommand(
             () => ActiveTool = ActiveTool == AppTool.Highlighter ? AppTool.Pen : AppTool.Highlighter);
+        Highlighter.SettingsChanged += (_, _) => RaiseRemembered();
+        Palette.PaletteChanged += (_, _) => RaiseRemembered();
     }
+
+    /// <summary>Raised after a value the settings remember changed (colours, widths, modes, curve, palette).</summary>
+    public event EventHandler? RememberedChanged;
 
     public IRelayCommand<InkColor> SelectColorCommand { get; }
 
     /// <summary>The highlighter as a toggle next to the pen: on selects it, off goes back to the pen (FR-41).</summary>
     public IRelayCommand ToggleHighlighterCommand { get; }
 
+    /// <summary>The custom colours shared by the pen and the highlighter (UI-02).</summary>
+    public CustomPaletteViewModel Palette { get; } = new();
+
     /// <summary>The highlighter options (FR-41, FR-44, FR-46).</summary>
-    public HighlighterOptionsViewModel Highlighter { get; } = new();
+    public HighlighterOptionsViewModel Highlighter { get; }
 
     public AppTool ActiveTool
     {
@@ -72,21 +83,23 @@ public sealed class ToolsViewModel : ObservableObject
     public PressureCurve Curve
     {
         get => _curve;
-        set => SetProperty(ref _curve, value);
+        set => SetRemembered(ref _curve, value);
     }
 
     public SmoothingLevel Smoothing
     {
         get => _smoothing;
-        set => SetProperty(ref _smoothing, value);
+        set => SetRemembered(ref _smoothing, value);
     }
 
+    /// <summary>The pen's base width, clamped to 0.25..5 mm (FR-22); NaN is ignored.</summary>
     public double BaseWidthMm
     {
         get => _baseWidthMm;
         set
         {
-            if (SetProperty(ref _baseWidthMm, Math.Clamp(value, _minWidthMm, _maxWidthMm)))
+            if (!double.IsNaN(value)
+                && SetRemembered(ref _baseWidthMm, Math.Clamp(value, AppSettings.MinPenWidthMm, AppSettings.MaxPenWidthMm)))
             {
                 OnPropertyChanged(nameof(BaseWidthPt));
             }
@@ -95,28 +108,88 @@ public sealed class ToolsViewModel : ObservableObject
 
     public double BaseWidthPt => Units.MmToPt(_baseWidthMm);
 
+    /// <summary>The pen colour (opaque).</summary>
     public InkColor Color
     {
         get => _color;
-        set => SetProperty(ref _color, value);
+        set => SetRemembered(ref _color, value);
     }
 
+    /// <summary>The one eraser mode: the eraser tool and the pen's back end both use it (FR-30, FR-31).</summary>
     public EraserMode EraserMode
     {
         get => _eraserMode;
-        set => SetProperty(ref _eraserMode, value);
+        set => SetRemembered(ref _eraserMode, value);
     }
 
+    /// <summary>The eraser circle's diameter, clamped to 2..20 mm (FR-32); NaN is ignored.</summary>
     public double EraserSizeMm
     {
         get => _eraserSizeMm;
-        set => SetProperty(ref _eraserSizeMm, Math.Clamp(value, _minEraserMm, _maxEraserMm));
+        set
+        {
+            if (!double.IsNaN(value))
+            {
+                SetRemembered(ref _eraserSizeMm, Math.Clamp(value, AppSettings.MinEraserSizeMm, AppSettings.MaxEraserSizeMm));
+            }
+        }
     }
 
     /// <summary>The pen's back end touched the screen: erase whatever tool is active (FR-30).</summary>
     public void BeginInvertedEraser() => SetInverted(true);
 
     public void EndInvertedEraser() => SetInverted(false);
+
+    /// <summary>Takes the remembered values from the settings (startup, or a change made in the settings).</summary>
+    public void Apply(AppSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        Curve = settings.PressureCurve;
+        Smoothing = settings.Smoothing;
+        EraserMode = settings.EraserMode;
+        EraserSizeMm = settings.EraserSizeMm;
+        Color = settings.PenColor with { A = 255 };
+        BaseWidthMm = settings.PenWidthMm;
+        Palette.Palette = settings.CustomPalette;
+        Highlighter.SelectColorCommand.Execute(settings.HighlighterColor);
+        Highlighter.IsChisel = settings.HighlighterChisel;
+        Highlighter.ChiselAngleDeg = settings.HighlighterAngleDeg;
+        Highlighter.IsStraightLine = settings.HighlighterStraightLine;
+    }
+
+    /// <summary><paramref name="settings"/> with the values of the tools the settings remember.</summary>
+    public AppSettings CaptureInto(AppSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        var highlighter = Highlighter.Settings;
+        return settings with
+        {
+            PressureCurve = Curve,
+            Smoothing = Smoothing,
+            EraserMode = EraserMode,
+            EraserSizeMm = EraserSizeMm,
+            PenColor = Color,
+            PenWidthMm = BaseWidthMm,
+            CustomPalette = Palette.Palette,
+            HighlighterColor = highlighter.StrokeColor,
+            HighlighterChisel = highlighter.Chisel,
+            HighlighterAngleDeg = highlighter.ChiselAngleDeg,
+            HighlighterStraightLine = highlighter.StraightLine,
+        };
+    }
+
+    private bool SetRemembered<T>(ref T field, T value, [CallerMemberName] string? name = null)
+    {
+        if (!SetProperty(ref field, value, name))
+        {
+            return false;
+        }
+
+        RaiseRemembered();
+        return true;
+    }
+
+    private void RaiseRemembered() => RememberedChanged?.Invoke(this, EventArgs.Empty);
 
     private void SetInverted(bool value)
     {

@@ -1,31 +1,43 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
-    <!-- Visual values are defined once here (see .claude/rules/wpf-ui.md). Minimal for the prototype. -->
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+                    xmlns:views="clr-namespace:DreamBooks.App.Views">
+    <!-- Visual values are defined once here (see .claude/rules/wpf-ui.md): the tokens that are the same in both themes.
+         Colours that change with the theme (backdrop, panels, rail, glyphs, accent brushes, shadows) are in
+         Theme.Light.xaml / Theme.Dark.xaml, merged after this one by App.AddThemeResources and swapped by ThemeService; reach them
+         with DynamicResource. -->
     <sys:Double x:Key="TouchTarget">40</sys:Double>
-    <sys:Double x:Key="PanelWidth">280</sys:Double>
-    <sys:Double x:Key="ProgressBarHeight">4</sys:Double>
     <Thickness x:Key="Gap">0,4,0,0</Thickness>
     <Thickness x:Key="SectionGap">0,12,0,0</Thickness>
+    <!-- The window's title bar (UI-06) lies over the document: 48 px, the 40 px touch target of its pills and buttons with
+         a 4 px margin above; elements docked at the top stay below it. -->
+    <sys:Double x:Key="TitleBarHeight">48</sys:Double>
+    <Thickness x:Key="TitleBarClearance">0,48,0,0</Thickness>
+    <!-- The title bar's two pills (UI-06): the file name and the window buttons, tinted like the other floating surfaces.
+         The buttons are 44 DIP wide (WPF UI's) and as high as the bar; their pill lies behind them, flush with the right edge. -->
+    <Thickness x:Key="TitleBarPillMargin">8,4,8,0</Thickness>
+    <Thickness x:Key="TitleBarButtonsPillMargin">0,4,0,0</Thickness>
+    <sys:Double x:Key="TitleBarPillHeight">40</sys:Double>
+    <sys:Double x:Key="TitleBarButtonsPillWidth">132</sys:Double>
+    <Thickness x:Key="TitleBarNamePadding">14,0,14,0</Thickness>
+    <sys:Double x:Key="TitleBarNameMaxWidth">480</sys:Double>
 
     <!-- Chisel angle slider (FR-46): one degree per arrow key, fifteen per page key. -->
     <sys:Double x:Key="ChiselAngleSmallChange">1</sys:Double>
     <sys:Double x:Key="ChiselAngleLargeChange">15</sys:Double>
 
-    <!-- Eraser cursor (FR-32): system accent colour, fill at 20% opacity, 1 DIP outline. -->
-    <SolidColorBrush x:Key="EraserCursorFill" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" Opacity="0.2" />
-    <SolidColorBrush x:Key="EraserCursorOutline" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" />
+    <!-- Eraser cursor (FR-32): accent colour brushes in the theme dictionaries, 1 DIP outline. -->
     <sys:Double x:Key="EraserCursorOutlineThickness">1</sys:Double>
 
     <!-- Document view (phase 3a): neutral backdrop around the pages; a page not rendered yet is white paper that
-         fades in lightly (instant when Windows animations are off, NFR-03, NFR-32). -->
-    <SolidColorBrush x:Key="PageBackdropBrush" Color="{DynamicResource {x:Static SystemColors.ControlColorKey}}" />
+         fades in lightly (instant when Windows animations are off, NFR-03, NFR-32). The backdrop brushes are in the
+         theme dictionaries; the paper is white in both themes. -->
     <SolidColorBrush x:Key="PagePlaceholderBrush" Color="White" />
     <Duration x:Key="PageFadeInDuration">0:0:0.15</Duration>
     <sys:Double x:Key="PageFadeInFromOpacity">0.6</sys:Double>
 
     <!-- Scroll rail (UI-07, design B): a 40 px touch strip on the right edge with an 8 px bar and a 34 px knob, one large
-         page preview beside the knob while scrubbing, and the page indicator; all fade in 180 ms and out 200 ms after
+         page preview beside the knob while scrubbing; all fade in 180 ms and out 200 ms after
          1.5 s idle, ease-out (instant when Windows animations are off, NFR-32). Mark ticks below (3b). -->
     <sys:TimeSpan x:Key="RailFadeInDuration">0:0:0.18</sys:TimeSpan>
     <sys:TimeSpan x:Key="RailFadeOutDuration">0:0:0.2</sys:TimeSpan>
@@ -44,14 +56,11 @@
     <CornerRadius x:Key="RailBarCornerRadius">4</CornerRadius>
     <CornerRadius x:Key="RailKnobCornerRadius">7</CornerRadius>
     <Thickness x:Key="RailTrackMargin">0,12,0,12</Thickness>
-    <SolidColorBrush x:Key="RailTrackBrush" Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" Opacity="0.55" />
-    <SolidColorBrush x:Key="RailKnobBrush" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" />
+    <!-- Track, knob, preview background and shadow brushes (and their opaque variants): theme dictionaries. -->
     <sys:Double x:Key="RailPreviewWidth">300</sys:Double>
     <Thickness x:Key="RailPreviewMargin">0,0,48,0</Thickness>
     <Thickness x:Key="RailPreviewPadding">6</Thickness>
     <CornerRadius x:Key="RailPreviewCornerRadius">10</CornerRadius>
-    <SolidColorBrush x:Key="RailPreviewBackgroundBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" Opacity="0.92" />
-    <DropShadowEffect x:Key="RailPreviewShadow" BlurRadius="14" ShadowDepth="4" Opacity="0.3" />
     <!-- The preview bubble fades in and out, and each new page fades in over the previous one, easing out (instant
          when Windows animations are off, NFR-32). The reader's ink is drawn over it, never thinner than this. -->
     <sys:TimeSpan x:Key="RailPreviewFadeInDuration">0:0:0.15</sys:TimeSpan>
@@ -59,16 +68,12 @@
     <sys:TimeSpan x:Key="RailPreviewCrossFadeDuration">0:0:0.14</sys:TimeSpan>
     <CubicEase x:Key="RailPreviewEase" EasingMode="EaseOut" />
     <sys:Double x:Key="RailPreviewMinStrokeWidth">0.75</sys:Double>
-    <!-- With Windows "Transparency effects" off (NFR-32): the same colours, opaque, and no shadow. -->
-    <SolidColorBrush x:Key="RailTrackBrushOpaque" Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
-    <SolidColorBrush x:Key="RailPreviewBackgroundBrushOpaque" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
     <!-- Mark ticks on the rail (FR-101, phase 3b): a short bar across the track per mark, as wide as the knob, which
          covers the tick of the mark shown; the text colour, so they read on the grey bar in light and dark themes.
          Search results (3b-2) get a different colour. Opaque with transparency effects off (NFR-32). -->
     <sys:Double x:Key="RailMarkTickLength">14</sys:Double>
     <sys:Double x:Key="RailMarkTickThickness">2</sys:Double>
-    <SolidColorBrush x:Key="RailMarkTickBrush" Color="{DynamicResource {x:Static SystemColors.ControlTextColorKey}}" Opacity="0.75" />
-    <SolidColorBrush x:Key="RailMarkTickBrushOpaque" Color="{DynamicResource {x:Static SystemColors.ControlTextColorKey}}" />
+    <!-- RailMarkTickBrush and RailMarkTickBrushOpaque: theme dictionaries (the text colour). -->
     <!-- Note ticks (FR-101): the handwritten notes, in red (the 3a mockup's colour for notes), short bars just left of
          the mark ticks, so a note and a mark at the same place both show; marks are drawn on top. The offset is the
          distance from the track's centre to the bar's centre: the bar spans 6 to 12 DIP left of the centre, the mark
@@ -89,7 +94,6 @@
     <Color x:Key="RailSearchTickColor">#1E88E5</Color>
     <SolidColorBrush x:Key="RailSearchTickBrush" Color="{StaticResource RailSearchTickColor}" Opacity="0.9" />
     <SolidColorBrush x:Key="RailSearchTickBrushOpaque" Color="{StaticResource RailSearchTickColor}" />
-    <Thickness x:Key="RailIndicatorMargin">0,0,44,12</Thickness>
 
     <!-- Finger fling (FR-05, NFR-03), read by FlingSettings: a pan released faster than FlingMinSpeed glides on, its
          speed decaying like a phone's, v(t) = v0·e^(−t/τ) with τ = FlingDecayTimeConstant (ms), until it falls below
@@ -112,26 +116,22 @@
     <sys:Double x:Key="EdgeSwipeZoneWidth">24</sys:Double>
     <CornerRadius x:Key="EdgePanelCornerRadius">0,12,12,0</CornerRadius>
     <Thickness x:Key="EdgePanelPadding">12,8,8,12</Thickness>
-    <Thickness x:Key="EdgePanelMargin">0,8,0,8</Thickness>
-    <SolidColorBrush x:Key="EdgePanelBackgroundBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" Opacity="0.92" />
-    <SolidColorBrush x:Key="EdgePanelBackgroundBrushOpaque" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
-    <DropShadowEffect x:Key="EdgePanelShadow" BlurRadius="24" ShadowDepth="4" Opacity="0.25" />
+    <!-- Below the title bar (TitleBarClearance 48) and its pills, with the usual 8 around. -->
+    <Thickness x:Key="EdgePanelMargin">0,56,0,8</Thickness>
+    <!-- EdgePanelBackgroundBrush(Opaque) and EdgePanelShadow: theme dictionaries. -->
     <sys:Double x:Key="EdgePanelTitleSize">16</sys:Double>
     <Thickness x:Key="EdgePanelDetailMargin">8,0,0,0</Thickness>
-    <!-- Close glyph (an X) and the previous/next mark chevrons, drawn in a 12 x 12 box with the text colour. -->
+    <!-- Close glyph (an X), drawn in a 12 x 12 box with the text colour. -->
     <Geometry x:Key="CloseGlyph">M 1,1 L 11,11 M 11,1 L 1,11</Geometry>
-    <Geometry x:Key="PreviousMarkGlyph">M 1,9 L 6,3 L 11,9</Geometry>
-    <Geometry x:Key="NextMarkGlyph">M 1,3 L 6,9 L 11,3</Geometry>
     <sys:Double x:Key="GlyphSize">12</sys:Double>
     <sys:Double x:Key="GlyphStrokeThickness">1.5</sys:Double>
-    <SolidColorBrush x:Key="GlyphBrush" Color="{DynamicResource {x:Static SystemColors.ControlTextColorKey}}" />
+    <!-- GlyphBrush: theme dictionaries. -->
 
     <!-- Marks list rows (FR-103): the mark's band of the page (full width, the mark's extent and one line above and
          below) as vector ink on paper, 120 x 60 DIP; ink strokes are never thinner than 1 DIP at that scale. -->
     <sys:Double x:Key="MarkThumbnailWidth">120</sys:Double>
     <sys:Double x:Key="MarkThumbnailHeight">60</sys:Double>
     <sys:Double x:Key="MarkThumbnailMinStrokeWidth">1</sys:Double>
-    <SolidColorBrush x:Key="MarkThumbnailBorderBrush" Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
     <Thickness x:Key="MarkRowPadding">4</Thickness>
     <Thickness x:Key="MarkRowLabelMargin">12,0,0,0</Thickness>
     <sys:Double x:Key="GoToPageFieldWidth">80</sys:Double>
@@ -140,7 +140,6 @@
     <Thickness x:Key="EdgePanelTabMargin">0,0,4,0</Thickness>
     <Thickness x:Key="EdgePanelTabPadding">8,0,8,0</Thickness>
     <Thickness x:Key="EdgePanelTabIndicatorThickness">0,0,0,2</Thickness>
-    <SolidColorBrush x:Key="EdgePanelTabIndicatorBrush" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" />
 
     <!-- Pages tab (FR-103, UI-04, phase 3b-2): one row per page, a 140 DIP wide thumbnail with the page's proportions
          (the page bitmap with the ink drawn over it; strokes never thinner than 0.75 DIP), the page number under it. The
@@ -150,13 +149,11 @@
     <sys:Double x:Key="PagesThumbnailMinStrokeWidth">0.75</sys:Double>
     <!-- The page's edge, drawn over the thumbnail so white pages read on the panel in both themes. -->
     <sys:Double x:Key="PagesThumbnailFrameThickness">1</sys:Double>
-    <SolidColorBrush x:Key="PagesThumbnailBorderBrush" Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
     <Thickness x:Key="PagesRowPadding">4</Thickness>
     <Thickness x:Key="PagesNumberMargin">0,2,0,0</Thickness>
     <Thickness x:Key="PagesCurrentRingThickness">3</Thickness>
     <Thickness x:Key="PagesCurrentRingPadding">1</Thickness>
     <CornerRadius x:Key="PagesCurrentRingCornerRadius">3</CornerRadius>
-    <SolidColorBrush x:Key="PagesCurrentRingBrush" Color="{DynamicResource {x:Static SystemColors.AccentColorKey}}" />
     <GridLength x:Key="PagesTickColumnWidth">16</GridLength>
     <Thickness x:Key="PagesTickMargin">0,4,3,0</Thickness>
     <Thickness x:Key="PagesTickGap">0,0,2,0</Thickness>
@@ -174,17 +171,289 @@
     <SolidColorBrush x:Key="SearchCurrentHighlightBrush" Color="{StaticResource SearchCurrentHighlightColor}" Opacity="0.5" />
     <sys:Double x:Key="SearchHighlightPaddingPt">1.5</sys:Double>
 
-    <Style TargetType="Button">
+    <!-- Floating toolbar and option flyouts (UI-02, phase 4a; section 3 shapes and animations). Shapes: 999 px pill for
+         the toolbar and single buttons, 12 px panels, 8 px inner elements. Icons: Segoe Fluent Icons at 20 px (Segoe
+         MDL2 Assets where Fluent Icons is missing). The surfaces are two layers, each with one of the two shadows
+         (diffuse and contact: WPF gives an element one effect); their brushes are in the theme dictionaries. -->
+    <CornerRadius x:Key="PillCornerRadius">999</CornerRadius>
+    <CornerRadius x:Key="PanelCornerRadius">12</CornerRadius>
+    <CornerRadius x:Key="InnerCornerRadius">8</CornerRadius>
+    <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+    <sys:Double x:Key="IconSize">20</sys:Double>
+    <Thickness x:Key="ToolbarPadding">8,6,8,6</Thickness>
+    <Thickness x:Key="ToolbarMargin">0,0,0,14</Thickness>
+    <Thickness x:Key="ToolbarButtonMargin">1,0,1,0</Thickness>
+    <sys:Double x:Key="ToolbarSeparatorWidth">1</sys:Double>
+    <sys:Double x:Key="ToolbarSeparatorHeight">22</sys:Double>
+    <Thickness x:Key="ToolbarSeparatorMargin">6,0,6,0</Thickness>
+    <!-- The active tool: an accent disc behind its icon and a short bar under it, sliding to the new tool in 150 ms. -->
+    <sys:Double x:Key="ToolIndicatorBarWidth">14</sys:Double>
+    <sys:Double x:Key="ToolIndicatorBarHeight">3</sys:Double>
+    <Thickness x:Key="ToolIndicatorBarMargin">0,0,0,3</Thickness>
+    <CornerRadius x:Key="ToolIndicatorBarCornerRadius">2</CornerRadius>
+    <sys:Double x:Key="DisabledOpacity">0.4</sys:Double>
+    <!-- Animations (section 3), all instant when Windows animations are off (NFR-32): the tool indicator slides in
+         150 ms; the toolbar dissolves in 200 ms while writing and comes back in 180 ms; a flyout appears in 180 ms (fade
+         and scale 0.95 to 1, ease-out) and disappears in 120 ms (fade and scale to 0.97, ease-in). -->
+    <sys:TimeSpan x:Key="ToolIndicatorSlideDuration">0:0:0.15</sys:TimeSpan>
+    <sys:TimeSpan x:Key="ToolbarRetractDuration">0:0:0.2</sys:TimeSpan>
+    <sys:TimeSpan x:Key="ToolbarShowDuration">0:0:0.18</sys:TimeSpan>
+    <sys:TimeSpan x:Key="FlyoutOpenDuration">0:0:0.18</sys:TimeSpan>
+    <sys:TimeSpan x:Key="FlyoutCloseDuration">0:0:0.12</sys:TimeSpan>
+    <sys:Double x:Key="FlyoutOpenFromScale">0.95</sys:Double>
+    <sys:Double x:Key="FlyoutCloseToScale">0.97</sys:Double>
+    <!-- The flyouts: 300 DIP wide, 12 px padding, 8 DIP above the toolbar. -->
+    <sys:Double x:Key="FlyoutWidth">300</sys:Double>
+    <Thickness x:Key="FlyoutPadding">12</Thickness>
+    <Thickness x:Key="FlyoutMargin">0,0,0,8</Thickness>
+    <sys:Double x:Key="FlyoutHeaderSize">12</sys:Double>
+    <Thickness x:Key="FlyoutHeaderMargin">0,8,0,4</Thickness>
+    <!-- The first header of a flyout: no gap above it, the panel padding is enough. -->
+    <Thickness x:Key="FlyoutFirstHeaderMargin">0,0,0,4</Thickness>
+    <!-- Colour swatches: a 28 DIP disc in a 40 DIP target, a ring around the chosen colour; a long press (0.6 s, moving
+         less than 8 DIP) on a custom colour removes it. -->
+    <sys:Double x:Key="SwatchSize">28</sys:Double>
+    <sys:Double x:Key="SwatchRingSize">36</sys:Double>
+    <sys:Double x:Key="SwatchRingThickness">2</sys:Double>
+    <sys:Double x:Key="SwatchOutlineThickness">1</sys:Double>
+    <sys:TimeSpan x:Key="LongPressDuration">0:0:0.6</sys:TimeSpan>
+    <sys:Double x:Key="LongPressSlop">8</sys:Double>
+    <!-- The free colour picker: saturation and brightness square, hue strip, hex field. The two gradients are the HSV
+         model itself (white to the hue, then to black), the same in both themes. -->
+    <sys:Double x:Key="ColorPickerSquareHeight">140</sys:Double>
+    <sys:Double x:Key="ColorPickerHueHeight">12</sys:Double>
+    <sys:Double x:Key="ColorPickerThumbSize">14</sys:Double>
+    <sys:Double x:Key="ColorPickerPreviewSize">28</sys:Double>
+    <!-- The hex field's gap before the buttons, and the gap between Conferma colore and Annulla operazione. -->
+    <Thickness x:Key="ColorPickerHexMargin">0,0,8,0</Thickness>
+    <Thickness x:Key="ColorPickerButtonMargin">4,0,0,0</Thickness>
+    <LinearGradientBrush x:Key="ColorPickerWhiteGradient" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#FFFFFFFF" Offset="0" />
+        <GradientStop Color="#00FFFFFF" Offset="1" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="ColorPickerBlackGradient" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#00000000" Offset="0" />
+        <GradientStop Color="#FF000000" Offset="1" />
+    </LinearGradientBrush>
+    <!-- The pen's pressure preview: a stroke from light to full pressure and back, at the pen's colour and width. -->
+    <sys:Double x:Key="PressurePreviewHeight">36</sys:Double>
+    <!-- The preset width buttons show a dot this many times the width (at 100% zoom). -->
+    <sys:Double x:Key="WidthPresetDotScale">2</sys:Double>
+    <!-- Segoe Fluent Icons glyphs. -->
+    <sys:String x:Key="GlyphPen">&#xE70F;</sys:String>
+    <sys:String x:Key="GlyphHighlighter">&#xE7E6;</sys:String>
+    <sys:String x:Key="GlyphEraser">&#xE75C;</sys:String>
+    <sys:String x:Key="GlyphSelection">&#xE8B3;</sys:String>
+    <sys:String x:Key="GlyphUndo">&#xE7A7;</sys:String>
+    <sys:String x:Key="GlyphRedo">&#xE7A6;</sys:String>
+    <sys:String x:Key="GlyphBookmark">&#xE728;</sys:String>
+    <sys:String x:Key="GlyphAdd">&#xE710;</sys:String>
+    <sys:String x:Key="GlyphBack">&#xE72B;</sys:String>
+    <sys:String x:Key="GlyphPrevious">&#xE70E;</sys:String>
+    <sys:String x:Key="GlyphNext">&#xE70D;</sys:String>
+    <sys:String x:Key="GlyphSearch">&#xE721;</sys:String>
+    <sys:String x:Key="GlyphClose">&#xE711;</sys:String>
+    <sys:String x:Key="GlyphZoomIn">&#xE8A3;</sys:String>
+    <sys:String x:Key="GlyphZoomOut">&#xE71F;</sys:String>
+    <sys:String x:Key="GlyphFitWidth">&#xE9A6;</sys:String>
+    <sys:String x:Key="GlyphMenu">&#xE700;</sys:String>
+
+    <!-- The main menu (UI-03): a round 40 px floating button at the top left, 8 DIP below the title bar and 4 DIP right of
+         the left-edge swipe zone (EdgeSwipeZoneWidth, 24: a finger swipe at the very edge opens the left panel, UI-04),
+         and its panel under it (12 px corners, the toolbar's material): 40 px entries with 8 px corners, the shortcut
+         on the right in the secondary text colour, thin separators. It appears like a flyout (fade and scale,
+         FlyoutOpenDuration, instant when Windows animations are off) and goes at once. -->
+    <Thickness x:Key="MainMenuMargin">28,48,0,0</Thickness>
+    <Thickness x:Key="MainMenuPanelMargin">0,8,0,0</Thickness>
+    <sys:Double x:Key="MainMenuPanelWidth">280</sys:Double>
+    <Thickness x:Key="MainMenuPanelPadding">4</Thickness>
+    <Thickness x:Key="MenuItemPadding">12,0,12,0</Thickness>
+    <Thickness x:Key="MenuShortcutMargin">24,0,0,0</Thickness>
+    <Thickness x:Key="MenuSeparatorMargin">8,4,8,4</Thickness>
+    <sys:Double x:Key="MenuSeparatorHeight">1</sys:Double>
+
+    <!-- The save progress line (FR-89) under the title bar, the window's width, while a save runs: an accent segment a
+         third of the width sliding across in 1.2 s; with Windows animations off a still, full line (NFR-32). -->
+    <sys:Double x:Key="SaveProgressLineHeight">3</sys:Double>
+    <sys:Double x:Key="SaveProgressBarFraction">0.3</sys:Double>
+    <sys:TimeSpan x:Key="SaveProgressCycleDuration">0:0:1.2</sys:TimeSpan>
+
+    <!-- The notices (FR-84, FR-86: restored changes, a file that cannot be saved, the journal warning) in a small panel
+         at the top centre, under the search pill, with a close button. -->
+    <Thickness x:Key="TopOverlaysMargin">0,48,0,0</Thickness>
+    <Thickness x:Key="NoticeBarMargin">0,8,0,0</Thickness>
+    <Thickness x:Key="NoticeBarPadding">14,4,4,4</Thickness>
+    <sys:Double x:Key="NoticeBarMaxWidth">520</sys:Double>
+    <Thickness x:Key="NoticeTextMargin">0,8,8,8</Thickness>
+
+    <!-- The page indicator chip (UI-05, FR-09) at the bottom right, left of the rail's 40 px strip, and the navigation
+         buttons above it (Back, previous and next mark, FR-09, FR-102): floating surfaces like the toolbar's (999 px
+         pill, the same material). They show and hide with the rail, fading in and out in 150 ms (instant when Windows
+         animations are off, NFR-32). The chip's text is 14 px; its zoom buttons are toolbar buttons. -->
+    <sys:TimeSpan x:Key="NavigationFadeDuration">0:0:0.15</sys:TimeSpan>
+    <Thickness x:Key="IndicatorChipMargin">0,0,44,12</Thickness>
+    <Thickness x:Key="IndicatorChipPadding">4</Thickness>
+    <Thickness x:Key="ChipTextPadding">12,0,12,0</Thickness>
+    <sys:Double x:Key="ChipFontSize">14</sys:Double>
+    <Thickness x:Key="NavigationButtonsMargin">0,0,0,8</Thickness>
+    <Thickness x:Key="NavigationButtonGap">6,0,0,0</Thickness>
+    <Thickness x:Key="NavigationStatusPadding">14,8,14,8</Thickness>
+
+    <!-- The search pill (FR-13, FR-105) at the top centre, 8 DIP below the title bar: a search icon, the field, the count,
+         previous / next and close; its messages (wrap, no text, unread pages) in a small panel under it. -->
+    <Thickness x:Key="SearchPillMargin">0,48,0,0</Thickness>
+    <Thickness x:Key="SearchPillPadding">14,4,4,4</Thickness>
+    <sys:Double x:Key="SearchFieldWidth">240</sys:Double>
+    <Thickness x:Key="SearchGlyphMargin">0,0,10,0</Thickness>
+    <Thickness x:Key="SearchCountMargin">10,0,4,0</Thickness>
+    <sys:Double x:Key="SearchCountMinWidth">64</sys:Double>
+    <Thickness x:Key="SearchMessageMargin">0,6,0,0</Thickness>
+    <Thickness x:Key="SearchMessagePadding">14,8,14,8</Thickness>
+    <sys:Double x:Key="SearchMessageMaxWidth">360</sys:Double>
+
+    <!-- A toolbar button: a 40 DIP round target with a 20 px icon; hover and press tints; dimmed when disabled. -->
+    <Style x:Key="ToolbarButtonStyle" TargetType="Button">
+        <Setter Property="Width" Value="{StaticResource TouchTarget}" />
+        <Setter Property="Height" Value="{StaticResource TouchTarget}" />
+        <Setter Property="Margin" Value="{StaticResource ToolbarButtonMargin}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+        <Setter Property="FontSize" Value="{StaticResource IconSize}" />
+        <Setter Property="Foreground" Value="{DynamicResource GlyphBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Stylus.IsPressAndHoldEnabled" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <views:PillBorder x:Name="Disc" Background="{TemplateBinding Background}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </views:PillBorder>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Disc" Property="Background" Value="{DynamicResource ToolbarHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Disc" Property="Background" Value="{DynamicResource ToolbarPressedBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="{StaticResource DisabledOpacity}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!-- A colour swatch: the 40 DIP target is the button; its content (disc and ring) is built by ColorSwatches. -->
+    <Style x:Key="SwatchButtonStyle" TargetType="Button">
+        <Setter Property="Width" Value="{StaticResource TouchTarget}" />
+        <Setter Property="Height" Value="{StaticResource TouchTarget}" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource GlyphBrush}" />
+        <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+        <Setter Property="FontSize" Value="{StaticResource IconSize}" />
+        <Setter Property="Stylus.IsPressAndHoldEnabled" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <views:PillBorder Background="{TemplateBinding Background}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </views:PillBorder>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource ToolbarHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="{StaticResource DisabledOpacity}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="FlyoutHeader" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="{StaticResource FlyoutHeaderSize}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource FlyoutHeaderBrush}" />
+        <Setter Property="Margin" Value="{StaticResource FlyoutHeaderMargin}" />
+    </Style>
+    <!-- The indicator chip's text ("12 / 48 · 125%"): a 40 DIP tall pill target as wide as the text, hover and press tints. -->
+    <Style x:Key="ChipTextButtonStyle" TargetType="Button">
+        <Setter Property="MinWidth" Value="{StaticResource TouchTarget}" />
+        <Setter Property="Height" Value="{StaticResource TouchTarget}" />
+        <Setter Property="Padding" Value="{StaticResource ChipTextPadding}" />
+        <Setter Property="FontSize" Value="{StaticResource ChipFontSize}" />
+        <Setter Property="Foreground" Value="{DynamicResource GlyphBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Stylus.IsPressAndHoldEnabled" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <views:PillBorder x:Name="Disc" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </views:PillBorder>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Disc" Property="Background" Value="{DynamicResource ToolbarHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Disc" Property="Background" Value="{DynamicResource ToolbarPressedBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- The confirmation dialog (ChoiceDialog): a themed window, not WPF UI's global button look. Neutral buttons with
+         the theme text on a solid fill (readable in both themes); the default button has an accent ring. -->
+    <Thickness x:Key="DialogButtonPadding">12,0,12,0</Thickness>
+    <Thickness x:Key="DialogButtonRingThickness">2</Thickness>
+    <Style x:Key="DialogButtonStyle" TargetType="Button">
+        <Setter Property="MinWidth" Value="{StaticResource TouchTarget}" />
+        <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />
+        <Setter Property="Margin" Value="4,0,0,0" />
+        <Setter Property="Padding" Value="{StaticResource DialogButtonPadding}" />
+        <Setter Property="Foreground" Value="{DynamicResource GlyphBrush}" />
+        <Setter Property="Background" Value="{DynamicResource DialogButtonBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Face" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"
+                            CornerRadius="{StaticResource InnerCornerRadius}" BorderBrush="Transparent"
+                            BorderThickness="{StaticResource DialogButtonRingThickness}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsDefault" Value="True">
+                            <Setter TargetName="Face" Property="BorderBrush" Value="{DynamicResource ToolActiveForegroundBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Face" Property="BorderBrush" Value="{DynamicResource ToolActiveForegroundBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Face" Property="Background" Value="{DynamicResource DialogButtonHoverBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- The 40 px touch targets over WPF UI's Fluent styles (ControlsDictionary, merged before this dictionary). -->
+    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="MinWidth" Value="{StaticResource TouchTarget}" />
         <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />
         <Setter Property="Margin" Value="0,0,4,0" />
     </Style>
-    <Style TargetType="RadioButton">
+    <Style TargetType="RadioButton" BasedOn="{StaticResource {x:Type RadioButton}}">
         <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
-        <Setter Property="Margin" Value="0,0,12,0" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="MinWidth" Value="0" />
     </Style>
-    <Style TargetType="CheckBox">
+    <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
         <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
@@ -206,7 +475,7 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Bar" Property="BorderBrush" Value="{StaticResource EdgePanelTabIndicatorBrush}" />
+                            <Setter TargetName="Bar" Property="BorderBrush" Value="{DynamicResource EdgePanelTabIndicatorBrush}" />
                             <Setter Property="FontWeight" Value="SemiBold" />
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -214,8 +483,43 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <Style x:Key="SectionLabel" TargetType="TextBlock">
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Margin" Value="{StaticResource SectionGap}" />
+    <!-- A main menu entry: a 40 DIP tall row as wide as the panel, text on the left (the content), hover and press
+         tints with 8 px corners, dimmed when disabled; keyboard focus shows the system focus rectangle. -->
+    <Style x:Key="MenuItemStyle" TargetType="Button">
+        <Setter Property="MinHeight" Value="{StaticResource TouchTarget}" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="Padding" Value="{StaticResource MenuItemPadding}" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Foreground" Value="{DynamicResource GlyphBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Stylus.IsPressAndHoldEnabled" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Row" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"
+                            CornerRadius="{StaticResource InnerCornerRadius}">
+                        <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Row" Property="Background" Value="{DynamicResource ToolbarHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Row" Property="Background" Value="{DynamicResource ToolbarPressedBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="{StaticResource DisabledOpacity}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!-- The shortcut beside a menu entry ("Ctrl+O"): the secondary text colour. -->
+    <Style x:Key="MenuShortcutText" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource FlyoutHeaderBrush}" />
+        <Setter Property="Margin" Value="{StaticResource MenuShortcutMargin}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 </ResourceDictionary>

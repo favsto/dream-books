@@ -48,11 +48,7 @@ internal static class Strings
 
     public static string Redo => Get(nameof(Redo));
 
-    public static string Zoom => Get(nameof(Zoom));
-
     public static string FitWidth => Get(nameof(FitWidth));
-
-    public static string Panel => Get(nameof(Panel));
 
     public static string ErrorFileNotFound => Get(nameof(ErrorFileNotFound));
 
@@ -169,9 +165,7 @@ internal static class Strings
 
     public static string PageIndicatorLabel => Get(nameof(PageIndicatorLabel));
 
-    public static string GoToPage => Get(nameof(GoToPage));
-
-    /// <summary>The page field opened from the rail's indicator (the panel's field is <see cref="GoToPage"/>).</summary>
+    /// <summary>The go-to-page field of the page indicator chip (FR-09).</summary>
     public static string GoToPageIndicatorField => Get(nameof(GoToPageIndicatorField));
 
     public static string GoToPageHint => Get(nameof(GoToPageHint));
@@ -236,8 +230,6 @@ internal static class Strings
     public static string PreviousResult => Get(nameof(PreviousResult));
 
     public static string NextResult => Get(nameof(NextResult));
-
-    public static string ClearSearch => Get(nameof(ClearSearch));
 
     /// <summary>Automation name of the result count.</summary>
     public static string SearchCountLabel => Get(nameof(SearchCountLabel));
@@ -341,6 +333,171 @@ internal static class Strings
 
     /// <summary>Highlighter colour name (FR-41).</summary>
     public static string HighlighterPurple => Get(nameof(HighlighterPurple));
+
+    /// <summary>Toolbar button of the lasso, disabled until phase 5 (UI-02).</summary>
+    public static string ToolSelection => Get(nameof(ToolSelection));
+
+    /// <summary>Toolbar button of the page bookmark, disabled until bookmarks exist (UI-02).</summary>
+    public static string ToolBookmark => Get(nameof(ToolBookmark));
+
+    /// <summary>Pen preset colour name (FR-25).</summary>
+    public static string PenBlack => Get(nameof(PenBlack));
+
+    /// <summary>Pen preset colour name (FR-25).</summary>
+    public static string PenDarkBlue => Get(nameof(PenDarkBlue));
+
+    /// <summary>Pen preset colour name (FR-25).</summary>
+    public static string PenBlue => Get(nameof(PenBlue));
+
+    /// <summary>Pen preset colour name (FR-25).</summary>
+    public static string PenRed => Get(nameof(PenRed));
+
+    /// <summary>Pen preset colour name (FR-25).</summary>
+    public static string PenGreen => Get(nameof(PenGreen));
+
+    /// <summary>Pen preset colour name (FR-25).</summary>
+    public static string PenOrange => Get(nameof(PenOrange));
+
+    /// <summary>Pen preset colour name (FR-25).</summary>
+    public static string PenPurple => Get(nameof(PenPurple));
+
+    /// <summary>Pen preset colour name (FR-25).</summary>
+    public static string PenGrey => Get(nameof(PenGrey));
+
+    /// <summary>The pen's option panel (UI-02).</summary>
+    public static string PenOptions => Get(nameof(PenOptions));
+
+    /// <summary>The eraser's option panel (UI-02).</summary>
+    public static string EraserOptions => Get(nameof(EraserOptions));
+
+    /// <summary>"Clear all on this page" in the eraser panel (UI-02).</summary>
+    public static string ClearPage => Get(nameof(ClearPage));
+
+    /// <summary>The confirmation step of clearing the page (UI-02).</summary>
+    public static string ClearPageConfirm => Get(nameof(ClearPageConfirm));
+
+    /// <summary>The button that confirms clearing the page (UI-02).</summary>
+    public static string ClearPageConfirmYes => Get(nameof(ClearPageConfirmYes));
+
+    /// <summary>Cancels a confirmation step (not "Annulla", which is undo).</summary>
+    public static string Cancel => Get(nameof(Cancel));
+
+    /// <summary>The "+" swatch that opens the colour picker (UI-02 custom palette).</summary>
+    public static string AddCustomColor => Get(nameof(AddCustomColor));
+
+    /// <summary>Removing a custom colour from the palette (UI-02 custom palette).</summary>
+    public static string RemoveCustomColor => Get(nameof(RemoveCustomColor));
+
+    /// <summary>The settings file could not be written (FR-110).</summary>
+    public static string WarnSettingsNotSaved => Get(nameof(WarnSettingsNotSaved));
+
+    /// <summary>The help text of the settings warning in the notices (FR-110).</summary>
+    public static string SettingsWarningLabel => Get(nameof(SettingsWarningLabel));
+
+    /// <summary>The floating toolbar (UI-02).</summary>
+    public static string ToolbarLabel => Get(nameof(ToolbarLabel));
+    public static string TitleBarMinimize => Get(nameof(TitleBarMinimize));
+    public static string TitleBarMaximize => Get(nameof(TitleBarMaximize));
+    public static string TitleBarClose => Get(nameof(TitleBarClose));
+
+    /// <summary>The item status of the active tool's button (UI-02, NFR-31).</summary>
+    public static string ToolActive => Get(nameof(ToolActive));
+
+    /// <summary>The pen panel's pressure preview (UI-02).</summary>
+    public static string PressurePreview => Get(nameof(PressurePreview));
+
+    /// <summary>A preset pen width button; {0} is the width in millimetres (UI-02).</summary>
+    public static string WidthPresetNameFormat => Get(nameof(WidthPresetNameFormat));
+
+    /// <summary>A custom palette swatch; {0} is its hex code (UI-02).</summary>
+    public static string CustomColorNameFormat => Get(nameof(CustomColorNameFormat));
+
+    /// <summary>How to remove a custom colour (UI-02).</summary>
+    public static string CustomColorHelp => Get(nameof(CustomColorHelp));
+
+    /// <summary>The free colour picker (UI-02).</summary>
+    public static string ColorPicker => Get(nameof(ColorPicker));
+
+    /// <summary>The colour picker's hue slider (UI-02).</summary>
+    public static string ColorPickerHue => Get(nameof(ColorPickerHue));
+
+    /// <summary>The colour picker's saturation and brightness square (UI-02).</summary>
+    public static string ColorPickerSquare => Get(nameof(ColorPickerSquare));
+
+    /// <summary>The colour picker's hex field (UI-02).</summary>
+    public static string ColorPickerHex => Get(nameof(ColorPickerHex));
+
+    /// <summary>The hex field's hint (UI-02).</summary>
+    public static string ColorPickerHexHint => Get(nameof(ColorPickerHexHint));
+
+    /// <summary>Adds the picked colour to the custom palette (UI-02); not the "+" swatch's name.</summary>
+    public static string ColorPickerConfirm => Get(nameof(ColorPickerConfirm));
+
+    /// <summary>The highlighter panel's tip header (UI-02).</summary>
+    public static string HighlighterTip => Get(nameof(HighlighterTip));
+
+    /// <summary>The item status of the chosen colour swatch (UI-02, NFR-31).</summary>
+    public static string SwatchChosen => Get(nameof(SwatchChosen));
+
+    /// <summary>The page indicator chip at the bottom right (UI-05), as a group.</summary>
+    public static string PageIndicatorChipLabel => Get(nameof(PageIndicatorChipLabel));
+
+    /// <summary>The help text of the chip's indicator: tap for the page field, long press or hover for the zoom (UI-05).</summary>
+    public static string PageIndicatorHelp => Get(nameof(PageIndicatorHelp));
+
+    /// <summary>The chip's zoom buttons (UI-05, FR-06).</summary>
+    public static string ZoomIn => Get(nameof(ZoomIn));
+
+    public static string ZoomOut => Get(nameof(ZoomOut));
+
+    /// <summary>The navigation buttons above the chip: Back, previous and next mark (FR-09, FR-102).</summary>
+    public static string NavigationLabel => Get(nameof(NavigationLabel));
+
+    /// <summary>The search pill at the top centre (FR-13) and its close button (Esc).</summary>
+    public static string SearchPillLabel => Get(nameof(SearchPillLabel));
+
+    public static string CloseSearch => Get(nameof(CloseSearch));
+
+    /// <summary>The main menu (UI-03): its round button, its panel and the entries' texts.</summary>
+    public static string MainMenu => Get(nameof(MainMenu));
+
+    public static string MainMenuPanel => Get(nameof(MainMenuPanel));
+
+    public static string MenuOpen => Get(nameof(MenuOpen));
+
+    public static string MenuSaveAs => Get(nameof(MenuSaveAs));
+
+    public static string MenuRecentFiles => Get(nameof(MenuRecentFiles));
+
+    public static string MenuExport => Get(nameof(MenuExport));
+
+    public static string MenuSearchName => Get(nameof(MenuSearchName));
+
+    public static string MenuSettings => Get(nameof(MenuSettings));
+
+    /// <summary>The help text of the entries that arrive in phase 4b.</summary>
+    public static string MenuNotYetAvailable => Get(nameof(MenuNotYetAvailable));
+
+    /// <summary>The shortcuts shown beside the menu entries (and their accelerator keys for screen readers).</summary>
+    public static string ShortcutOpen => Get(nameof(ShortcutOpen));
+
+    public static string ShortcutSave => Get(nameof(ShortcutSave));
+
+    public static string ShortcutSaveAs => Get(nameof(ShortcutSaveAs));
+
+    public static string ShortcutMarks => Get(nameof(ShortcutMarks));
+
+    public static string ShortcutPages => Get(nameof(ShortcutPages));
+
+    public static string ShortcutSearch => Get(nameof(ShortcutSearch));
+
+    /// <summary>The title bar's file name with the dirty mark (UI-06): {0} is the file name.</summary>
+    public static string DocumentTitleDirtyFormat => Get(nameof(DocumentTitleDirtyFormat));
+
+    /// <summary>The notices at the top centre (FR-84, FR-86) and their close button.</summary>
+    public static string NoticeBarLabel => Get(nameof(NoticeBarLabel));
+
+    public static string CloseNotice => Get(nameof(CloseNotice));
 
     private static string Get(string name) =>
         Manager.GetString(name, System.Globalization.CultureInfo.CurrentUICulture) ?? name;

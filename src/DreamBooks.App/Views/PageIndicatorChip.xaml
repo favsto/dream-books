@@ -1,0 +1,40 @@
+<UserControl x:Class="DreamBooks.App.Views.PageIndicatorChip"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="clr-namespace:DreamBooks.App.Resources"
+             xmlns:views="clr-namespace:DreamBooks.App.Views"
+             HorizontalAlignment="Right" VerticalAlignment="Bottom" Focusable="False" IsTabStop="False">
+    <!-- The page indicator chip (UI-05) at the bottom right: "12 / 48 · 125%". A tap opens the go-to-page field in its
+         place (FR-09: Enter goes, Esc cancels, invalid numbers are ignored, a press outside closes it); a long press, the
+         mouse (or the pen) hovering, or the keyboard on it shows the zoom − / + and fit width buttons on its left. The data context is
+         the MainViewModel. It shows and hides with the rail (the window wires it). Pen rule: only the surface hit-tests
+         and it carries the inert stylus plug-in; on it the pen presses the controls and types in the field, like a
+         finger; around it the pen inks; hidden, it takes nothing. -->
+    <views:FloatingSurface x:Name="Surface" CornerRadius="{StaticResource PillCornerRadius}" Stylus.IsPressAndHoldEnabled="False"
+                           AutomationProperties.Name="{x:Static res:Strings.PageIndicatorChipLabel}">
+        <StackPanel Orientation="Horizontal" Margin="{StaticResource IndicatorChipPadding}">
+            <Button x:Name="ZoomOutButton" Style="{StaticResource ToolbarButtonStyle}" Content="{StaticResource GlyphZoomOut}"
+                    Visibility="Collapsed" Command="{Binding ZoomVm.ZoomOutCommand}"
+                    ToolTip="{x:Static res:Strings.ZoomOut}" AutomationProperties.Name="{x:Static res:Strings.ZoomOut}" />
+            <Button x:Name="ZoomInButton" Style="{StaticResource ToolbarButtonStyle}" Content="{StaticResource GlyphZoomIn}"
+                    Visibility="Collapsed" Command="{Binding ZoomVm.ZoomInCommand}"
+                    ToolTip="{x:Static res:Strings.ZoomIn}" AutomationProperties.Name="{x:Static res:Strings.ZoomIn}" />
+            <Button x:Name="FitWidthButton" Style="{StaticResource ToolbarButtonStyle}" Content="{StaticResource GlyphFitWidth}"
+                    Visibility="Collapsed" Command="{Binding Viewport.FitWidthCommand}"
+                    ToolTip="{x:Static res:Strings.FitWidth}" AutomationProperties.Name="{x:Static res:Strings.FitWidth}" />
+            <Button x:Name="IndicatorButton" Style="{StaticResource ChipTextButtonStyle}"
+                    Content="{Binding Viewport.IndicatorText}" Click="OnIndicatorClick"
+                    PreviewMouseLeftButtonDown="OnIndicatorPressed" PreviewMouseMove="OnIndicatorMoved"
+                    PreviewMouseLeftButtonUp="OnIndicatorReleased" LostMouseCapture="OnIndicatorCaptureLost"
+                    AutomationProperties.Name="{x:Static res:Strings.PageIndicatorLabel}"
+                    AutomationProperties.HelpText="{x:Static res:Strings.PageIndicatorHelp}" />
+            <TextBox x:Name="GoToPageBox" Visibility="Collapsed" InputScope="Number" VerticalAlignment="Center"
+                     MinWidth="{StaticResource GoToPageFieldWidth}" MinHeight="{StaticResource TouchTarget}"
+                     VerticalContentAlignment="Center"
+                     ToolTip="{x:Static res:Strings.GoToPageHint}"
+                     AutomationProperties.Name="{x:Static res:Strings.GoToPageIndicatorField}"
+                     AutomationProperties.HelpText="{x:Static res:Strings.GoToPageHint}"
+                     PreviewKeyDown="OnGoToPageKeyDown" LostKeyboardFocus="OnGoToPageLostFocus" />
+        </StackPanel>
+    </views:FloatingSurface>
+</UserControl>

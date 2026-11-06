@@ -67,6 +67,7 @@ public sealed class MainViewModel : ObservableObject
     private DocumentLock? _lock;
     private bool _startupRecoveryDone;
     private string? _journalWarning;
+    private string? _settingsWarning;
     private bool _listenerFailed;
 
     // Marks (FR-100..FR-103): a new index per document, live tracking of loaded pages, and a background scan over
@@ -98,11 +99,13 @@ public sealed class MainViewModel : ObservableObject
     /// </param>
     /// <param name="positions">Where the last position of each document is remembered (FR-04); null disables it.</param>
     /// <param name="scheduler">Debounce timers; the UI thread's dispatcher when null.</param>
+    /// <param name="clock">The time in the scheduler's terms, for the toolbar's visibility; a stopwatch when null.</param>
     public MainViewModel(
         IFileDialogService dialogs,
         RecoveryStore? recovery = null,
         ViewPositionStore? positions = null,
-        IDelayScheduler? scheduler = null)
+        IDelayScheduler? scheduler = null,
+        Func<TimeSpan>? clock = null)
     {
         ArgumentNullException.ThrowIfNull(dialogs);
         _dialogs = dialogs;
@@ -136,6 +139,16 @@ public sealed class MainViewModel : ObservableObject
         RedoCommand = new AsyncRelayCommand(RedoAsync, () => Session is not null && Undo.CanRedo);
         SaveCommand = new AsyncRelayCommand(() => SaveCoreAsync(saveAs: false), CanSave);
         SaveAsCommand = new AsyncRelayCommand(() => SaveCoreAsync(saveAs: true), CanSave);
+        Toolbar = new ToolbarViewModel(Tools, UndoCommand, RedoCommand, () => Editor, _scheduler, clock ?? StopwatchClock());
+    }
+
+    /// <summary>The floating toolbar, its option panels and its automatic visibility (UI-02, section 4).</summary>
+    public ToolbarViewModel Toolbar { get; }
+
+    private static Func<TimeSpan> StopwatchClock()
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        return () => watch.Elapsed;
     }
 
     /// <summary>Raised after a successful Save or Save as (the session is already marked saved).</summary>
@@ -186,7 +199,13 @@ public sealed class MainViewModel : ObservableObject
     public PageEditor? Editor
     {
         get => _editor;
-        private set => SetProperty(ref _editor, value);
+        private set
+        {
+            if (SetProperty(ref _editor, value))
+            {
+                Toolbar?.Eraser.Refresh();
+            }
+        }
     }
 
     /// <summary>
@@ -233,6 +252,16 @@ public sealed class MainViewModel : ObservableObject
             System.IO.Path.GetFileName(session.Path),
             Strings.AppTitle);
 
+    /// <summary>
+    /// The title bar's text (UI-06): the file name alone, with a "*" after it while there are unsaved changes; the
+    /// app name when no document is open. The window's own title (<see cref="WindowTitle"/>) keeps the app name.
+    /// </summary>
+    public string DocumentTitle => Session is not { } session
+        ? Strings.AppTitle
+        : session.IsDirty
+            ? string.Format(CultureInfo.CurrentCulture, Strings.DocumentTitleDirtyFormat, System.IO.Path.GetFileName(session.Path))
+            : System.IO.Path.GetFileName(session.Path);
+
     /// <summary>Current page, 1-based; 0 when no document is open.</summary>
     public int PageNumber
     {
@@ -277,6 +306,16 @@ public sealed class MainViewModel : ObservableObject
     {
         get => _journalWarning;
         private set => SetProperty(ref _journalWarning, value);
+    }
+
+    /// <summary>
+    /// "The settings were not saved" (FR-110) while the settings file cannot be written, null otherwise; set by the
+    /// window from the settings service, shown in the notices.
+    /// </summary>
+    public string? SettingsWarning
+    {
+        get => _settingsWarning;
+        set => SetProperty(ref _settingsWarning, value);
     }
 
     /// <summary>Crash recovery over the recovery store, or null when the view model has none.</summary>
@@ -1208,6 +1247,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(Renderer));
         OnPropertyChanged(nameof(IsDirty));
         OnPropertyChanged(nameof(WindowTitle));
+        OnPropertyChanged(nameof(DocumentTitle));
         SaveCommand.NotifyCanExecuteChanged();
         SaveAsCommand.NotifyCanExecuteChanged();
         PageCount = session.PageCount;
@@ -1493,6 +1533,16 @@ public sealed class MainViewModel : ObservableObject
         if (e.PropertyName == nameof(ZoomViewModel.IsLocked))
         {
             SetScanPause(ref _scanPausedForInk, ZoomVm.IsLocked);
+
+            // The same signal is "the pen is writing or erasing" for the toolbar's automatic visibility (section 4).
+            if (ZoomVm.IsLocked)
+            {
+                Toolbar.PenDown();
+            }
+            else
+            {
+                Toolbar.PenUp();
+            }
         }
     }
 
@@ -1794,6 +1844,7 @@ public sealed class MainViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(IsDirty));
                 OnPropertyChanged(nameof(WindowTitle)); // Save as changed the file name
+                OnPropertyChanged(nameof(DocumentTitle));
             }
 
             if (result.Saved is { } saved)
@@ -1953,6 +2004,7 @@ public sealed class MainViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(IsDirty));
             OnPropertyChanged(nameof(WindowTitle));
+            OnPropertyChanged(nameof(DocumentTitle));
         }
     }
 
@@ -2003,6 +2055,7 @@ public sealed class MainViewModel : ObservableObject
 
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
+        Toolbar.Eraser.Refresh(); // the page's strokes changed: "Clear all on this page" follows
     }
 
     /// <summary>

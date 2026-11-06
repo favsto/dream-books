@@ -70,6 +70,7 @@ public sealed class DocumentViewportViewModel : ObservableObject
         PageDownCommand = new RelayCommand(() => PageStep(1));
         HomeCommand = new RelayCommand(GoHome);
         EndCommand = new RelayCommand(GoEnd);
+        FitWidthCommand = new RelayCommand(FitWidth);
         History.Changed += (_, _) => BackCommand.NotifyCanExecuteChanged();
     }
 
@@ -163,6 +164,12 @@ public sealed class DocumentViewportViewModel : ObservableObject
     public IRelayCommand EndCommand { get; }
 
     /// <summary>
+    /// Fits the widest page to the width (FR-07; the indicator chip's button, which the debug panel had): unlike the
+    /// double tap, it never leaves fit-width mode when it is already on.
+    /// </summary>
+    public IRelayCommand FitWidthCommand { get; }
+
+    /// <summary>
     /// Loads and shows a page after a go-to-page jump (set by <see cref="MainViewModel"/>: the session's
     /// <see cref="DocumentSession.GoToPageAsync"/> with its error handling). Without it the page is only reported
     /// as current.
@@ -224,6 +231,14 @@ public sealed class DocumentViewportViewModel : ObservableObject
         else if (_viewportWidthDip > 0)
         {
             ApplyZoom(layout.FitWidthZoom(_viewportWidthDip), _viewportWidthDip / 2, anchorY, fit: true);
+        }
+    }
+
+    private void FitWidth()
+    {
+        if (!_zoom.IsFitWidth)
+        {
+            ToggleFitWidth(null);
         }
     }
 

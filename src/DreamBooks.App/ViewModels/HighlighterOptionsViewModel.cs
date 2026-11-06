@@ -19,10 +19,27 @@ public sealed class HighlighterOptionsViewModel : ObservableObject
     /// <summary>The largest chisel angle in degrees (FR-46).</summary>
     public const double MaxChiselAngleDeg = 180;
 
+    private readonly CustomPaletteViewModel _palette;
     private HighlighterSettings _settings = HighlighterSettings.Default;
 
+    /// <summary>Options with a palette of their own (tests; the app shares the tools' palette).</summary>
     public HighlighterOptionsViewModel()
+        : this(new CustomPaletteViewModel())
     {
+    }
+
+    /// <param name="palette">The custom colours, shared with the pen (UI-02).</param>
+    public HighlighterOptionsViewModel(CustomPaletteViewModel palette)
+    {
+        ArgumentNullException.ThrowIfNull(palette);
+        _palette = palette;
+        _palette.PaletteChanged += (_, _) => OnPropertyChanged(nameof(CustomColors));
+        AddCustomColorCommand = new RelayCommand<InkColor>(c =>
+        {
+            _palette.Add(c);
+            Update(_settings with { Color = c with { A = HighlighterPresets.Alpha } });
+        });
+        RemoveCustomColorCommand = new RelayCommand<InkColor>(_palette.Remove);
         Swatches =
         [
             new(HighlighterPresets.Yellow, Strings.HighlighterYellow),
@@ -43,6 +60,15 @@ public sealed class HighlighterOptionsViewModel : ObservableObject
 
     /// <summary>Selects a swatch's colour; the highlighter alpha is kept whatever the colour's own alpha.</summary>
     public IRelayCommand<InkColor> SelectColorCommand { get; }
+
+    /// <summary>The shared custom colours (UI-02), oldest first, with the highlighter alpha (a custom colour is a hue).</summary>
+    public IReadOnlyList<InkColor> CustomColors => _palette.ColorsWithAlpha(HighlighterPresets.Alpha);
+
+    /// <summary>A colour from the picker: added to the shared palette and selected (alpha 89 whatever it had).</summary>
+    public IRelayCommand<InkColor> AddCustomColorCommand { get; }
+
+    /// <summary>Removes a colour from the shared palette; the highlighter keeps its colour.</summary>
+    public IRelayCommand<InkColor> RemoveCustomColorCommand { get; }
 
     /// <summary>The settings new highlighter strokes are committed with.</summary>
     public HighlighterSettings Settings => _settings;

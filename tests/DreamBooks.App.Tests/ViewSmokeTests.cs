@@ -57,7 +57,7 @@ public sealed class ViewSmokeTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -72,24 +72,30 @@ public sealed class ViewSmokeTests : IDisposable
             {
                 LayOut((FrameworkElement)window.Content, 1000, 2000);
                 var vm = (MainViewModel)window.DataContext;
-                var named = Descendants((DependencyObject)window.Content)
+
+                // The toolbar's button and the highlighter flyout (the debug panel's controls are gone, phase 4a).
+                var toolbar = window.FloatingToolbar;
+                toolbar.AnimationsEnabled = () => false;
+                var tool = toolbar.HighlighterButton;
+                Assert.Equal(Strings.ToolHighlighter, AutomationProperties.GetName(tool));
+                ToolbarViewTests.Invoke(tool);
+                Assert.Equal(AppTool.Highlighter, vm.Tools.ActiveTool);
+                var flyout = (HighlighterOptionsFlyout)ToolbarViewTests.OpenFlyout(toolbar, OptionsPanel.Highlighter);
+                window.UpdateLayout();
+                var named = Descendants(flyout)
                     .OfType<Control>()
                     .Where(c => !string.IsNullOrEmpty(AutomationProperties.GetName(c)))
                     .ToList();
                 Control Named(string name) => Assert.Single(named, c => AutomationProperties.GetName(c) == name);
 
+                // The six presets, as 40 px keyboard-reachable swatches (their behaviour: ColorSwatchesTests).
+                Assert.Same(vm.Tools.Highlighter.Swatches, flyout.Swatches.Presets);
                 foreach (var swatch in vm.Tools.Highlighter.Swatches)
                 {
                     var button = Assert.IsType<Button>(Named(swatch.Name));
-                    Assert.Same(vm.Tools.Highlighter.SelectColorCommand, button.Command);
-                    Assert.Equal(swatch.Color, button.CommandParameter);
                     Assert.True(button.Focusable && button.IsTabStop);
-                    Assert.True(button.MinHeight >= 40 && button.MinWidth >= 40);
+                    Assert.True(button.ActualHeight >= 40 && button.ActualWidth >= 40);
                 }
-
-                var tool = Assert.IsType<RadioButton>(Named(Strings.ToolHighlighter));
-                tool.IsChecked = true;
-                Assert.Equal(AppTool.Highlighter, vm.Tools.ActiveTool);
 
                 var chisel = Assert.IsType<RadioButton>(Named(Strings.HighlighterTipChisel));
                 chisel.IsChecked = true;
@@ -113,7 +119,7 @@ public sealed class ViewSmokeTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }
@@ -132,7 +138,7 @@ public sealed class ViewSmokeTests : IDisposable
     }
 
     [Fact]
-    public void Main_window_has_the_save_buttons_the_saving_indicator_and_the_title_binding()
+    public void Main_window_has_the_save_entries_the_saving_line_and_the_title_binding()
     {
         WpfTestThread.Run(() =>
         {
@@ -141,15 +147,21 @@ public sealed class ViewSmokeTests : IDisposable
             {
                 LayOut((FrameworkElement)window.Content, 1000, 700);
                 var vm = (MainViewModel)window.DataContext;
-                Assert.Same(vm.SaveCommand, window.SaveButton.Command);
-                Assert.Same(vm.SaveAsCommand, window.SaveAsButton.Command);
-                Assert.Equal(Strings.Save, AutomationProperties.GetName(window.SaveButton));
-                Assert.Equal(Strings.SaveAs, AutomationProperties.GetName(window.SaveAsButton));
-                Assert.True(window.SaveButton.MinHeight >= 40 && window.SaveAsButton.MinHeight >= 40);
-                Assert.Equal(Visibility.Collapsed, window.SavingIndicator.Visibility); // not saving
+                var menu = window.MainMenu;
+                menu.AnimationsEnabled = () => false;
+                menu.Open();
+                window.UpdateLayout();
+                Assert.Same(vm.SaveCommand, menu.SaveItem.Command);
+                Assert.Same(vm.SaveAsCommand, menu.SaveAsItem.Command);
+                Assert.Equal(Strings.Save, AutomationProperties.GetName(menu.SaveItem));
+                Assert.Equal(Strings.SaveAs, AutomationProperties.GetName(menu.SaveAsItem));
+                Assert.True(menu.SaveItem.ActualHeight >= 40 && menu.SaveAsItem.ActualHeight >= 40);
+                Assert.False(menu.SaveItem.IsEnabled); // no document
+                Assert.Equal(Visibility.Collapsed, window.SaveLine.Visibility); // not saving
                 Assert.Equal(Strings.AppTitle, window.Title);
-                Assert.Equal(Visibility.Collapsed, window.JournalWarningText.Visibility); // no journal fault
-                Assert.Equal(Strings.JournalWarningLabel, AutomationProperties.GetName(window.JournalWarningText));
+                Assert.Equal(Strings.AppTitle, window.TitleNameText.Text);
+                Assert.Equal(Visibility.Collapsed, window.Notices.Visibility); // no notice, no journal fault
+                Assert.Equal(Strings.JournalWarningLabel, AutomationProperties.GetHelpText(window.Notices.WarningText));
                 Assert.EndsWith(Path.Combine("DreamBooks", "recovery"), MainWindow.RecoveryRoot(), StringComparison.OrdinalIgnoreCase);
 
                 var gestures = window.InputBindings.OfType<KeyBinding>()
@@ -160,7 +172,7 @@ public sealed class ViewSmokeTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }

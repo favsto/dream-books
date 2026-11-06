@@ -22,19 +22,20 @@ namespace DreamBooks.App.Views;
 /// <summary>
 /// The fading scroll rail on the document's right edge (UI-07, design B): a knob showing the position, a 40 px strip
 /// where a tap jumps and a drag scrubs through the document (the position before is recorded for Back on the first
-/// move of a press, FR-09), one large preview of the page at the knob while scrubbing, and the "12 / 48 · 125%"
-/// indicator that opens a page field on tap. It appears while the user scrolls and near the edge and fades out after
-/// the idle delay (<see cref="RailVisibilityState"/>; instant when Windows animations are off, opaque without shadow
-/// when transparency effects are off, NFR-32).
+/// move of a press, FR-09) and one large preview of the page at the knob while scrubbing. It appears while the user
+/// scrolls or zooms and near the edge and fades out after the idle delay (<see cref="RailVisibilityState"/>; instant
+/// when Windows animations are off, opaque without shadow when transparency effects are off, NFR-32). The window's
+/// indicator chip ("12 / 48 · 125%", UI-05) and navigation buttons show and hide with it (<see cref="ShownChanged"/>)
+/// and keep it shown while they are used (<see cref="SetExternalHold"/>).
 /// </summary>
 /// <remarks>
-/// Nothing of the rail hit-tests: the pen always reaches the page under it and inks (FR-30). Fingers and the mouse
-/// reach it through <see cref="DocumentView"/>, which routes their presses by position (<see cref="ZoneAt"/>) to
-/// <see cref="PointerDown"/> / <see cref="OpenGoToPage"/>. The position fraction is the scroll offset over the
+/// Nothing of the rail hit-tests but the knob's pen grip: the pen reaches the page under it and inks (FR-30). Fingers
+/// and the mouse reach it through <see cref="DocumentView"/>, which routes their presses by position
+/// (<see cref="ZoneAt"/>) to <see cref="PointerDown"/>. The position fraction is the scroll offset over the
 /// scrollable range (extent minus viewport), both from the view model, the only writer of the position (scrubbing
 /// calls <see cref="DocumentViewportViewModel.SetScroll"/>). Nothing scrolls while a page is inking
-/// (<see cref="CanScroll"/>). Only the page field, while open, takes keyboard focus. The marks' ticks (FR-101) are
-/// one decorative layer over the bar and under the knob, placed with the knob's own mapping (see UpdateTicks).
+/// (<see cref="CanScroll"/>). The rail never takes keyboard focus. The marks' ticks (FR-101) are one decorative layer
+/// over the bar and under the knob, placed with the knob's own mapping (see UpdateTicks).
 /// </remarks>
 public partial class ScrollRail : UserControl
 {
@@ -59,18 +60,19 @@ public partial class ScrollRail : UserControl
     private bool _tapMoved;
     private double _tapY;
     private bool _hovering;
-    private bool _editing;
+    private bool _externalHold;
     private bool _listening;
     private double _grab;
     private int _previewPage = -1;
     private CancellationTokenSource? _previewCancel;
     private bool _bubbleShown;
-    private IInputElement? _focusBefore;
+    private (bool Shown, bool HasDocument) _reported;
 
     public ScrollRail()
     {
         InitializeComponent();
-        _state = new RailVisibilityState(() => _clock.Elapsed, default);
+        Clock = () => _clock.Elapsed;
+        _state = new RailVisibilityState(() => Clock(), default);
         _idleTimer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher);
         _idleTimer.Tick += (_, _) =>
         {
@@ -97,7 +99,6 @@ public partial class ScrollRail : UserControl
                 SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
             }
 
-            CloseGoToPage(restoreFocus: false);
             if (_dragging)
             {
                 EndDrag();
@@ -110,6 +111,12 @@ public partial class ScrollRail : UserControl
             SetRendering(false);
         };
     }
+
+    /// <summary>
+    /// The time the rail's visibility (fade in, 1.5 s idle, fade out) is measured in: a stopwatch; tests that are not
+    /// about the timing stop it, so a slow test thread never sees the rail fade out under its assertions.
+    /// </summary>
+    internal Func<TimeSpan> Clock { get; set; }
 
     /// <summary>The document position the rail shows and moves; set by <see cref="DocumentView"/>.</summary>
     internal DocumentViewportViewModel? Model
@@ -222,12 +229,25 @@ public partial class ScrollRail : UserControl
 
     internal bool IsShown => _state.Phase != RailPhase.Hidden;
 
+    /// <summary>
+    /// True while the rail fades in or is fully shown (not while it fades out or is hidden): what the indicator chip and
+    /// the navigation buttons follow, so they take no input once the rail starts to go.
+    /// </summary>
+    internal bool IsShownForOverlays => _state.Phase is RailPhase.FadingIn or RailPhase.Visible;
+
+    /// <summary>True with a document's layout: without one the chip and the buttons are not there at all.</summary>
+    internal bool HasDocument => _model?.Layout is not null;
+
+    /// <summary>
+    /// Raised when <see cref="IsShownForOverlays"/> or <see cref="HasDocument"/> changes (on the UI thread, as the rail
+    /// shows, starts to fade out, hides, or gets or loses a document).
+    /// </summary>
+    internal event EventHandler? ShownChanged;
+
     internal bool IsDragging => _dragging;
 
     /// <summary>A finger or the mouse is down on the strip: dragging the knob, or a press off it that may be a tap.</summary>
     internal bool IsPressed => _dragging || _tapPending;
-
-    internal bool IsEditing => _editing;
 
     internal double KnobHeight => Knob.Height;
 
@@ -246,7 +266,7 @@ public partial class ScrollRail : UserControl
     /// The part of the rail under a point in rail coordinates while the rail is shown, otherwise none (the
     /// document's). For the pen only the knob counts (its bounds plus <c>RailKnobPenSlop</c>): anywhere else on the
     /// rail it writes. For a finger or the mouse the knob has a wider, taller zone reaching into the page, then the
-    /// strip and the indicator.
+    /// strip.
     /// </summary>
     internal RailZone ZoneAt(Point point, PointerKind kind = PointerKind.Finger)
     {
@@ -265,23 +285,13 @@ public partial class ScrollRail : UserControl
             return RailZone.Knob;
         }
 
-        if (point.X >= ActualWidth - Strip.Width && point.X <= ActualWidth)
-        {
-            return RailZone.Strip;
-        }
-
-        return IndicatorButton.Visibility == Visibility.Visible && BoundsOf(IndicatorButton).Contains(point)
-            ? RailZone.Indicator
-            : RailZone.None;
+        return point.X >= ActualWidth - Strip.Width && point.X <= ActualWidth ? RailZone.Strip : RailZone.None;
     }
-
-    /// <summary>True when a point (rail coordinates) is on the open page field.</summary>
-    internal bool IsOnGoToPageBox(Point point) => _editing && BoundsOf(GoToPageBox).Contains(point);
 
     /// <summary>A point in rail coordinates as a y on the track (what <see cref="PointerDown"/> takes).</summary>
     internal double TrackYAt(Point point) => TranslatePoint(point, Track).Y;
 
-    /// <summary>The mouse (not the pen) is over the strip or the indicator: the rail stays while it is.</summary>
+    /// <summary>The mouse (not the pen) is over the strip: the rail stays while it is.</summary>
     internal void SetHover(bool hovering)
     {
         if (hovering != _hovering)
@@ -289,6 +299,27 @@ public partial class ScrollRail : UserControl
             _hovering = hovering;
             UpdateHeld();
         }
+    }
+
+    /// <summary>
+    /// Something outside the rail is in use (the indicator chip or the navigation buttons: hovered, its page field
+    /// open, the keyboard on them): held, the rail does not fade; a hold that starts shows it (the keyboard reaching
+    /// the hidden chip brings it up). The idle delay counts again from the release.
+    /// </summary>
+    internal void SetExternalHold(bool held)
+    {
+        if (held == _externalHold)
+        {
+            return;
+        }
+
+        _externalHold = held;
+        if (held)
+        {
+            NotifyActivity();
+        }
+
+        UpdateHeld();
     }
 
     /// <summary>The user scrolled, or a finger or the mouse is near the edge: the rail shows, the idle delay restarts.</summary>
@@ -305,10 +336,9 @@ public partial class ScrollRail : UserControl
         Refresh();
     }
 
-    /// <summary>Hidden at once (another document, or none): a drag ends, the page field closes.</summary>
+    /// <summary>Hidden at once (another document, or none): a drag ends.</summary>
     internal void HideNow()
     {
-        CloseGoToPage(restoreFocus: false);
         if (_dragging)
         {
             EndDrag();
@@ -425,53 +455,6 @@ public partial class ScrollRail : UserControl
         UpdateKnob();
     }
 
-    /// <summary>Tapping the indicator: a page field in its place, with the current page selected (FR-09).</summary>
-    internal void OpenGoToPage()
-    {
-        if (_editing || _model is not { Layout: not null } model)
-        {
-            return;
-        }
-
-        _editing = true;
-        _focusBefore = Keyboard.FocusedElement;
-        IndicatorButton.Visibility = Visibility.Collapsed;
-        GoToPageBox.Visibility = Visibility.Visible;
-        GoToPageBox.Text = (model.CurrentPage + 1).ToString(CultureInfo.CurrentCulture);
-        UpdateHeld();
-
-        // Focused once it is laid out (a collapsed element cannot take focus).
-        Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
-        {
-            if (_editing)
-            {
-                GoToPageBox.Focus();
-                GoToPageBox.SelectAll();
-            }
-        });
-    }
-
-    /// <summary>Enter: a valid page number jumps there and closes the field; anything else is ignored (false).</summary>
-    internal bool ConfirmGoToPage()
-    {
-        if (!_editing)
-        {
-            return false;
-        }
-
-        if (_model?.TryGoToPage(GoToPageBox.Text) == true)
-        {
-            CloseGoToPage(restoreFocus: true);
-            return true;
-        }
-
-        GoToPageBox.SelectAll();
-        return false;
-    }
-
-    /// <summary>Esc, or a press anywhere outside the field: closes it without moving.</summary>
-    internal void CancelGoToPage() => CloseGoToPage(restoreFocus: true);
-
     /// <summary>
     /// Opaque theme brushes and no shadow when Windows transparency effects are off (NFR-32); the translucent ones
     /// otherwise. The values live in the theme dictionary.
@@ -573,15 +556,22 @@ public partial class ScrollRail : UserControl
     private void UpdateHeld()
     {
         PrepareState();
-        _state.IsHeld = IsPressed || _hovering || _editing;
+        _state.IsHeld = IsPressed || _hovering || _externalHold;
         Refresh();
     }
 
-    /// <summary>Applies the state: opacity, the bubble, and when to look again.</summary>
+    /// <summary>Applies the state: opacity, the bubble, and when to look again; reports a change to the overlays.</summary>
     private void Refresh()
     {
         var phase = _state.Phase;
         Opacity = _state.Opacity;
+        var reported = (phase is RailPhase.FadingIn or RailPhase.Visible, HasDocument);
+        if (reported != _reported)
+        {
+            _reported = reported;
+            ShownChanged?.Invoke(this, EventArgs.Empty);
+        }
+
         KnobGrip.IsHitTestVisible = phase != RailPhase.Hidden && _model?.Layout is not null; // the pen inks when hidden
         UpdateGrip();
         if (phase == RailPhase.Hidden)
@@ -973,32 +963,6 @@ public partial class ScrollRail : UserControl
 
     private void OnBubbleSizeChanged(object sender, SizeChangedEventArgs e) => PlaceBubble();
 
-    private void CloseGoToPage(bool restoreFocus)
-    {
-        if (!_editing)
-        {
-            return;
-        }
-
-        _editing = false;
-        var before = _focusBefore;
-        _focusBefore = null;
-        var hadFocus = GoToPageBox.IsKeyboardFocusWithin;
-        GoToPageBox.Visibility = Visibility.Collapsed;
-        IndicatorButton.Visibility = Visibility.Visible;
-        UpdateHeld();
-        if (restoreFocus && hadFocus && before is UIElement { IsVisible: true } element)
-        {
-            element.Focus();
-        }
-        else if (hadFocus)
-        {
-            Keyboard.ClearFocus(); // the keys go back to the window (and the navigation keys to the document)
-        }
-    }
-
-    private void OnIndicatorClick(object sender, RoutedEventArgs e) => OpenGoToPage(); // UI Automation's Invoke
-
     /// <summary>What the ticks were last drawn from; the lists compare by reference (each refresh makes a new one).</summary>
     private readonly record struct TickInputs(
         IReadOnlyList<Mark>? Marks,
@@ -1008,26 +972,4 @@ public partial class ScrollRail : UserControl
         double WindowHeightPt,
         double TrackLength,
         double KnobHeight);
-
-    private void OnGoToPageKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter)
-        {
-            e.Handled = true;
-            ConfirmGoToPage();
-        }
-        else if (e.Key == Key.Escape)
-        {
-            e.Handled = true;
-            CancelGoToPage();
-        }
-    }
-
-    private void OnGoToPageLostFocus(object sender, KeyboardFocusChangedEventArgs e)
-    {
-        if (!GoToPageBox.IsKeyboardFocusWithin)
-        {
-            CloseGoToPage(restoreFocus: false); // focus moved elsewhere: closed, nothing moves
-        }
-    }
 }

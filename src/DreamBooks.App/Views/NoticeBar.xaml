@@ -1,0 +1,43 @@
+<UserControl x:Class="DreamBooks.App.Views.NoticeBar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="clr-namespace:DreamBooks.App.Resources"
+             xmlns:views="clr-namespace:DreamBooks.App.Views"
+             HorizontalAlignment="Center" VerticalAlignment="Top" Margin="{StaticResource NoticeBarMargin}"
+             Focusable="False" IsTabStop="False" Visibility="Collapsed">
+    <!-- The notices (FR-84, FR-86), what the debug panel showed in its last lines: the document's notice (restored
+         changes, annotations the app cannot edit, a file that cannot be saved, journaling off) and the journal warning
+         (unsaved changes are not being recorded), the settings warning (the settings file cannot be written, FR-110), each a live region read with its text (the label is its help text),
+         with a close button. The data context is the MainViewModel. Closed, it stays closed until a notice changes.
+         Pen rule: only the surface hit-tests and it carries the inert stylus plug-in; the pen presses the close button;
+         around it the pen inks; closed, it takes nothing. -->
+    <views:FloatingSurface x:Name="Surface" CornerRadius="{StaticResource PanelCornerRadius}" MaxWidth="{StaticResource NoticeBarMaxWidth}"
+                           Stylus.IsPressAndHoldEnabled="False"
+                           AutomationProperties.Name="{x:Static res:Strings.NoticeBarLabel}">
+        <DockPanel Margin="{StaticResource NoticeBarPadding}">
+            <Button x:Name="CloseButton" DockPanel.Dock="Right" VerticalAlignment="Top" Style="{StaticResource ToolbarButtonStyle}"
+                    Margin="0" Content="{StaticResource GlyphClose}" Click="OnCloseClick"
+                    ToolTip="{x:Static res:Strings.CloseNotice}" AutomationProperties.Name="{x:Static res:Strings.CloseNotice}" />
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock x:Name="WarningText" Text="{Binding JournalWarning, NotifyOnTargetUpdated=True}"
+                           TargetUpdated="OnTextUpdated" TextWrapping="Wrap" FontWeight="SemiBold"
+                           Margin="{StaticResource NoticeTextMargin}" Foreground="{DynamicResource GlyphBrush}"
+                           Visibility="Collapsed"
+                           AutomationProperties.HelpText="{x:Static res:Strings.JournalWarningLabel}"
+                           AutomationProperties.LiveSetting="Polite" />
+                <TextBlock x:Name="SettingsText" Text="{Binding SettingsWarning, NotifyOnTargetUpdated=True}"
+                           TargetUpdated="OnTextUpdated" TextWrapping="Wrap"
+                           Margin="{StaticResource NoticeTextMargin}" Foreground="{DynamicResource GlyphBrush}"
+                           Visibility="Collapsed"
+                           AutomationProperties.HelpText="{x:Static res:Strings.SettingsWarningLabel}"
+                           AutomationProperties.LiveSetting="Polite" />
+                <TextBlock x:Name="NoticeText" Text="{Binding Notice, NotifyOnTargetUpdated=True}"
+                           TargetUpdated="OnTextUpdated" TextWrapping="Wrap"
+                           Margin="{StaticResource NoticeTextMargin}" Foreground="{DynamicResource GlyphBrush}"
+                           Visibility="Collapsed"
+                           AutomationProperties.HelpText="{x:Static res:Strings.NoticeLabel}"
+                           AutomationProperties.LiveSetting="Polite" />
+            </StackPanel>
+        </DockPanel>
+    </views:FloatingSurface>
+</UserControl>

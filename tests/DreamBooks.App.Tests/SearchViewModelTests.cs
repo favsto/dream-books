@@ -395,6 +395,39 @@ public sealed class SearchViewModelTests : IDisposable
     }
 
     [Fact]
+    public void The_search_pill_opens_on_request_or_with_a_query_and_closes_when_the_search_is_cleared()
+    {
+        var search = new SearchViewModel(new DocumentViewportViewModel(new ZoomViewModel(), _scheduler), _scheduler);
+        var changes = new List<string?>();
+        search.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
+        Assert.False(search.IsOpen);
+
+        // Ctrl+F (or the menu's entry): open, with an empty field.
+        search.Open();
+        Assert.True(search.IsOpen);
+        Assert.Contains(nameof(SearchViewModel.IsOpen), changes);
+
+        // Emptying the field by hand keeps it open; Esc or the close button (the clear command) closes it.
+        search.QueryText = "sole";
+        search.QueryText = string.Empty;
+        Assert.True(search.IsOpen);
+        search.ClearCommand.Execute(null);
+        Assert.False(search.IsOpen);
+
+        // A query typed elsewhere (the old panel's field) opens it, so the results always have their buttons.
+        search.QueryText = "luna";
+        Assert.True(search.IsOpen);
+        search.ClearCommand.Execute(null);
+        Assert.False(search.IsOpen);
+        Assert.Equal(string.Empty, search.QueryText);
+
+        // Another document closes it with the search.
+        search.Open();
+        search.ResetForDocument();
+        Assert.False(search.IsOpen);
+    }
+
+    [Fact]
     public async Task Pages_that_could_not_be_searched_are_noted_beside_the_count()
     {
         var source = new FakeSearchPageSource(10);
@@ -740,26 +773,30 @@ public sealed class SearchViewModelTests : IDisposable
                 var vm = (MainViewModel)window.DataContext;
                 var search = vm.Search;
 
-                // The field and the buttons: bound, named, 40 x 40 touch targets, keyboard reachable.
-                Assert.Equal(Strings.SearchField, System.Windows.Automation.AutomationProperties.GetName(window.SearchField));
-                Assert.Same(search.PreviousCommand, window.PreviousResultButton.Command);
-                Assert.Same(search.NextCommand, window.NextResultButton.Command);
-                Assert.Same(search.ClearCommand, window.ClearSearchButton.Command);
-                foreach (var button in new[] { window.PreviousResultButton, window.NextResultButton, window.ClearSearchButton })
+                // The search pill's field and buttons (the debug panel's are gone, phase 4a): bound, named, 40 x 40
+                // touch targets (the size the style gives them: the pill is closed), keyboard reachable.
+                var pill = window.SearchBar;
+                var field = pill.Field;
+                var goToPage = window.IndicatorChip.GoToPageBox;
+                Assert.Equal(Strings.SearchField, System.Windows.Automation.AutomationProperties.GetName(field));
+                Assert.Same(search.PreviousCommand, pill.PreviousButton.Command);
+                Assert.Same(search.NextCommand, pill.NextButton.Command);
+                Assert.Same(search.ClearCommand, pill.CloseButton.Command);
+                foreach (var button in new[] { pill.PreviousButton, pill.NextButton, pill.CloseButton })
                 {
                     Assert.False(string.IsNullOrEmpty(System.Windows.Automation.AutomationProperties.GetName(button)));
-                    Assert.True(button.ActualWidth >= 40 && button.ActualHeight >= 40, "40 x 40 touch target");
+                    Assert.True(button.Width >= 40 && button.Height >= 40, "40 x 40 touch target");
                     Assert.True(button.Focusable && button.IsTabStop, "keyboard reachable");
                 }
 
                 // Nothing is taken without a search (Esc stays the panel's / the fields', F3 does nothing harmful).
                 Assert.False(window.RouteKey(Key.Escape, ModifierKeys.None, null));
-                Assert.False(window.RouteKey(Key.Enter, ModifierKeys.None, window.GoToPageField));
+                Assert.False(window.RouteKey(Key.Enter, ModifierKeys.None, goToPage));
 
                 // Ctrl+F focuses the field (from anywhere, also from another field).
                 var requests = window.SearchFocusRequests;
                 Assert.True(window.RouteKey(Key.F, ModifierKeys.Control, null));
-                Assert.True(window.RouteKey(Key.F, ModifierKeys.Control, window.GoToPageField));
+                Assert.True(window.RouteKey(Key.F, ModifierKeys.Control, goToPage));
                 Assert.Equal(requests + 2, window.SearchFocusRequests);
 
                 // A search with three results, without a real document: a layout and an index are enough.
@@ -781,24 +818,24 @@ public sealed class SearchViewModelTests : IDisposable
 
                 Assert.True(window.RouteKey(Key.F3, ModifierKeys.None, null));
                 Assert.Equal(Hit(1, 100), search.Current);
-                Assert.True(window.RouteKey(Key.Enter, ModifierKeys.None, window.SearchField));
+                Assert.True(window.RouteKey(Key.Enter, ModifierKeys.None, field));
                 Assert.Equal(Hit(3, 100), search.Current);
-                Assert.True(window.RouteKey(Key.F3, ModifierKeys.None, window.GoToPageField)); // anywhere
+                Assert.True(window.RouteKey(Key.F3, ModifierKeys.None, goToPage)); // anywhere
                 Assert.Equal(Hit(3, 400), search.Current);
-                Assert.True(window.RouteKey(Key.Enter, ModifierKeys.Shift, window.SearchField));
+                Assert.True(window.RouteKey(Key.Enter, ModifierKeys.Shift, field));
                 Assert.Equal(Hit(3, 100), search.Current);
                 Assert.True(window.RouteKey(Key.F3, ModifierKeys.Shift, null));
                 Assert.Equal(Hit(1, 100), search.Current);
 
                 // The key may come from a part inside the field (its template): still the field's Enter.
-                window.SearchField.ApplyTemplate();
+                field.ApplyTemplate();
                 var inner = Assert.IsAssignableFrom<DependencyObject>(
-                    window.SearchField.Template.FindName("PART_ContentHost", window.SearchField));
+                    field.Template.FindName("PART_ContentHost", field));
                 Assert.True(window.RouteKey(Key.Enter, ModifierKeys.None, inner));
                 Assert.Equal(Hit(3, 100), search.Current);
                 Assert.True(window.RouteKey(Key.Enter, ModifierKeys.Shift, inner));
                 Assert.Equal(Hit(1, 100), search.Current);
-                Assert.False(window.RouteKey(Key.Enter, ModifierKeys.None, window.BackButton)); // Enter elsewhere is not ours
+                Assert.False(window.RouteKey(Key.Enter, ModifierKeys.None, window.NavButtons.BackButton)); // Enter elsewhere is not ours
 
                 // The existing bindings stay: no search key clashes with them.
                 var gestures = window.InputBindings.OfType<KeyBinding>().Select(b => (b.Key, b.Modifiers)).ToList();
@@ -807,13 +844,13 @@ public sealed class SearchViewModelTests : IDisposable
                 // Esc in the field clears the search and gives the keyboard back to the document.
                 search.QueryText = "x";
                 var focus = window.DocumentFocusRequests;
-                Assert.True(window.RouteKey(Key.Escape, ModifierKeys.None, window.SearchField));
+                Assert.True(window.RouteKey(Key.Escape, ModifierKeys.None, field));
                 Assert.Equal(string.Empty, search.QueryText);
                 Assert.Equal(focus + 1, window.DocumentFocusRequests);
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }

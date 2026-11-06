@@ -384,6 +384,51 @@ public sealed class DocumentViewTests : IDisposable
     }
 
     [Fact]
+    public async Task A_single_finger_tap_is_reported_after_the_double_tap_time_and_never_for_a_double_tap()
+    {
+        await WithViewAsync((vm, view) =>
+        {
+            var taps = new List<Point>();
+            view.TapScheduler = _scheduler;
+            view.SingleTapped += (_, position) => taps.Add(position);
+            var tap = new Point(200, 300);
+
+            // A lone tap waits for a possible second one, then is a single tap.
+            view.RegisterTap(tap, timestamp: 1000);
+            _scheduler.Advance(DocumentView.DoubleTapTimeMs - 1);
+            Assert.Empty(taps);
+            _scheduler.Advance(1);
+            Assert.Equal([tap], taps);
+
+            // A double tap zooms (FR-07) and is never also a single tap.
+            view.RegisterTap(tap, timestamp: 5000);
+            view.RegisterTap(tap, timestamp: 5100);
+            _scheduler.Advance(1000);
+            Assert.Single(taps);
+            Assert.False(vm.Viewport.IsFitWidth);
+
+            // Too slow for a double tap: two single taps, each after its own wait.
+            view.RegisterTap(tap, timestamp: 9000);
+            _scheduler.Advance(DocumentView.DoubleTapTimeMs);
+            view.RegisterTap(tap, timestamp: 9400);
+            _scheduler.Advance(DocumentView.DoubleTapTimeMs);
+            Assert.Equal(3, taps.Count);
+            Assert.False(vm.Viewport.IsFitWidth);
+
+            // A finger coming down again before the wait ends (a pan, a pinch, a second tap) drops the pending tap.
+            view.RegisterTap(tap, timestamp: 20000);
+            view.CancelPendingSingleTap();
+            _scheduler.Advance(1000);
+            Assert.Equal(3, taps.Count);
+
+            // A tap that stopped a glide only stopped it: it is not a single tap (it can still be half of a double tap).
+            view.RegisterTap(tap, timestamp: 30000, stoppedGlide: true);
+            _scheduler.Advance(1000);
+            Assert.Equal(3, taps.Count);
+        });
+    }
+
+    [Fact]
     public async Task Resize_in_fit_mode_recomputes_zoom_and_keeps_the_top_position()
     {
         await WithViewAsync((vm, view) =>
@@ -462,7 +507,7 @@ public sealed class DocumentViewTests : IDisposable
             }
             finally
             {
-                window.Close();
+                window.CloseForTests();
             }
         });
     }

@@ -203,6 +203,27 @@ public sealed class DocumentViewportViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task FitWidthCommand_fits_the_width_and_never_leaves_fit_mode() // FR-07, the chip's button
+    {
+        var vm = await OpenAsync(NewVm(), Pages(10));
+        var viewport = vm.Viewport;
+        viewport.ViewportWidthDip = 1000;
+        viewport.ViewportHeightDip = 800;
+        var fit = 1000 / (612 * _scale);
+
+        vm.ZoomVm.ZoomInCommand.Execute(null);
+        Assert.False(vm.ZoomVm.IsFitWidth);
+        Assert.True(viewport.FitWidthCommand.CanExecute(null));
+        viewport.FitWidthCommand.Execute(null);
+        Assert.True(vm.ZoomVm.IsFitWidth);
+        Assert.Equal(fit, vm.ZoomVm.Zoom, 6);
+
+        viewport.FitWidthCommand.Execute(null); // already fitted: stays (unlike the double tap, which zooms to 200%)
+        Assert.True(vm.ZoomVm.IsFitWidth);
+        Assert.Equal(fit, vm.ZoomVm.Zoom, 6);
+    }
+
+    [Fact]
     public async Task Manual_zoom_turns_fit_mode_off_and_DoubleTap_toggles_it()
     {
         var vm = await OpenAsync(NewVm(), Pages(10));

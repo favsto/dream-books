@@ -13,7 +13,7 @@
         <Border x:Name="Sheet" HorizontalAlignment="Left" Width="{StaticResource EdgePanelWidth}"
                 Margin="{StaticResource EdgePanelMargin}" Padding="{StaticResource EdgePanelPadding}"
                 CornerRadius="{StaticResource EdgePanelCornerRadius}"
-                Background="{StaticResource EdgePanelBackgroundBrush}" Effect="{StaticResource EdgePanelShadow}"
+                Background="{DynamicResource EdgePanelBackgroundBrush}" Effect="{DynamicResource EdgePanelShadow}"
                 Stylus.IsPressAndHoldEnabled="False" Stylus.IsFlicksEnabled="False"
                 KeyboardNavigation.TabNavigation="Cycle" KeyboardNavigation.ControlTabNavigation="Cycle"
                 PreviewStylusDown="OnSheetStylusDown" PreviewMouseDown="OnSheetMouseButton" PreviewMouseUp="OnSheetMouseButton"
@@ -28,7 +28,7 @@
                             Background="Transparent" BorderThickness="0"
                             AutomationProperties.Name="{x:Static res:Strings.ClosePanel}"
                             ToolTip="{x:Static res:Strings.ClosePanel}">
-                        <Path Data="{StaticResource CloseGlyph}" Stroke="{StaticResource GlyphBrush}"
+                        <Path Data="{StaticResource CloseGlyph}" Stroke="{DynamicResource GlyphBrush}"
                               StrokeThickness="{StaticResource GlyphStrokeThickness}"
                               Width="{StaticResource GlyphSize}" Height="{StaticResource GlyphSize}" />
                     </Button>

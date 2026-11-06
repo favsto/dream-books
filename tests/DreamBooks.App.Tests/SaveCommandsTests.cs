@@ -215,6 +215,29 @@ public sealed class SaveCommandsTests : IDisposable
     }
 
     [Fact]
+    public async Task DocumentTitle_is_the_file_name_alone_with_the_dirty_mark() // UI-06: the title bar's small name
+    {
+        var vm = new MainViewModel(_dialogs);
+        Assert.Equal(Strings.AppTitle, vm.DocumentTitle);
+
+        await OpenAsync(vm);
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+        Assert.Equal("a.pdf", vm.DocumentTitle);
+
+        Draw(vm);
+        Assert.Equal(string.Format(Strings.DocumentTitleDirtyFormat, "a.pdf"), vm.DocumentTitle);
+        Assert.Contains("*", vm.DocumentTitle, StringComparison.Ordinal);
+        Assert.Contains(nameof(MainViewModel.DocumentTitle), changed);
+
+        changed.Clear();
+        _dialogs.NextSavePath = Path.Combine(_dir, "b.pdf");
+        await vm.SaveAsCommand.ExecuteAsync(null);
+        Assert.Equal("b.pdf", vm.DocumentTitle);
+        Assert.Contains(nameof(MainViewModel.DocumentTitle), changed);
+    }
+
+    [Fact]
     public async Task Stroke_drawn_while_saving_stays_dirty_after_the_save()
     {
         var vm = await OpenAsync();

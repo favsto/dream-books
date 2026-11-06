@@ -58,6 +58,23 @@ public sealed class PageEditor
         return true;
     }
 
+    /// <summary>
+    /// Removes every stroke of the page as one undo step ("Clear all on this page", UI-02): a replacement with no
+    /// strokes, so undo restores them in their order and the journal records it like an erase. Returns false,
+    /// executing nothing, when the page has no strokes.
+    /// </summary>
+    public bool ClearPage()
+    {
+        var before = Page.Strokes;
+        if (before.Count == 0)
+        {
+            return false;
+        }
+
+        _undo.Execute(new EraseStrokesCommand(Page, before, [], "Clear page"));
+        return true;
+    }
+
     /// <summary>Starts an eraser gesture; nothing changes until <see cref="EraserSession.Complete"/> (FR-31).</summary>
     public EraserSession BeginErase(EraserMode mode) => new(Page, _undo, mode);
 

@@ -1,0 +1,74 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Light theme colour tokens (section 3, materials). Theme.Dark.xaml has the same keys; ThemeService merges one of
+         the two after Theme.xaml (the tokens that are the same in both themes) and WPF UI's dictionaries. Views reach
+         these keys with DynamicResource (or SetResourceReference), so a theme switch repaints them. The accent comes
+         from WPF UI's SystemAccentColorPrimary: the system accent or the override (ThemeService). -->
+    <Color x:Key="ThemeTextColor">#1A1A1A</Color>
+    <Color x:Key="ThemePanelColor">#FCFCFC</Color>
+    <Color x:Key="ThemeControlDarkColor">#A0A0A0</Color>
+    <Color x:Key="ThemeShadowColor">#000000</Color>
+
+    <!-- Window: Mica (FluentWindow); with Windows "Transparency effects" off a solid brush instead (NFR-32). -->
+    <SolidColorBrush x:Key="WindowBackgroundOpaqueBrush" Color="#F3F3F3" />
+
+    <!-- Around the pages: a light neutral grey laid over the Mica (opaque with transparency effects off, NFR-32).
+         Pages: square corners and no shadow (an effect on every page would cost pen latency, NFR-04). -->
+    <Color x:Key="PageBackdropColor">#E5E5E5</Color>
+    <SolidColorBrush x:Key="PageBackdropBrush" Color="{StaticResource PageBackdropColor}" Opacity="0.6" />
+    <SolidColorBrush x:Key="PageBackdropBrushOpaque" Color="{StaticResource PageBackdropColor}" />
+
+    <!-- Floating panels (phase 4a toolbar and flyouts): a tinted translucency (WPF has no in-window backdrop blur;
+         65% tint, section 3), opaque with transparency effects off (NFR-32); two shadows, diffuse (blur 32 px, 12%)
+         and contact (blur 4 px, 8%). -->
+    <SolidColorBrush x:Key="PanelTintBrushOpaque" Color="{StaticResource ThemePanelColor}" />
+    <DropShadowEffect x:Key="PanelDiffuseShadow" BlurRadius="32" ShadowDepth="4" Opacity="0.12" Color="{StaticResource ThemeShadowColor}" />
+    <DropShadowEffect x:Key="PanelContactShadow" BlurRadius="4" ShadowDepth="1" Opacity="0.08" Color="{StaticResource ThemeShadowColor}" />
+    <!-- One of the two layers of a floating surface (each carries one shadow): 41% each, 65% together. -->
+    <SolidColorBrush x:Key="PanelLayerBrush" Color="{StaticResource ThemePanelColor}" Opacity="0.41" />
+
+    <!-- Toolbar and flyouts (UI-02): hover and press tints of the round buttons, the separators, the active tool (an
+         accent disc at 22% and an accent bar, the icon in the accent), the flyout headers, the swatch ring around the
+         chosen colour and the thin outline that lets light colours read on the panel. -->
+    <SolidColorBrush x:Key="ToolbarHoverBrush" Color="{StaticResource ThemeTextColor}" Opacity="0.06" />
+    <SolidColorBrush x:Key="ToolbarPressedBrush" Color="{StaticResource ThemeTextColor}" Opacity="0.1" />
+    <SolidColorBrush x:Key="ToolbarSeparatorBrush" Color="{StaticResource ThemeTextColor}" Opacity="0.12" />
+    <SolidColorBrush x:Key="ToolIndicatorBrush" Color="{DynamicResource SystemAccentColorPrimary}" Opacity="0.22" />
+    <SolidColorBrush x:Key="ToolIndicatorBarBrush" Color="{DynamicResource SystemAccentColorPrimary}" />
+    <SolidColorBrush x:Key="ToolActiveForegroundBrush" Color="{DynamicResource SystemAccentColorPrimary}" />
+    <SolidColorBrush x:Key="FlyoutHeaderBrush" Color="#6B6B6B" />
+    <SolidColorBrush x:Key="SwatchRingBrush" Color="{StaticResource ThemeTextColor}" />
+    <SolidColorBrush x:Key="SwatchOutlineBrush" Color="{StaticResource ThemeTextColor}" Opacity="0.2" />
+
+    <!-- Eraser cursor (FR-32): the accent colour, fill at 20% opacity, 1 DIP outline. -->
+    <SolidColorBrush x:Key="EraserCursorFill" Color="{DynamicResource SystemAccentColorPrimary}" Opacity="0.2" />
+    <SolidColorBrush x:Key="EraserCursorOutline" Color="{DynamicResource SystemAccentColorPrimary}" />
+
+    <!-- Scroll rail (UI-07): translucent track and preview, opaque variants with transparency effects off (NFR-32). -->
+    <SolidColorBrush x:Key="RailTrackBrush" Color="{StaticResource ThemeControlDarkColor}" Opacity="0.55" />
+    <SolidColorBrush x:Key="RailTrackBrushOpaque" Color="{StaticResource ThemeControlDarkColor}" />
+    <SolidColorBrush x:Key="RailKnobBrush" Color="{DynamicResource SystemAccentColorPrimary}" />
+    <SolidColorBrush x:Key="RailPreviewBackgroundBrush" Color="{StaticResource ThemePanelColor}" Opacity="0.92" />
+    <SolidColorBrush x:Key="RailPreviewBackgroundBrushOpaque" Color="{StaticResource ThemePanelColor}" />
+    <DropShadowEffect x:Key="RailPreviewShadow" BlurRadius="14" ShadowDepth="4" Opacity="0.3" Color="{StaticResource ThemeShadowColor}" />
+    <!-- Mark ticks (FR-101): the text colour, so they read on the grey bar. -->
+    <SolidColorBrush x:Key="RailMarkTickBrush" Color="{StaticResource ThemeTextColor}" Opacity="0.75" />
+    <SolidColorBrush x:Key="RailMarkTickBrushOpaque" Color="{StaticResource ThemeTextColor}" />
+
+    <!-- Left-edge panel (UI-04): translucent panel colour with a soft shadow, opaque without shadow (NFR-32). -->
+    <SolidColorBrush x:Key="EdgePanelBackgroundBrush" Color="{StaticResource ThemePanelColor}" Opacity="0.92" />
+    <SolidColorBrush x:Key="EdgePanelBackgroundBrushOpaque" Color="{StaticResource ThemePanelColor}" />
+    <DropShadowEffect x:Key="EdgePanelShadow" BlurRadius="24" ShadowDepth="4" Opacity="0.25" Color="{StaticResource ThemeShadowColor}" />
+    <SolidColorBrush x:Key="EdgePanelTabIndicatorBrush" Color="{DynamicResource SystemAccentColorPrimary}" />
+    <SolidColorBrush x:Key="GlyphBrush" Color="{StaticResource ThemeTextColor}" />
+
+    <!-- Marks list and Pages tab (FR-103): the thumbnails' edge and the current page's accent ring. -->
+    <SolidColorBrush x:Key="MarkThumbnailBorderBrush" Color="{StaticResource ThemeControlDarkColor}" />
+    <SolidColorBrush x:Key="PagesThumbnailBorderBrush" Color="{StaticResource ThemeControlDarkColor}" />
+    <SolidColorBrush x:Key="PagesCurrentRingBrush" Color="{DynamicResource SystemAccentColorPrimary}" />
+
+    <!-- The save progress line under the title bar (FR-89): the accent colour. -->
+    <SolidColorBrush x:Key="SaveProgressBarBrush" Color="{DynamicResource SystemAccentColorPrimary}" />
+    <SolidColorBrush x:Key="DialogButtonBrush" Color="#E1E1E1" />
+    <SolidColorBrush x:Key="DialogButtonHoverBrush" Color="#D0D0D0" />
+</ResourceDictionary>
