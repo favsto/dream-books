@@ -10,11 +10,11 @@ using DreamBooks.Core.Settings;
 namespace DreamBooks.App.ViewModels;
 
 /// <summary>
-/// The floating toolbar (UI-02): Pen, Highlighter, Eraser, Selection (disabled until phase 5), Undo, Redo, Bookmark
+/// The floating toolbar (UI-02): Pen, Highlighter, Eraser, Selection (the lasso, FR-50), Undo, Redo, Bookmark
 /// (disabled until bookmarks exist); the option panels; and its automatic visibility (section 4).
 /// <list type="bullet">
 /// <item>A tap on an inactive tool activates it and closes any panel; a tap on the active tool opens its panel, or
-/// closes it when open. A disabled tool never becomes active.</item>
+/// closes it when open (the lasso has none).</item>
 /// <item>The active tool is <see cref="ToolsViewModel.ActiveTool"/>: a change made elsewhere is followed (a panel of
 /// another tool closes); the pen's back end does not change it (FR-30).</item>
 /// <item>Visibility: <see cref="PenDown"/>/<see cref="PenUp"/> (the pen writing or erasing) and
@@ -64,7 +64,7 @@ public sealed class ToolbarViewModel : ObservableObject
             new(ToolbarButtonKind.Pen, Strings.ToolPen, new RelayCommand(() => TapTool(ToolbarTool.Pen)), IsTool: true),
             new(ToolbarButtonKind.Highlighter, Strings.ToolHighlighter, new RelayCommand(() => TapTool(ToolbarTool.Highlighter)), IsTool: true),
             new(ToolbarButtonKind.Eraser, Strings.ToolEraser, new RelayCommand(() => TapTool(ToolbarTool.Eraser)), IsTool: true),
-            new(ToolbarButtonKind.Selection, Strings.ToolSelection, disabled, IsTool: true),
+            new(ToolbarButtonKind.Selection, Strings.ToolSelection, new RelayCommand(() => TapTool(ToolbarTool.Selection)), IsTool: true),
             new(ToolbarButtonKind.Undo, Strings.Undo, undo, IsTool: false),
             new(ToolbarButtonKind.Redo, Strings.Redo, redo, IsTool: false),
             new(ToolbarButtonKind.Bookmark, Strings.ToolBookmark, disabled, IsTool: false),
@@ -97,6 +97,7 @@ public sealed class ToolbarViewModel : ObservableObject
     {
         AppTool.Highlighter => ToolbarTool.Highlighter,
         AppTool.Eraser => ToolbarTool.Eraser,
+        AppTool.Selection => ToolbarTool.Selection,
         _ => ToolbarTool.Pen,
     };
 
@@ -174,6 +175,7 @@ public sealed class ToolbarViewModel : ObservableObject
             {
                 ToolbarTool.Highlighter => AppTool.Highlighter,
                 ToolbarTool.Eraser => AppTool.Eraser,
+                ToolbarTool.Selection => AppTool.Selection,
                 _ => AppTool.Pen,
             };
             return;
@@ -211,12 +213,13 @@ public sealed class ToolbarViewModel : ObservableObject
         Update();
     }
 
-    private static bool IsEnabled(ToolbarTool tool) => tool != ToolbarTool.Selection;
+    private static bool IsEnabled(ToolbarTool tool) => Enum.IsDefined(tool);
 
     private static OptionsPanel PanelOf(ToolbarTool tool) => tool switch
     {
         ToolbarTool.Highlighter => OptionsPanel.Highlighter,
         ToolbarTool.Eraser => OptionsPanel.Eraser,
+        ToolbarTool.Selection => OptionsPanel.None, // the lasso has no option panel; the action bar is its UI
         _ => OptionsPanel.Pen,
     };
 

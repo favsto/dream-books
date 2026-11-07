@@ -163,6 +163,9 @@
   <data name="HighlighterOrange" xml:space="preserve"><value>Arancio</value></data>
   <data name="HighlighterPurple" xml:space="preserve"><value>Viola</value></data>
   <data name="ToolSelection" xml:space="preserve"><value>Selezione (lazo)</value></data>
+  <data name="SelectionCopy" xml:space="preserve"><value>Copia</value></data>
+  <data name="SelectionPaste" xml:space="preserve"><value>Incolla</value></data>
+  <data name="SelectionDelete" xml:space="preserve"><value>Elimina</value></data>
   <data name="ToolBookmark" xml:space="preserve"><value>Segnalibro sulla pagina</value></data>
   <data name="PenBlack" xml:space="preserve"><value>Nero</value></data>
   <data name="PenDarkBlue" xml:space="preserve"><value>Blu scuro</value></data>

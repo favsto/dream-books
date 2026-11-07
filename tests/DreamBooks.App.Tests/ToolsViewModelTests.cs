@@ -8,6 +8,35 @@ namespace DreamBooks.App.Tests;
 public class ToolsViewModelTests
 {
     [Fact]
+    public void Barrel_held_makes_effective_tool_selection_and_release_restores_previous() // FR-28
+    {
+        var tools = new ToolsViewModel { ActiveTool = AppTool.Highlighter };
+
+        tools.BeginBarrelSelection();
+        Assert.Equal(AppTool.Selection, tools.EffectiveTool);
+        Assert.False(tools.IsDrawingTool);
+        Assert.Equal(AppTool.Highlighter, tools.ActiveTool);
+
+        tools.EndBarrelSelection();
+        Assert.Equal(AppTool.Highlighter, tools.EffectiveTool);
+    }
+
+    [Fact]
+    public void Eraser_end_wins_over_barrel() // FR-28, FR-30
+    {
+        var tools = new ToolsViewModel();
+        tools.BeginBarrelSelection();
+
+        tools.BeginInvertedEraser();
+        Assert.Equal(AppTool.Eraser, tools.EffectiveTool);
+
+        tools.EndInvertedEraser();
+        Assert.Equal(AppTool.Selection, tools.EffectiveTool);
+        tools.EndBarrelSelection();
+        Assert.Equal(AppTool.Pen, tools.EffectiveTool);
+    }
+
+    [Fact]
     public void Back_end_switches_to_eraser_and_restores_previous_tool()
     {
         var tools = new ToolsViewModel();

@@ -31,6 +31,32 @@ public sealed class MainViewModelToolbarTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task Leaving_the_lasso_tool_clears_the_selection_but_the_barrel_lasso_keeps_it() // FR-28, FR-50
+    {
+        var vm = await OpenAsync();
+        try
+        {
+            vm.Editor!.CommitStroke(_line, InkTool.Pen, InkColor.FromRgb(0, 0, 0), 2);
+            PointD[] around = [new(0, 0), new(612, 0), new(612, 792), new(0, 792)];
+
+            vm.Tools.ActiveTool = AppTool.Selection;
+            vm.Selection.SelectLoop(around);
+            Assert.True(vm.Selection.HasSelection);
+            vm.Tools.ActiveTool = AppTool.Pen;
+            Assert.False(vm.Selection.HasSelection);
+
+            vm.Tools.BeginBarrelSelection();
+            vm.Selection.SelectLoop(around);
+            vm.Tools.EndBarrelSelection();
+            Assert.True(vm.Selection.HasSelection);
+        }
+        finally
+        {
+            await CleanUpAsync(vm);
+        }
+    }
+
     [Theory]
     [InlineData(true, 2)] // partial: the middle goes, both ends stay
     [InlineData(false, 0)] // whole stroke: the stroke goes

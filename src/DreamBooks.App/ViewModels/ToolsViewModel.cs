@@ -18,6 +18,7 @@ public sealed class ToolsViewModel : ObservableObject
 {
     private AppTool _activeTool = AppTool.Pen;
     private bool _isInverted;
+    private bool _isBarrelSelection;
     private PressureCurve _curve = AppSettings.Default.PressureCurve;
     private SmoothingLevel _smoothing = AppSettings.Default.Smoothing;
     private double _baseWidthMm = AppSettings.DefaultPenWidthMm;
@@ -64,7 +65,11 @@ public sealed class ToolsViewModel : ObservableObject
 
     public bool IsInverted => _isInverted;
 
-    public AppTool EffectiveTool => _isInverted ? AppTool.Eraser : _activeTool;
+    /// <summary>True while the pen's barrel button is held: the lasso is the effective tool (FR-28).</summary>
+    public bool IsBarrelSelection => _isBarrelSelection;
+
+    /// <summary>The tool the pen acts with now: the back end's eraser, else the lasso under the barrel button, else the active tool.</summary>
+    public AppTool EffectiveTool => _isInverted ? AppTool.Eraser : _isBarrelSelection ? AppTool.Selection : _activeTool;
 
     /// <summary>True when the pen inks with the effective tool: the pen or the highlighter (FR-30, FR-41).</summary>
     public bool IsDrawingTool => EffectiveTool is AppTool.Pen or AppTool.Highlighter;
@@ -140,6 +145,11 @@ public sealed class ToolsViewModel : ObservableObject
 
     public void EndInvertedEraser() => SetInverted(false);
 
+    /// <summary>The pen's barrel button went down: the lasso until it is released, whatever tool is active (FR-28).</summary>
+    public void BeginBarrelSelection() => SetBarrelSelection(true);
+
+    public void EndBarrelSelection() => SetBarrelSelection(false);
+
     /// <summary>Takes the remembered values from the settings (startup, or a change made in the settings).</summary>
     public void Apply(AppSettings settings)
     {
@@ -190,6 +200,19 @@ public sealed class ToolsViewModel : ObservableObject
     }
 
     private void RaiseRemembered() => RememberedChanged?.Invoke(this, EventArgs.Empty);
+
+    private void SetBarrelSelection(bool value)
+    {
+        if (_isBarrelSelection == value)
+        {
+            return;
+        }
+
+        _isBarrelSelection = value;
+        OnPropertyChanged(nameof(IsBarrelSelection));
+        OnPropertyChanged(nameof(EffectiveTool));
+        OnPropertyChanged(nameof(IsDrawingTool));
+    }
 
     private void SetInverted(bool value)
     {

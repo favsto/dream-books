@@ -334,8 +334,17 @@ internal static class Strings
     /// <summary>Highlighter colour name (FR-41).</summary>
     public static string HighlighterPurple => Get(nameof(HighlighterPurple));
 
-    /// <summary>Toolbar button of the lasso, disabled until phase 5 (UI-02).</summary>
+    /// <summary>Toolbar button of the lasso (UI-02, FR-50).</summary>
     public static string ToolSelection => Get(nameof(ToolSelection));
+
+    /// <summary>Selection action bar: copy the selected strokes (FR-51).</summary>
+    public static string SelectionCopy => Get(nameof(SelectionCopy));
+
+    /// <summary>Selection action bar and main menu: paste the copied strokes (FR-51).</summary>
+    public static string SelectionPaste => Get(nameof(SelectionPaste));
+
+    /// <summary>Selection action bar: delete the selected strokes (FR-51).</summary>
+    public static string SelectionDelete => Get(nameof(SelectionDelete));
 
     /// <summary>Toolbar button of the page bookmark, disabled until bookmarks exist (UI-02).</summary>
     public static string ToolBookmark => Get(nameof(ToolBookmark));

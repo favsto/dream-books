@@ -115,6 +115,9 @@ public sealed class MainViewModel : ObservableObject
         Recovery = recovery is null ? null : new RecoveryService(recovery, dialogs);
         Tools = new ToolsViewModel();
         Tools.Highlighter.SettingsChanged += OnHighlighterSettingsChanged;
+        Clipboard = new StrokeClipboard();
+        Selection = new SelectionViewModel(() => Editor, Clipboard);
+        Tools.PropertyChanged += OnActiveToolChanged;
         ZoomVm = new ZoomViewModel();
         Viewport = new DocumentViewportViewModel(ZoomVm, _scheduler) { PageNavigator = NavigateToPageAsync };
         Viewport.PositionChanged += OnViewportPositionChanged;
@@ -173,6 +176,12 @@ public sealed class MainViewModel : ObservableObject
 
     public ToolsViewModel Tools { get; }
 
+    /// <summary>The strokes copied with the lasso, shared by every page and document of the session (FR-51).</summary>
+    public StrokeClipboard Clipboard { get; }
+
+    /// <summary>The lasso selection on the current page (FR-50, FR-51).</summary>
+    public SelectionViewModel Selection { get; }
+
     public ZoomViewModel ZoomVm { get; }
 
     /// <summary>The multi-page view state: layout, position, current page, history, fit width.</summary>
@@ -230,6 +239,7 @@ public sealed class MainViewModel : ObservableObject
             if (SetProperty(ref _editor, value))
             {
                 Toolbar?.Eraser.Refresh();
+                Selection.Clear(); // a selection belongs to the page it was made on (FR-50)
             }
         }
     }
@@ -2310,6 +2320,15 @@ public sealed class MainViewModel : ObservableObject
     /// The current page may have got its editor without a page change (a load for the view, an undo): the session
     /// raises nothing then, so <see cref="Editor"/> is re-read here.
     /// </summary>
+    /// <summary>Choosing another tool drops the selection; the barrel button's lasso keeps it (FR-28).</summary>
+    private void OnActiveToolChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ToolsViewModel.ActiveTool))
+        {
+            Selection.Clear();
+        }
+    }
+
     private void RefreshCurrentEditor()
     {
         if (Session is { } session && !ReferenceEquals(session.CurrentEditor, Editor))

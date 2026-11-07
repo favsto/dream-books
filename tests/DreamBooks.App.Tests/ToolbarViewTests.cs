@@ -42,9 +42,9 @@ public sealed class ToolbarViewTests
             Assert.InRange(toolbar.Separators[0].TranslatePoint(new Point(0, 0), toolbar.Pill).X, xs[3], xs[4]);
             Assert.InRange(toolbar.Separators[1].TranslatePoint(new Point(0, 0), toolbar.Pill).X, xs[5], xs[6]);
 
-            // Lasso and bookmark wait for their phases; nothing to undo or redo without a document.
+            // The bookmark waits for its phase; nothing to undo or redo without a document.
             Assert.True(toolbar.PenButton.IsEnabled && toolbar.HighlighterButton.IsEnabled && toolbar.EraserButton.IsEnabled);
-            Assert.False(toolbar.SelectionButton.IsEnabled);
+            Assert.True(toolbar.SelectionButton.IsEnabled);
             Assert.False(toolbar.BookmarkButton.IsEnabled);
             Assert.False(toolbar.UndoButton.IsEnabled);
             Assert.False(toolbar.RedoButton.IsEnabled);

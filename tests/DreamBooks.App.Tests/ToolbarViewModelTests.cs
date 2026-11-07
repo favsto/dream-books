@@ -14,7 +14,7 @@ public class ToolbarViewModelTests
         new(_tools, undo ?? new RelayCommand(() => { }), redo ?? new RelayCommand(() => { }), () => null, _scheduler, () => _scheduler.Now);
 
     [Fact]
-    public void The_toolbar_has_seven_buttons_in_order_with_italian_names_and_two_disabled()
+    public void The_toolbar_has_seven_buttons_in_order_with_italian_names_and_only_the_bookmark_disabled()
     {
         var toolbar = Create();
 
@@ -28,7 +28,7 @@ public class ToolbarViewModelTests
             [Strings.ToolPen, Strings.ToolHighlighter, Strings.ToolEraser, Strings.ToolSelection, Strings.Undo, Strings.Redo, Strings.ToolBookmark],
             toolbar.Buttons.Select(b => b.Name));
         Assert.All(toolbar.Buttons, b => Assert.False(string.IsNullOrWhiteSpace(b.Name)));
-        Assert.False(toolbar.Buttons.Single(b => b.Kind == ToolbarButtonKind.Selection).Command.CanExecute(null));
+        Assert.True(toolbar.Buttons.Single(b => b.Kind == ToolbarButtonKind.Selection).Command.CanExecute(null));
         Assert.False(toolbar.Buttons.Single(b => b.Kind == ToolbarButtonKind.Bookmark).Command.CanExecute(null));
         Assert.True(toolbar.Buttons.Single(b => b.Kind == ToolbarButtonKind.Pen).Command.CanExecute(null));
         Assert.Equal([true, true, true, true, false, false, false], toolbar.Buttons.Select(b => b.IsTool));
@@ -107,20 +107,30 @@ public class ToolbarViewModelTests
     }
 
     [Fact]
-    public void Disabled_tools_cannot_become_active_and_leave_the_panel_as_it_is()
+    public void Selection_becomes_active_and_closes_the_open_panel() // FR-50
     {
         var toolbar = Create();
         toolbar.TapTool(ToolbarTool.Pen);
         Assert.Equal(OptionsPanel.Pen, toolbar.OpenPanel);
 
         toolbar.TapTool(ToolbarTool.Selection);
-        toolbar.TapToolCommand.Execute(ToolbarTool.Selection);
 
-        Assert.Equal(ToolbarTool.Pen, toolbar.ActiveTool);
-        Assert.Equal(AppTool.Pen, _tools.ActiveTool);
-        Assert.Equal(OptionsPanel.Pen, toolbar.OpenPanel);
-        Assert.False(toolbar.TapToolCommand.CanExecute(ToolbarTool.Selection));
-        Assert.True(toolbar.TapToolCommand.CanExecute(ToolbarTool.Eraser));
+        Assert.True(toolbar.TapToolCommand.CanExecute(ToolbarTool.Selection));
+        Assert.Equal(ToolbarTool.Selection, toolbar.ActiveTool);
+        Assert.Equal(AppTool.Selection, _tools.ActiveTool);
+        Assert.Equal(OptionsPanel.None, toolbar.OpenPanel);
+    }
+
+    [Fact]
+    public void Tapping_the_active_selection_tool_opens_no_panel() // FR-50
+    {
+        var toolbar = Create();
+        toolbar.TapTool(ToolbarTool.Selection);
+
+        toolbar.TapTool(ToolbarTool.Selection);
+
+        Assert.Equal(OptionsPanel.None, toolbar.OpenPanel);
+        Assert.Equal(ToolbarTool.Selection, toolbar.ActiveTool);
     }
 
     [Fact]
