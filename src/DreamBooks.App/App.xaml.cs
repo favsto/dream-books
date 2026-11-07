@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using DreamBooks.App.Services;
+using DreamBooks.App.Views;
 using DreamBooks.Core.Settings;
 using DreamBooks.Pdf;
 using Wpf.Ui.Appearance;
@@ -39,6 +40,24 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // The splash first, before the heavy start-up work, so the user sees the app at once; it closes when the window
+        // is ready (no minimum time).
+        var splash = new SplashWindow();
+        splash.Show();
+        try
+        {
+            StartMainWindow(e, splash);
+        }
+        catch
+        {
+            splash.Close(); // never leave a splash over an app that failed to start
+            throw;
+        }
+    }
+
+    private void StartMainWindow(StartupEventArgs e, SplashWindow splash)
+    {
         _theme = new ThemeService(new WindowsSystemThemeSource());
         _settings = new SettingsService(new AppSettingsStore(AppSettingsStore.DefaultRootDirectory()), new DispatcherDelayScheduler());
         _settings.Load(); // one small file; anything unreadable gives the defaults
@@ -53,6 +72,12 @@ public partial class App : Application
         var covers = new CoverService(new CoverStore(RecentFilesStore.DefaultRootDirectory()));
         var window = new MainWindow(_theme, _settings, _recents, covers);
         MainWindow = window;
+        window.StartupFile = StartupPlan.FileFromArguments(e.Args);
+        window.StartupCompleted.ContinueWith(
+            _ => splash.Close(),
+            CancellationToken.None,
+            TaskContinuationOptions.None,
+            TaskScheduler.FromCurrentSynchronizationContext());
         window.Show();
     }
 

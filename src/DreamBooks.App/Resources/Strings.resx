@@ -186,6 +186,7 @@
   <data name="TitleBarMinimize" xml:space="preserve"><value>Riduci a icona</value></data>
   <data name="TitleBarMaximize" xml:space="preserve"><value>Ingrandisci</value></data>
   <data name="TitleBarClose" xml:space="preserve"><value>Chiudi</value></data>
+  <data name="SplashTagline" xml:space="preserve"><value>Leggi. Annota. Sogna.</value></data>
   <data name="MenuCloseDocument" xml:space="preserve"><value>Chiudi documento</value></data>
   <data name="StartAllName" xml:space="preserve"><value>Mostra tutti i recenti</value></data>
   <data name="StartRemoveName" xml:space="preserve"><value>Rimuovi {0} dall'elenco</value></data>

@@ -489,6 +489,21 @@
         </Setter>
     </Style>
 
+    <!-- The splash (phase 4b): a fixed dark look, the same in both themes (it shows before the theme is applied). -->
+    <SolidColorBrush x:Key="SplashBackgroundBrush" Color="#1C1C1E" />
+    <SolidColorBrush x:Key="SplashTextBrush" Color="#F2F2F2" />
+    <SolidColorBrush x:Key="SplashSubtextBrush" Color="#9A9A9F" />
+    <SolidColorBrush x:Key="SplashAccentBrush" Color="#FF6B6B" />
+    <sys:Double x:Key="SplashIconSize">96</sys:Double>
+    <sys:Double x:Key="SplashTitleSize">26</sys:Double>
+    <sys:Double x:Key="SplashTaglineSize">14</sys:Double>
+    <sys:Double x:Key="SplashIndicatorWidth">160</sys:Double>
+    <sys:Double x:Key="SplashIndicatorHeight">3</sys:Double>
+    <Thickness x:Key="SplashPadding">56,44,56,44</Thickness>
+    <Thickness x:Key="SplashTitleMargin">0,14,0,0</Thickness>
+    <Thickness x:Key="SplashTaglineMargin">0,4,0,0</Thickness>
+    <Thickness x:Key="SplashIndicatorMargin">0,28,0,0</Thickness>
+
     <!-- The 40 px touch targets over WPF UI's Fluent styles (ControlsDictionary, merged before this dictionary). -->
     <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="MinWidth" Value="{StaticResource TouchTarget}" />

@@ -467,17 +467,40 @@ public partial class MainWindow : FluentWindow
     /// Startup recovery (FR-86), once the window is up so its questions have an owner: reopens the document of
     /// the most recent journal with its unsaved changes. Never on the pen path; never crashes the app.
     /// </summary>
+    private readonly TaskCompletionSource _startup = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>The file the app was started with ("Apri con"); set before the window is shown. It wins over the restore (FR-86).</summary>
+    internal string? StartupFile { get; set; }
+
+    /// <summary>
+    /// Completes when the start-up action (the file, the restored session, or nothing: the start screen) has finished,
+    /// whether it worked or not. The splash closes on it; there is no minimum time.
+    /// </summary>
+    internal Task StartupCompleted => _startup.Task;
+
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         Loaded -= OnLoaded;
         try
         {
-            await _viewModel.TryRestoreLastSessionAsync();
+            switch (StartupPlan.Decide(StartupFile, restorable: _viewModel.Recovery is not null))
+            {
+                case StartupAction.OpenFile:
+                    await _viewModel.OpenStartupFileAsync(StartupFile!);
+                    break;
+                case StartupAction.Restore:
+                    await _viewModel.TryRestoreLastSessionAsync();
+                    break;
+            }
         }
-#pragma warning disable CA1031 // A failed recovery leaves the journal on disk; the app starts empty.
+#pragma warning disable CA1031 // A failed recovery or open leaves the journal on disk; the app starts on the start screen.
         catch (Exception)
 #pragma warning restore CA1031
         {
+        }
+        finally
+        {
+            _startup.TrySetResult();
         }
     }
 
