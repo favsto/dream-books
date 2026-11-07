@@ -182,6 +182,24 @@
     <sys:Double x:Key="IconSize">20</sys:Double>
     <Thickness x:Key="ToolbarPadding">8,6,8,6</Thickness>
     <Thickness x:Key="ToolbarMargin">0,0,0,14</Thickness>
+    <!-- The movable toolbar (UI-02, 4b): where the pill sits on each edge (the title bar's 48 above the top; below the
+         menu button and clear of the left-edge swipe zone (24 + 14) on the left; clear of the rail's 40 px strip on the
+         right), the flyout's gap on the side facing the window, the vertical pill's padding and separators, and the grip
+         the finger drags. -->
+    <Thickness x:Key="ToolbarMarginTop">0,62,0,0</Thickness>
+    <Thickness x:Key="ToolbarMarginLeft">38,96,0,14</Thickness>
+    <Thickness x:Key="ToolbarMarginRight">0,96,54,14</Thickness>
+    <Thickness x:Key="FlyoutMarginTop">0,8,0,0</Thickness>
+    <Thickness x:Key="FlyoutMarginLeft">8,0,0,0</Thickness>
+    <Thickness x:Key="FlyoutMarginRight">0,0,8,0</Thickness>
+    <Thickness x:Key="ToolbarPaddingVertical">6,8,6,8</Thickness>
+    <Thickness x:Key="ToolbarSeparatorMarginVertical">0,6,0,6</Thickness>
+    <sys:Double x:Key="ToolbarGripLength">28</sys:Double>
+    <sys:Double x:Key="ToolbarGripDotSize">3</sys:Double>
+    <sys:Double x:Key="ToolbarGripDotGap">4</sys:Double>
+    <sys:Double x:Key="ToolbarSnapFromOpacity">0.3</sys:Double>
+    <!-- The search pill and the notices when the toolbar is on the top edge: below it. -->
+    <Thickness x:Key="TopOverlaysMarginBelowToolbar">0,122,0,0</Thickness>
     <Thickness x:Key="ToolbarButtonMargin">1,0,1,0</Thickness>
     <sys:Double x:Key="ToolbarSeparatorWidth">1</sys:Double>
     <sys:Double x:Key="ToolbarSeparatorHeight">22</sys:Double>

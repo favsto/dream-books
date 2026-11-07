@@ -105,7 +105,19 @@ internal sealed class SettingsService
     {
         ArgumentNullException.ThrowIfNull(toolbar);
         toolbar.IsToolbarFixed = _current.ToolbarFixed;
-        _listeners.Add((_, next) => toolbar.IsToolbarFixed = next.ToolbarFixed);
+        toolbar.Edge = _current.ToolbarEdge;
+        _listeners.Add((_, next) =>
+        {
+            toolbar.IsToolbarFixed = next.ToolbarFixed;
+            toolbar.Edge = next.ToolbarEdge;
+        });
+        toolbar.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ToolbarViewModel.Edge))
+            {
+                Update(s => s with { ToolbarEdge = toolbar.Edge }); // a drag by the grip is remembered
+            }
+        };
     }
 
     /// <summary>The theme mode and accent reach <paramref name="apply"/> now and whenever either changes.</summary>

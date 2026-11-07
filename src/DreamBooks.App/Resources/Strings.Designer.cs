@@ -399,6 +399,7 @@ internal static class Strings
     public static string TitleBarMinimize => Get(nameof(TitleBarMinimize));
     public static string TitleBarMaximize => Get(nameof(TitleBarMaximize));
     public static string TitleBarClose => Get(nameof(TitleBarClose));
+    public static string ToolbarGrip => Get(nameof(ToolbarGrip));
     public static string ShortcutSettings => Get(nameof(ShortcutSettings));
     public static string SettingsEdgeRight => Get(nameof(SettingsEdgeRight));
     public static string SettingsEdgeLeft => Get(nameof(SettingsEdgeLeft));

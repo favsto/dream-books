@@ -28,7 +28,7 @@
         <views:FloatingSurface x:Name="Pill" Grid.Row="1" HorizontalAlignment="Center" Margin="{StaticResource ToolbarMargin}"
                                CornerRadius="{StaticResource PillCornerRadius}" Stylus.IsPressAndHoldEnabled="False"
                                AutomationProperties.Name="{x:Static res:Strings.ToolbarLabel}">
-            <Grid Margin="{StaticResource ToolbarPadding}">
+            <Grid x:Name="PillContent" Margin="{StaticResource ToolbarPadding}">
                 <!-- The active tool's indicator, behind the buttons: an accent disc and a short bar, sliding (150 ms). -->
                 <Canvas IsHitTestVisible="False" HorizontalAlignment="Left" VerticalAlignment="Top">
                     <Grid x:Name="Indicator" Width="{StaticResource TouchTarget}" Height="{StaticResource TouchTarget}">
@@ -42,6 +42,8 @@
                     </Grid>
                 </Canvas>
                 <StackPanel x:Name="ButtonRow" Orientation="Horizontal">
+                    <!-- The grip: a finger or the mouse drags the toolbar by it to another edge; the pen does not (UI-02). -->
+                    <views:ToolbarGrip x:Name="Grip" AutomationProperties.Name="{x:Static res:Strings.ToolbarGrip}" />
                     <Button x:Name="PenButton" Style="{StaticResource ToolbarButtonStyle}" Content="{StaticResource GlyphPen}"
                             Command="{Binding Buttons[0].Command, Mode=OneTime}" ToolTip="{Binding Buttons[0].Name, Mode=OneTime}"
                             AutomationProperties.Name="{Binding Buttons[0].Name, Mode=OneTime}" />

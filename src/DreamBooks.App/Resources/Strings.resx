@@ -186,6 +186,7 @@
   <data name="TitleBarMinimize" xml:space="preserve"><value>Riduci a icona</value></data>
   <data name="TitleBarMaximize" xml:space="preserve"><value>Ingrandisci</value></data>
   <data name="TitleBarClose" xml:space="preserve"><value>Chiudi</value></data>
+  <data name="ToolbarGrip" xml:space="preserve"><value>Sposta la barra degli strumenti</value></data>
   <data name="ShortcutSettings" xml:space="preserve"><value>Ctrl+,</value></data>
   <data name="SettingsEdgeRight" xml:space="preserve"><value>A destra</value></data>
   <data name="SettingsEdgeLeft" xml:space="preserve"><value>A sinistra</value></data>

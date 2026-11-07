@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using DreamBooks.App.Resources;
 using DreamBooks.App.Services;
 using DreamBooks.Core.Ink;
+using DreamBooks.Core.Settings;
 
 namespace DreamBooks.App.ViewModels;
 
@@ -110,6 +111,23 @@ public sealed class ToolbarViewModel : ObservableObject
     {
         get => _phase;
         private set => SetProperty(ref _phase, value);
+    }
+
+    private ToolbarEdge _edge = ToolbarEdge.Bottom;
+
+    /// <summary>The window edge the toolbar sits on (UI-02, FR-110): the settings set it, and a drag by the grip does.</summary>
+    public ToolbarEdge Edge
+    {
+        get => _edge;
+        set
+        {
+            if (_edge != value && Enum.IsDefined(value))
+            {
+                _edge = value;
+                OnPropertyChanged();
+                ClosePanel(); // an open flyout belongs to the old place
+            }
+        }
     }
 
     /// <summary>"Toolbar fixed" (section 4): always visible.</summary>

@@ -80,6 +80,16 @@ public partial class MainWindow : FluentWindow
             _viewModel.SettingsWarning = settings.Warning;
         }
 
+        // The search pill and the notices go below the toolbar when it is on the top edge (UI-02, 4b).
+        _viewModel.Toolbar.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ViewModels.ToolbarViewModel.Edge))
+            {
+                ArrangeTopOverlays();
+            }
+        };
+        ArrangeTopOverlays();
+
         Loaded += OnLoaded;
         ApplyBackdrop();
         if (theme is not null)
@@ -232,6 +242,10 @@ public partial class MainWindow : FluentWindow
         MainMenu.SettingsItem.Command = vm.OpenCommand;
         InputBindings.Add(new KeyBinding(vm.OpenCommand, Key.OemComma, ModifierKeys.Control));
     }
+
+    private void ArrangeTopOverlays() =>
+        TopOverlays.Margin = (Thickness)FindResource(
+            _viewModel.Toolbar.Edge == Core.Settings.ToolbarEdge.Top ? "TopOverlaysMarginBelowToolbar" : "TopOverlaysMargin");
 
     private CoverService? _covers;
 

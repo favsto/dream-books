@@ -9,6 +9,7 @@ using System.Windows.Threading;
 using DreamBooks.App.Resources;
 using DreamBooks.App.Services;
 using DreamBooks.App.ViewModels;
+using DreamBooks.Core.Settings;
 using Microsoft.Win32;
 
 namespace DreamBooks.App.Views;
@@ -54,6 +55,7 @@ public partial class ToolbarView : UserControl
         }
 
         Separators = [Separator1, Separator2];
+        WireGrip();
 
         // No boundary feedback from the flyouts moves the whole window (they do not pan; kept as a guard).
         FlyoutHost.AddHandler(ManipulationBoundaryFeedbackEvent, new EventHandler<ManipulationBoundaryFeedbackEventArgs>((_, e) => e.Handled = true));
@@ -151,6 +153,173 @@ public partial class ToolbarView : UserControl
         return kind != PointerKind.Pen;
     }
 
+    private readonly TranslateTransform _drag = new();
+    private bool _vertical;
+
+    /// <summary>The edge the toolbar sits on (UI-02); set from the view model (the settings, or a drag by the grip).</summary>
+    internal ToolbarEdge Edge { get; private set; } = ToolbarEdge.Bottom;
+
+    /// <summary>True on the left and right edges: the pill is a column.</summary>
+    internal bool IsVertical => _vertical;
+
+    /// <summary>The length of the last snap animation after a drag; null when it was instant (animations off) or none happened.</summary>
+    internal TimeSpan? LastSnapAnimationDuration { get; private set; }
+
+    /// <summary>The toolbar grip, by which a finger or the mouse drags it.</summary>
+    internal ToolbarGrip DragGrip => Grip;
+
+    /// <summary>
+    /// Puts the pill and the flyouts on <paramref name="edge"/>: the pill is a row on the top and bottom edges and a
+    /// column on the left and right; the flyouts open towards the centre of the window. Bottom is exactly the layout 4a
+    /// had. The visibility rules, the hit testing and the pen rules do not depend on the edge.
+    /// </summary>
+    internal void ApplyEdge(ToolbarEdge edge)
+    {
+        Edge = edge;
+        _vertical = edge is ToolbarEdge.Left or ToolbarEdge.Right;
+        Root.RowDefinitions.Clear();
+        Root.ColumnDefinitions.Clear();
+        switch (edge)
+        {
+            case ToolbarEdge.Top:
+                AddAutoRows();
+                SetSlots([Pill, FlyoutHost], row: true);
+                Place(HorizontalAlignment.Center, VerticalAlignment.Top, Resource<Thickness>("ToolbarMarginTop"), Resource<Thickness>("FlyoutMarginTop"));
+                FlyoutHost.VerticalAlignment = VerticalAlignment.Top;
+                SetFlyoutAnchor(VerticalAlignment.Top, new Point(0.5, 0));
+                break;
+            case ToolbarEdge.Left:
+                AddAutoColumns();
+                SetSlots([Pill, FlyoutHost], row: false);
+                Place(HorizontalAlignment.Left, VerticalAlignment.Center, Resource<Thickness>("ToolbarMarginLeft"), Resource<Thickness>("FlyoutMarginLeft"));
+                FlyoutHost.HorizontalAlignment = HorizontalAlignment.Left;
+                FlyoutHost.VerticalAlignment = VerticalAlignment.Center;
+                SetFlyoutAnchor(VerticalAlignment.Center, new Point(0, 0.5));
+                break;
+            case ToolbarEdge.Right:
+                AddAutoColumns();
+                SetSlots([FlyoutHost, Pill], row: false);
+                Place(HorizontalAlignment.Right, VerticalAlignment.Center, Resource<Thickness>("ToolbarMarginRight"), Resource<Thickness>("FlyoutMarginRight"));
+                FlyoutHost.HorizontalAlignment = HorizontalAlignment.Right;
+                FlyoutHost.VerticalAlignment = VerticalAlignment.Center;
+                SetFlyoutAnchor(VerticalAlignment.Center, new Point(1, 0.5));
+                break;
+            default:
+                AddAutoRows();
+                SetSlots([FlyoutHost, Pill], row: true);
+                Place(HorizontalAlignment.Center, VerticalAlignment.Bottom, Resource<Thickness>("ToolbarMargin"), Resource<Thickness>("FlyoutMargin"));
+                FlyoutHost.VerticalAlignment = VerticalAlignment.Bottom;
+                SetFlyoutAnchor(VerticalAlignment.Bottom, new Point(0.5, 1));
+                break;
+        }
+
+        ButtonRow.Orientation = _vertical ? Orientation.Vertical : Orientation.Horizontal;
+        Grip.IsVertical = _vertical;
+        PillContent.Margin = Resource<Thickness>(_vertical ? "ToolbarPaddingVertical" : "ToolbarPadding");
+        var line = Resource<double>("ToolbarSeparatorWidth");
+        var length = Resource<double>("ToolbarSeparatorHeight");
+        foreach (var separator in Separators)
+        {
+            separator.Width = _vertical ? length : line;
+            separator.Height = _vertical ? line : length;
+            separator.Margin = Resource<Thickness>(_vertical ? "ToolbarSeparatorMarginVertical" : "ToolbarSeparatorMargin");
+            separator.VerticalAlignment = _vertical ? VerticalAlignment.Top : VerticalAlignment.Center;
+            separator.HorizontalAlignment = _vertical ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+        }
+
+        InvalidateMeasure();
+        UpdateLayout();
+        MoveIndicator(animate: false);
+    }
+
+    private T Resource<T>(string key) => TryFindResource(key) is T value ? value : default!;
+
+    private void AddAutoRows()
+    {
+        Root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+    }
+
+    private void AddAutoColumns()
+    {
+        Root.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Root.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+    }
+
+    /// <summary>The pill and the flyout host on the grid rows (a row layout) or columns, in the order given.</summary>
+    private static void SetSlots(FrameworkElement[] ordered, bool row)
+    {
+        for (var i = 0; i < ordered.Length; i++)
+        {
+            Grid.SetRow(ordered[i], row ? i : 0);
+            Grid.SetColumn(ordered[i], row ? 0 : i);
+        }
+    }
+
+    private void Place(HorizontalAlignment horizontal, VerticalAlignment vertical, Thickness pillMargin, Thickness flyoutMargin)
+    {
+        HorizontalAlignment = horizontal;
+        VerticalAlignment = vertical;
+        Pill.Margin = pillMargin;
+        Pill.HorizontalAlignment = horizontal == HorizontalAlignment.Center ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
+        Pill.VerticalAlignment = vertical == VerticalAlignment.Center ? VerticalAlignment.Center : VerticalAlignment.Stretch;
+        FlyoutHost.Margin = flyoutMargin;
+        FlyoutHost.HorizontalAlignment = HorizontalAlignment.Center;
+    }
+
+    private void SetFlyoutAnchor(VerticalAlignment alignment, Point origin)
+    {
+        foreach (var flyout in Flyouts())
+        {
+            flyout.VerticalAlignment = alignment;
+            flyout.RenderTransformOrigin = origin;
+        }
+    }
+
+    /// <summary>The grip drag: the toolbar follows the pointer, and where it is let go it snaps to the nearest edge (finger or mouse).</summary>
+    private void WireGrip()
+    {
+        Grip.DragStarted += (_, _) =>
+        {
+            _drag.X = 0;
+            _drag.Y = 0;
+            RenderTransform = _drag;
+            _viewModel?.ClosePanel();
+        };
+        Grip.DragDelta += (_, delta) =>
+        {
+            _drag.X = delta.X;
+            _drag.Y = delta.Y;
+        };
+        Grip.DragCompleted += (_, release) =>
+        {
+            _drag.X = 0;
+            _drag.Y = 0;
+            var host = Grip.ReferenceElement as FrameworkElement ?? this;
+            var edge = ToolbarPlacement.NearestEdge(release.X, release.Y, host.ActualWidth, host.ActualHeight);
+            if (_viewModel is not null && edge != _viewModel.Edge)
+            {
+                _viewModel.Edge = edge;
+                Snap();
+            }
+        };
+        Loaded += (_, _) => Grip.ReferenceElement = VisualTreeHelper.GetParent(this) as UIElement;
+    }
+
+    /// <summary>The short animation of the toolbar landing on its new edge (a fade-in); none with Windows animations off (NFR-32).</summary>
+    private void Snap()
+    {
+        LastSnapAnimationDuration = null;
+        if (!AnimationsEnabled() || TryFindResource("ToolbarShowDuration") is not TimeSpan duration || duration <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        LastSnapAnimationDuration = duration;
+        var from = Resource<double>("ToolbarSnapFromOpacity");
+        BeginAnimation(OpacityProperty, new DoubleAnimation(from, 1, new Duration(duration)) { FillBehavior = FillBehavior.Stop });
+    }
+
     /// <summary>Opaque theme brushes when Windows transparency effects are off (NFR-32), the tinted layers otherwise.</summary>
     internal void ApplyTransparency()
     {
@@ -238,6 +407,7 @@ public partial class ToolbarView : UserControl
         viewModel.PropertyChanged += OnViewModelChanged;
         ApplyMotionSetting();
         ShowActiveTool(animate: false);
+        ApplyEdge(viewModel.Edge);
         ShowPanel(viewModel.OpenPanel);
         ApplyPhase(viewModel.Phase);
     }
@@ -256,6 +426,9 @@ public partial class ToolbarView : UserControl
                 break;
             case nameof(ToolbarViewModel.OpenPanel):
                 ShowPanel(_viewModel.OpenPanel);
+                break;
+            case nameof(ToolbarViewModel.Edge):
+                ApplyEdge(_viewModel.Edge);
                 break;
             case nameof(ToolbarViewModel.Phase):
                 ApplyPhase(_viewModel.Phase);
@@ -292,23 +465,36 @@ public partial class ToolbarView : UserControl
             return; // not laid out yet: placed when the row gets its size
         }
 
-        var x = active.TranslatePoint(new Point(0, 0), ButtonRow).X;
-        var y = active.TranslatePoint(new Point(0, 0), ButtonRow).Y;
-        IndicatorSlide.Y = y;
-        if (!animate || TryFindResource("ToolIndicatorSlideDuration") is not TimeSpan duration || duration <= TimeSpan.Zero)
+        var at = active.TranslatePoint(new Point(0, 0), ButtonRow);
+
+        // The indicator slides along the pill: across on the top and bottom edges, down on the left and right ones.
+        var along = _vertical ? TranslateTransform.YProperty : TranslateTransform.XProperty;
+        var target = _vertical ? at.Y : at.X;
+        if (_vertical)
         {
             IndicatorSlide.BeginAnimation(TranslateTransform.XProperty, null);
-            IndicatorSlide.X = x;
+            IndicatorSlide.X = at.X;
+        }
+        else
+        {
+            IndicatorSlide.BeginAnimation(TranslateTransform.YProperty, null);
+            IndicatorSlide.Y = at.Y;
+        }
+
+        if (!animate || TryFindResource("ToolIndicatorSlideDuration") is not TimeSpan duration || duration <= TimeSpan.Zero)
+        {
+            IndicatorSlide.BeginAnimation(along, null);
+            IndicatorSlide.SetValue(along, target);
             _indicatorPlaced = true;
             return;
         }
 
-        var from = IndicatorSlide.X;
-        IndicatorSlide.X = x; // the base value under the animation: where it ends
+        var from = (double)IndicatorSlide.GetValue(along);
+        IndicatorSlide.SetValue(along, target); // the base value under the animation: where it ends
         LastIndicatorAnimationDuration = duration;
         IndicatorSlide.BeginAnimation(
-            TranslateTransform.XProperty,
-            new DoubleAnimation(from, x, new Duration(duration))
+            along,
+            new DoubleAnimation(from, target, new Duration(duration))
             {
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
                 FillBehavior = FillBehavior.Stop,
@@ -498,7 +684,19 @@ public partial class ToolbarView : UserControl
         var title = TryFindResource("TitleBarClearance") is Thickness clearance ? clearance.Top : 0;
         var button = TryFindResource("TouchTarget") as double? ?? 0;
         var padding = TryFindResource("ToolbarPadding") is Thickness p ? Vertical(p) : 0;
+        if (_vertical)
+        {
+            // Beside the pill: the whole height below the title bar, less the pill's own bottom gap.
+            return Math.Max(0, slotHeight - title - Pill.Margin.Bottom);
+        }
+
+        // Above (bottom edge) or below (top edge) the pill. On the top edge the pill's margin already holds the title bar.
         var pill = button + padding + Vertical(Pill.Margin);
-        return Math.Max(0, slotHeight - title - pill - Vertical(FlyoutHost.Margin));
+        var reserved = Edge == ToolbarEdge.Top ? 0 : title;
+        var gap = Edge == ToolbarEdge.Top ? ToolbarBottomGap() : 0;
+        return Math.Max(0, slotHeight - reserved - pill - Vertical(FlyoutHost.Margin) - gap);
     }
+
+    /// <summary>The space kept below a flyout that opens downwards from the top edge (the bottom edge's gap of the toolbar).</summary>
+    private double ToolbarBottomGap() => TryFindResource("ToolbarMargin") is Thickness m ? m.Bottom : 0;
 }

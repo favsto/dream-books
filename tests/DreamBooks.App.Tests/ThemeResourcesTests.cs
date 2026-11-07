@@ -58,6 +58,7 @@ public sealed class ThemeResourcesTests
         "MenuItemPadding", "MenuShortcutMargin", "MenuSeparatorMargin", "MenuSeparatorHeight", "MenuItemStyle",
         "MenuShortcutText", "SaveProgressLineHeight", "SaveProgressBarFraction", "SaveProgressCycleDuration",
         "SaveProgressBarBrush", "TopOverlaysMargin", "NoticeBarMargin", "NoticeBarPadding", "NoticeBarMaxWidth",
+        "ToolbarMarginTop", "ToolbarMarginLeft", "ToolbarMarginRight", "FlyoutMarginTop", "FlyoutMarginLeft", "FlyoutMarginRight", "ToolbarPaddingVertical", "ToolbarSeparatorMarginVertical", "ToolbarGripLength", "ToolbarGripDotSize", "ToolbarGripDotGap", "ToolbarSnapFromOpacity", "TopOverlaysMarginBelowToolbar",
         "SettingsPanelWidth", "SettingsPanelMargin", "SettingsTitleSize", "SettingsAccentFieldMargin", "SettingsAccentFieldWidth", "MenuSubListMargin", "SplashBackgroundBrush", "SplashTextBrush", "SplashSubtextBrush", "SplashAccentBrush", "SplashIconSize", "SplashTitleSize", "SplashTaglineSize", "SplashIndicatorWidth", "SplashIndicatorHeight", "SplashPadding", "SplashTitleMargin", "SplashTaglineMargin", "SplashIndicatorMargin",
         "StartMargin", "StartMaxWidth", "StartTitleSize", "StartHeaderMargin", "StartCardWidth", "StartCoverHeight", "StartCardGap", "StartCardMargin", "StartCardTextMargin", "StartCardSubtextMargin", "StartCardTextSize", "StartProgressHeight", "StartProgressMargin", "StartCardButtonStyle", "ErrorLineMargin", "DialogButtonStyle",
         "NoticeTextMargin", "FlyoutFirstHeaderMargin", "ColorPickerHexMargin", "ColorPickerButtonMargin",
