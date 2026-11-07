@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="it"><head><meta charset="utf-8"><title>Dream Books 4b – avvio</title>
+<style>
+:root{--bg:#1c1c1e;--panel:#2c2c2e;--text:#f2f2f2;--mute:#9a9a9f;--acc:#ff6b6b;--line:#3a3a3c}
+*{box-sizing:border-box}body{margin:0;font-family:"Segoe UI",system-ui,sans-serif;background:#111;color:var(--text);padding:24px}
+h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;margin:32px 0 10px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em}
+p.s{color:var(--mute);margin:0 0 16px;font-size:14px}
+.row{display:flex;gap:20px;flex-wrap:wrap}
+.win{width:560px;height:350px;background:var(--bg);border-radius:12px;position:relative;overflow:hidden;border:1px solid var(--line)}
+.cap{font-size:13px;color:var(--mute);margin:8px 0 0;width:560px}
+.pill{position:absolute;top:6px;height:26px;border-radius:13px;background:var(--panel);font-size:12px;display:flex;align-items:center;padding:0 12px}
+.btn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 16px;border-radius:8px;background:var(--panel);font-size:14px;border:1px solid var(--line)}
+.btn.main{background:var(--acc);color:#1c1c1e;border-color:var(--acc);font-weight:600}
+.rec{display:flex;align-items:center;gap:12px;height:44px;padding:0 12px;border-radius:8px;font-size:13px}
+.rec:hover{background:var(--panel)}.rec small{color:var(--mute);margin-left:auto}
+.thumb{width:26px;height:34px;background:#f4f4f4;border-radius:2px}
+.card{width:120px}.card .t{height:150px;background:#f4f4f4;border-radius:6px;margin-bottom:6px;position:relative}
+.card b{font-size:12px;font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.card span{font-size:11px;color:var(--mute)}
+.bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--acc)}
+.icons{display:flex;gap:24px}.icons div{text-align:center;font-size:12px;color:var(--mute)}
+.splash{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%}
+.prog{width:160px;height:3px;background:var(--line);border-radius:2px;margin-top:28px;overflow:hidden}.prog i{display:block;width:45%;height:100%;background:var(--acc)}
+</style></head><body>
+<h1>Dream Books – fase 4b: avvio</h1>
+<p class="s">Bozze per reagire, non il design finale. Colori e forme seguono la 4a (tinta scura, pillole, accento corallo).</p>
+
+<h2>1. Icona dell'app (tre idee)</h2>
+<div class="icons">
+ <div><svg width="96" height="96" viewBox="0 0 96 96"><rect width="96" height="96" rx="22" fill="#2a2d4a"/><path d="M48 70V34c-8-6-20-7-28-4v34c8-3 20-2 28 6zm0 0V34c8-6 20-7 28-4v34c-8-3-20-2-28 6z" fill="#f4f4f4"/><path d="M28 74c14-14 26-22 44-30" stroke="#ff6b6b" stroke-width="5" stroke-linecap="round" fill="none"/></svg><br>A · libro aperto + tratto d'inchiostro</div>
+ <div><svg width="96" height="96" viewBox="0 0 96 96"><rect width="96" height="96" rx="22" fill="#2a2d4a"/><path d="M62 18a28 28 0 1 0 16 44A22 22 0 0 1 62 18z" fill="#f4f4f4"/><rect x="30" y="52" width="30" height="24" rx="3" fill="#ff6b6b"/><path d="M45 52v24" stroke="#2a2d4a" stroke-width="2"/></svg><br>B · luna ("dream") + libro</div>
+ <div><svg width="96" height="96" viewBox="0 0 96 96"><rect width="96" height="96" rx="22" fill="#ff6b6b"/><path d="M30 24h26a14 14 0 0 1 0 28H44v20H30z" fill="#fff"/><path d="M60 70l14-26" stroke="#2a2d4a" stroke-width="5" stroke-linecap="round"/></svg><br>C · "D" con pennino</div>
+</div>
+
+<h2>2. Splash all'avvio (si chiude da sola quando l'app è pronta)</h2>
+<div class="row"><div><div class="win"><div class="splash">
+ <svg width="88" height="88" viewBox="0 0 96 96"><rect width="96" height="96" rx="22" fill="#2a2d4a"/><path d="M48 70V34c-8-6-20-7-28-4v34c8-3 20-2 28 6zm0 0V34c8-6 20-7 28-4v34c-8-3-20-2-28 6z" fill="#f4f4f4"/><path d="M28 74c14-14 26-22 44-30" stroke="#ff6b6b" stroke-width="5" stroke-linecap="round" fill="none"/></svg>
+ <div style="font-size:26px;font-weight:600;margin-top:14px">Dream Books</div>
+ <div style="color:var(--mute);font-size:14px;margin-top:4px">Leggi. Annota. Sogna.</div>
+ <div class="prog"><i></i></div></div></div>
+ <div class="cap">Il tratto d'inchiostro del logo si disegna da solo mentre l'app carica (animazione, ferma se le animazioni di Windows sono disattivate). Sotto, una frase breve.</div></div></div>
+
+<h2>3. Schermata iniziale senza PDF aperto</h2>
+<div class="row">
+<div><div class="win">
+ <div class="pill" style="left:8px">Dream Books</div>
+ <div style="position:absolute;left:44px;top:62px;right:44px">
+  <div style="font-size:24px;font-weight:600">Dream Books</div>
+  <div style="color:var(--mute);margin:2px 0 18px">Leggi. Annota. Sogna.</div>
+  <div style="display:flex;gap:10px;margin-bottom:18px"><span class="btn main">📂 Apri PDF…</span><span class="btn">Ultimo aperto</span></div>
+  <div style="font-size:12px;color:var(--mute);margin:0 0 4px 12px">RECENTI</div>
+  <div class="rec"><div class="thumb"></div>Mondo senza fine - 4a.pdf<small>ieri · pag. 131</small></div>
+  <div class="rec"><div class="thumb"></div>Manuale Surface.pdf<small>3 giorni fa · pag. 12</small></div>
+  <div class="rec"><div class="thumb"></div>Appunti corso.pdf<small>1 settimana fa · pag. 4</small></div>
+ </div></div>
+ <div class="cap"><b>A · Lista in stile VS Code</b>: bottone grande "Apri PDF", sotto l'elenco dei recenti con miniatura, nome, quando e a che pagina eri. Semplice e veloce da leggere.</div></div>
+
+<div><div class="win">
+ <div class="pill" style="left:8px">Dream Books</div>
+ <div style="position:absolute;left:44px;top:56px;right:44px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px"><div style="font-size:22px;font-weight:600">Riprendi a leggere</div><span class="btn main">📂 Apri PDF…</span></div>
+  <div style="display:flex;gap:16px">
+   <div class="card"><div class="t"><div class="bar" style="width:40%"></div></div><b>Mondo senza fine - 4a.pdf</b><span>ieri · pag. 131</span></div>
+   <div class="card"><div class="t"><div class="bar" style="width:8%"></div></div><b>Manuale Surface.pdf</b><span>3 giorni fa</span></div>
+   <div class="card"><div class="t"><div class="bar" style="width:70%"></div></div><b>Appunti corso.pdf</b><span>1 settimana fa</span></div>
+   <div class="card"><div class="t" style="background:var(--panel);display:flex;align-items:center;justify-content:center;color:var(--mute)">Altri…</div></div>
+  </div>
+ </div></div>
+ <div class="cap"><b>B · Copertine</b>: i recenti sono le prime pagine in grande con una barra di avanzamento di lettura; si tocca la copertina con un dito o la penna. Più "da tablet", meno compatta.</div></div>
+</div>
+<p class="s" style="margin-top:28px">Il bottone "Apri PDF" apre il selettore file; trascinare un PDF sulla finestra lo apre pure (mia ipotesi).</p>
+</body></html>
