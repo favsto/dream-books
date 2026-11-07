@@ -66,9 +66,17 @@ implementation, review). Project-specific additions:
   `ViewModels/` ToolbarViewModel, ToolbarVisibilityState (retract while
   writing, finger tap), Pen/EraserOptionsViewModel, CustomPaletteViewModel,
   ColorPickerViewModel.
+  Lasso (phase 5a): `Ink/SelectionLayer` (loop, rectangle, handles; in
+  InkSurface, whose lasso gestures live in `Ink/InkSurface.Selection.cs`, a
+  partial file, incl. the barrel button), `Views/SelectionActionBar` (colours,
+  copy, paste, delete, top centre), `ViewModels/SelectionViewModel` and
+  SelectionState (a drag only previews; the page changes once, at pen-up).
 - `src/DreamBooks.Core/` — domain model, ink math (highlighters: Model
   HighlighterPresets and ChiselTip, Ink HighlighterSettings and
-  HighlighterGeometry: constant width, chisel, straight line), UndoManager,
+  HighlighterGeometry: constant width, chisel, straight line; lasso: Ink
+  SelectionGeometry, SelectionHandles, StrokeTransform, StrokeClipboard and
+  the PageEditor Move/Scale/Recolor/Delete/PasteStrokes, all replacements
+  through EraseStrokesCommand/AddStrokesCommand), UndoManager,
   DocumentSession (lazy pages, dirty tracking, PageStrokesChanged), stroke
   JSON schema, journal (recorder, replayer), `Settings/` (AppSettings,
   CustomPalette, HexColor, ThemeMode, ToolbarEdge: the pure settings model),
