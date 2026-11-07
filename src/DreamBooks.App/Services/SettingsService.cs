@@ -44,6 +44,9 @@ internal sealed class SettingsService
     /// </summary>
     public event EventHandler? SaveStatusChanged;
 
+    /// <summary>The settings changed (any listener has already taken the new values), by the user or by the tools and the toolbar.</summary>
+    public event EventHandler? Changed;
+
     public AppSettings Current => _current;
 
     /// <summary>True when the last write failed (cleared by the next successful one).</summary>
@@ -71,6 +74,8 @@ internal sealed class SettingsService
         {
             listener(previous, next);
         }
+
+        Changed?.Invoke(this, EventArgs.Empty);
 
         _pendingSave?.Dispose();
         _pendingSave = _scheduler.Schedule(SaveDelay, () =>

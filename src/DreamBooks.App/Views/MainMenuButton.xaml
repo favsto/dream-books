@@ -107,10 +107,13 @@
                 <Border x:Name="Separator3" Height="{StaticResource MenuSeparatorHeight}" Margin="{StaticResource MenuSeparatorMargin}"
                         Background="{DynamicResource ToolbarSeparatorBrush}" IsHitTestVisible="False" />
 
-                <Button x:Name="SettingsItem" Style="{StaticResource MenuItemStyle}" IsEnabled="False"
+                <Button x:Name="SettingsItem" Style="{StaticResource MenuItemStyle}"
                         AutomationProperties.Name="{x:Static res:Strings.MenuSettings}"
-                        AutomationProperties.HelpText="{x:Static res:Strings.MenuNotYetAvailable}">
-                    <TextBlock Text="{x:Static res:Strings.MenuSettings}" VerticalAlignment="Center" />
+                        AutomationProperties.AcceleratorKey="{x:Static res:Strings.ShortcutSettings}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Right" Text="{x:Static res:Strings.ShortcutSettings}" Style="{StaticResource MenuShortcutText}" />
+                        <TextBlock Text="{x:Static res:Strings.MenuSettings}" VerticalAlignment="Center" />
+                    </DockPanel>
                 </Button>
             </StackPanel>
         </views:FloatingSurface>

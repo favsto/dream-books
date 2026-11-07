@@ -1,0 +1,110 @@
+<UserControl x:Class="DreamBooks.App.Views.SettingsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="clr-namespace:DreamBooks.App.Resources"
+             xmlns:conv="clr-namespace:DreamBooks.App.Converters"
+             xmlns:views="clr-namespace:DreamBooks.App.Views"
+             HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{StaticResource SettingsPanelMargin}"
+             Focusable="False" IsTabStop="False" Visibility="Collapsed"
+             AutomationProperties.Name="{x:Static res:Strings.SettingsPanelLabel}">
+    <!-- The settings (FR-110, 4b): theme, accent, eraser, pressure curve with its preview, smoothing, "Toolbar fissa" and
+         the toolbar's edge. A centred floating surface over the document (no second window), so the pen and finger rules
+         of the other floating views hold: the pen presses the controls inside it, a pen press outside closes it and writes.
+         It scrolls in a short window. Esc, the close button and a press outside close it. The data context is the
+         SettingsViewModel. No finger-drawing option: fingers never draw. -->
+    <UserControl.Resources>
+        <conv:EnumMatchConverter x:Key="EnumMatch" />
+    </UserControl.Resources>
+    <views:FloatingSurface x:Name="Surface" Width="{StaticResource SettingsPanelWidth}" CornerRadius="{StaticResource PanelCornerRadius}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" PanningMode="None" Focusable="False">
+            <StackPanel Margin="{StaticResource FlyoutPadding}" KeyboardNavigation.TabNavigation="Cycle">
+                <DockPanel>
+                    <Button x:Name="CloseButton" DockPanel.Dock="Right" Style="{StaticResource ToolbarButtonStyle}" Margin="0"
+                            Content="&#xE711;" Command="{Binding CloseCommand}" ToolTip="{x:Static res:Strings.ClosePanel}"
+                            AutomationProperties.Name="{x:Static res:Strings.ClosePanel}" />
+                    <TextBlock Text="{x:Static res:Strings.MenuSettings}" FontSize="{StaticResource SettingsTitleSize}" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Foreground="{DynamicResource GlyphBrush}" />
+                </DockPanel>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsThemeHeader}" Style="{StaticResource FlyoutHeader}" />
+                <UniformGrid Rows="1">
+                    <RadioButton x:Name="ThemeSystemRadio" GroupName="Theme" Content="{x:Static res:Strings.SettingsThemeSystem}"
+                                 AutomationProperties.Name="{x:Static res:Strings.SettingsThemeSystem}"
+                                 IsChecked="{Binding ThemeMode, Converter={StaticResource EnumMatch}, ConverterParameter=System}" />
+                    <RadioButton x:Name="ThemeLightRadio" GroupName="Theme" Content="{x:Static res:Strings.SettingsThemeLight}"
+                                 AutomationProperties.Name="{x:Static res:Strings.SettingsThemeLight}"
+                                 IsChecked="{Binding ThemeMode, Converter={StaticResource EnumMatch}, ConverterParameter=Light}" />
+                    <RadioButton x:Name="ThemeDarkRadio" GroupName="Theme" Content="{x:Static res:Strings.SettingsThemeDark}"
+                                 AutomationProperties.Name="{x:Static res:Strings.SettingsThemeDark}"
+                                 IsChecked="{Binding ThemeMode, Converter={StaticResource EnumMatch}, ConverterParameter=Dark}" />
+                </UniformGrid>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsAccentHeader}" Style="{StaticResource FlyoutHeader}" />
+                <DockPanel>
+                    <Button x:Name="AccentSystemButton" DockPanel.Dock="Right" Content="{x:Static res:Strings.SettingsAccentSystem}"
+                            Command="{Binding ClearAccentCommand}" AutomationProperties.Name="{x:Static res:Strings.SettingsAccentSystem}" />
+                    <TextBox x:Name="AccentBox" Text="{Binding AccentHex, UpdateSourceTrigger=LostFocus, TargetNullValue=''}"
+                             Width="{StaticResource SettingsAccentFieldWidth}" HorizontalAlignment="Left"
+                             Margin="{StaticResource SettingsAccentFieldMargin}" MinHeight="{StaticResource TouchTarget}"
+                             AutomationProperties.Name="{x:Static res:Strings.SettingsAccentHexName}" />
+                </DockPanel>
+
+                <TextBlock Text="{x:Static res:Strings.EraserMode}" Style="{StaticResource FlyoutHeader}" />
+                <UniformGrid Rows="1">
+                    <RadioButton x:Name="EraserWholeRadio" GroupName="SettingsEraser" Content="{x:Static res:Strings.EraseWhole}"
+                                 AutomationProperties.Name="{x:Static res:Strings.EraseWhole}"
+                                 IsChecked="{Binding EraserMode, Converter={StaticResource EnumMatch}, ConverterParameter=WholeStroke}" />
+                    <RadioButton x:Name="EraserPartialRadio" GroupName="SettingsEraser" Content="{x:Static res:Strings.ErasePartial}"
+                                 AutomationProperties.Name="{x:Static res:Strings.ErasePartial}"
+                                 IsChecked="{Binding EraserMode, Converter={StaticResource EnumMatch}, ConverterParameter=Partial}" />
+                </UniformGrid>
+
+                <TextBlock Text="{x:Static res:Strings.PressureCurve}" Style="{StaticResource FlyoutHeader}" />
+                <UniformGrid Rows="1">
+                    <RadioButton x:Name="CurveLinearRadio" GroupName="SettingsCurve" Content="{x:Static res:Strings.CurveLinear}"
+                                 AutomationProperties.Name="{x:Static res:Strings.CurveLinear}"
+                                 IsChecked="{Binding PressureCurve, Converter={StaticResource EnumMatch}, ConverterParameter=Linear}" />
+                    <RadioButton x:Name="CurveSoftRadio" GroupName="SettingsCurve" Content="{x:Static res:Strings.CurveSoft}"
+                                 AutomationProperties.Name="{x:Static res:Strings.CurveSoft}"
+                                 IsChecked="{Binding PressureCurve, Converter={StaticResource EnumMatch}, ConverterParameter=Soft}" />
+                    <RadioButton x:Name="CurveFirmRadio" GroupName="SettingsCurve" Content="{x:Static res:Strings.CurveFirm}"
+                                 AutomationProperties.Name="{x:Static res:Strings.CurveFirm}"
+                                 IsChecked="{Binding PressureCurve, Converter={StaticResource EnumMatch}, ConverterParameter=Firm}" />
+                </UniformGrid>
+                <views:PressurePreview x:Name="Preview" Height="{StaticResource PressurePreviewHeight}" Curve="{Binding PressureCurve}"
+                                       AutomationProperties.Name="{x:Static res:Strings.PressurePreview}" />
+
+                <TextBlock Text="{x:Static res:Strings.Smoothing}" Style="{StaticResource FlyoutHeader}" />
+                <UniformGrid Rows="1">
+                    <RadioButton x:Name="SmoothingOffRadio" GroupName="SettingsSmoothing" Content="{x:Static res:Strings.SmoothingOff}"
+                                 AutomationProperties.Name="{x:Static res:Strings.SmoothingOff}"
+                                 IsChecked="{Binding Smoothing, Converter={StaticResource EnumMatch}, ConverterParameter=Off}" />
+                    <RadioButton x:Name="SmoothingLightRadio" GroupName="SettingsSmoothing" Content="{x:Static res:Strings.SmoothingLight}"
+                                 AutomationProperties.Name="{x:Static res:Strings.SmoothingLight}"
+                                 IsChecked="{Binding Smoothing, Converter={StaticResource EnumMatch}, ConverterParameter=Light}" />
+                    <RadioButton x:Name="SmoothingStrongRadio" GroupName="SettingsSmoothing" Content="{x:Static res:Strings.SmoothingStrong}"
+                                 AutomationProperties.Name="{x:Static res:Strings.SmoothingStrong}"
+                                 IsChecked="{Binding Smoothing, Converter={StaticResource EnumMatch}, ConverterParameter=Strong}" />
+                </UniformGrid>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsToolbarEdgeHeader}" Style="{StaticResource FlyoutHeader}" />
+                <UniformGrid Rows="1">
+                    <RadioButton x:Name="EdgeBottomRadio" GroupName="SettingsEdge" Content="{x:Static res:Strings.SettingsEdgeBottom}"
+                                 AutomationProperties.Name="{x:Static res:Strings.SettingsEdgeBottom}"
+                                 IsChecked="{Binding ToolbarEdge, Converter={StaticResource EnumMatch}, ConverterParameter=Bottom}" />
+                    <RadioButton x:Name="EdgeTopRadio" GroupName="SettingsEdge" Content="{x:Static res:Strings.SettingsEdgeTop}"
+                                 AutomationProperties.Name="{x:Static res:Strings.SettingsEdgeTop}"
+                                 IsChecked="{Binding ToolbarEdge, Converter={StaticResource EnumMatch}, ConverterParameter=Top}" />
+                    <RadioButton x:Name="EdgeLeftRadio" GroupName="SettingsEdge" Content="{x:Static res:Strings.SettingsEdgeLeft}"
+                                 AutomationProperties.Name="{x:Static res:Strings.SettingsEdgeLeft}"
+                                 IsChecked="{Binding ToolbarEdge, Converter={StaticResource EnumMatch}, ConverterParameter=Left}" />
+                    <RadioButton x:Name="EdgeRightRadio" GroupName="SettingsEdge" Content="{x:Static res:Strings.SettingsEdgeRight}"
+                                 AutomationProperties.Name="{x:Static res:Strings.SettingsEdgeRight}"
+                                 IsChecked="{Binding ToolbarEdge, Converter={StaticResource EnumMatch}, ConverterParameter=Right}" />
+                </UniformGrid>
+                <CheckBox x:Name="ToolbarFixedCheck" Content="{x:Static res:Strings.SettingsToolbarFixed}" Margin="{StaticResource SectionGap}"
+                          IsChecked="{Binding ToolbarFixed}" AutomationProperties.Name="{x:Static res:Strings.SettingsToolbarFixed}" />
+            </StackPanel>
+        </ScrollViewer>
+    </views:FloatingSurface>
+</UserControl>

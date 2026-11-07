@@ -504,6 +504,13 @@
     <Thickness x:Key="SplashTaglineMargin">0,4,0,0</Thickness>
     <Thickness x:Key="SplashIndicatorMargin">0,28,0,0</Thickness>
 
+    <!-- The settings panel (phase 4b): a centred floating surface over the document, in the 4a language. -->
+    <sys:Double x:Key="SettingsPanelWidth">380</sys:Double>
+    <Thickness x:Key="SettingsPanelMargin">24</Thickness>
+    <sys:Double x:Key="SettingsTitleSize">18</sys:Double>
+    <Thickness x:Key="SettingsAccentFieldMargin">0,0,8,0</Thickness>
+    <sys:Double x:Key="SettingsAccentFieldWidth">110</sys:Double>
+
     <!-- The 40 px touch targets over WPF UI's Fluent styles (ControlsDictionary, merged before this dictionary). -->
     <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="MinWidth" Value="{StaticResource TouchTarget}" />

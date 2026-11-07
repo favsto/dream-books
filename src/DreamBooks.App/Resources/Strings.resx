@@ -186,6 +186,21 @@
   <data name="TitleBarMinimize" xml:space="preserve"><value>Riduci a icona</value></data>
   <data name="TitleBarMaximize" xml:space="preserve"><value>Ingrandisci</value></data>
   <data name="TitleBarClose" xml:space="preserve"><value>Chiudi</value></data>
+  <data name="ShortcutSettings" xml:space="preserve"><value>Ctrl+,</value></data>
+  <data name="SettingsEdgeRight" xml:space="preserve"><value>A destra</value></data>
+  <data name="SettingsEdgeLeft" xml:space="preserve"><value>A sinistra</value></data>
+  <data name="SettingsEdgeTop" xml:space="preserve"><value>In alto</value></data>
+  <data name="SettingsEdgeBottom" xml:space="preserve"><value>In basso</value></data>
+  <data name="SettingsToolbarEdgeHeader" xml:space="preserve"><value>Posizione della toolbar</value></data>
+  <data name="SettingsToolbarFixed" xml:space="preserve"><value>Toolbar fissa</value></data>
+  <data name="SettingsAccentHexName" xml:space="preserve"><value>Codice colore esadecimale</value></data>
+  <data name="SettingsAccentSystem" xml:space="preserve"><value>Predefinito</value></data>
+  <data name="SettingsAccentHeader" xml:space="preserve"><value>Colore d'accento</value></data>
+  <data name="SettingsThemeDark" xml:space="preserve"><value>Scuro</value></data>
+  <data name="SettingsThemeLight" xml:space="preserve"><value>Chiaro</value></data>
+  <data name="SettingsThemeSystem" xml:space="preserve"><value>Sistema</value></data>
+  <data name="SettingsThemeHeader" xml:space="preserve"><value>Tema</value></data>
+  <data name="SettingsPanelLabel" xml:space="preserve"><value>Pannello delle impostazioni</value></data>
   <data name="SplashTagline" xml:space="preserve"><value>Leggi. Annota. Sogna.</value></data>
   <data name="MenuCloseDocument" xml:space="preserve"><value>Chiudi documento</value></data>
   <data name="StartAllName" xml:space="preserve"><value>Mostra tutti i recenti</value></data>

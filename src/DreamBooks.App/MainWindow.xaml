@@ -88,6 +88,9 @@
                         <views:PagesListView DataContext="{Binding Pages}" />
                     </views:EdgePanel.SecondBody>
                 </views:EdgePanel>
+
+                <!-- The settings (FR-110, 4b): a centred floating panel over everything else in the document area. -->
+                <views:SettingsPanel x:Name="SettingsView" />
             </Grid>
         </Grid>
 

@@ -69,6 +69,7 @@ public partial class MainWindow : FluentWindow
         {
             settings.AttachTools(_viewModel.Tools);
             settings.AttachToolbar(_viewModel.Toolbar);
+            AttachSettingsPanel(settings);
 
             // A settings file that cannot be written shows a notice until a later write works (FR-110). Raised on a
             // thread-pool thread, like the journal's faults: shown on this window's thread.
@@ -219,6 +220,18 @@ public partial class MainWindow : FluentWindow
     }
 
     internal static readonly TimeSpan MaximizeDebounce = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>The settings panel's view model; null when the window has no settings service (tests).</summary>
+    internal SettingsViewModel? SettingsVm { get; private set; }
+
+    private void AttachSettingsPanel(SettingsService settings)
+    {
+        var vm = new SettingsViewModel(settings);
+        SettingsVm = vm;
+        SettingsView.DataContext = vm;
+        MainMenu.SettingsItem.Command = vm.OpenCommand;
+        InputBindings.Add(new KeyBinding(vm.OpenCommand, Key.OemComma, ModifierKeys.Control));
+    }
 
     private CoverService? _covers;
 
@@ -375,6 +388,7 @@ public partial class MainWindow : FluentWindow
         DocumentViewer.ApplyTransparency(transparent);
         TitleNamePill.IsOpaque = !TransparencyEnabled();
         TitleButtonsPill.IsOpaque = !TransparencyEnabled();
+        SettingsView.ApplyTransparency(TransparencyEnabled());
     }
 
     /// <summary>
@@ -607,6 +621,12 @@ public partial class MainWindow : FluentWindow
     /// </summary>
     internal bool RouteKey(Key key, ModifierKeys modifiers, object? source)
     {
+        if (key == Key.Escape && modifiers == ModifierKeys.None && SettingsView.IsOpen)
+        {
+            SettingsVm?.CloseCommand.Execute(null);
+            return true;
+        }
+
         if (key == Key.Escape && modifiers == ModifierKeys.None && MainMenu.IsOpen)
         {
             MainMenu.Close();
@@ -880,7 +900,8 @@ public partial class MainWindow : FluentWindow
         var flyout = FloatingToolbar.RoutePress(PageHost.TranslatePoint(position, FloatingToolbar), kind);
         var menu = MainMenu.RoutePress(PageHost.TranslatePoint(position, MainMenu), kind);
         var chip = IndicatorChip.RoutePress(PageHost.TranslatePoint(position, IndicatorChip), kind); // closes its open field
-        if (!(panel || flyout || menu || chip))
+        var settingsPanel = SettingsView.RoutePress(PageHost.TranslatePoint(position, SettingsView), kind);
+        if (!(panel || flyout || menu || chip || settingsPanel))
         {
             return false;
         }

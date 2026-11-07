@@ -167,7 +167,7 @@ public sealed class MainMenuTests : IDisposable
             Assert.Contains((Key.S, ModifierKeys.Control | ModifierKeys.Shift, (ICommand)vm.SaveAsCommand), gestures);
 
             // Not yet available (4b): disabled, with no command, and saying so.
-            foreach (var placeholder in new[] { menu.ExportItem, menu.SettingsItem })
+            foreach (var placeholder in new[] { menu.ExportItem })
             {
                 Assert.False(placeholder.IsEnabled);
                 Assert.Null(placeholder.Command);
