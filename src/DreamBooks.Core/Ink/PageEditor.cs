@@ -1,4 +1,5 @@
 using DreamBooks.Core.Commands;
+using DreamBooks.Core.Geometry;
 using DreamBooks.Core.Model;
 using DreamBooks.Core.Undo;
 
@@ -75,8 +76,86 @@ public sealed class PageEditor
         return true;
     }
 
+    /// <summary>How far a pasted copy lands from its original, in page points (FR-51).</summary>
+    public const double PasteOffsetPt = 12;
+
+    /// <summary>The page strokes with these ids, in z-order.</summary>
+    public IReadOnlyList<InkStroke> Strokes(IReadOnlyCollection<Guid> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        return Page.Strokes.Where(s => ids.Contains(s.Id)).ToArray();
+    }
+
+    /// <summary>Moves the strokes as one undo step, keeping them on the page. Returns the new ids (FR-51).</summary>
+    public IReadOnlyList<Guid> MoveStrokes(IReadOnlyCollection<Guid> ids, double dx, double dy)
+        => Replace(ids, "Move", selected => StrokeTransform.Translate(selected, dx, dy, Page.WidthPt, Page.HeightPt));
+
+    /// <summary>Resizes the strokes about <paramref name="anchor"/> as one undo step. Returns the new ids (FR-51).</summary>
+    public IReadOnlyList<Guid> ScaleStrokes(IReadOnlyCollection<Guid> ids, double factor, PointD anchor)
+        => Replace(ids, "Resize", selected => StrokeTransform.Scale(selected, factor, anchor, Page.WidthPt, Page.HeightPt));
+
+    /// <summary>Recolours the strokes as one undo step. Returns the new ids (FR-51).</summary>
+    public IReadOnlyList<Guid> RecolorStrokes(IReadOnlyCollection<Guid> ids, InkColor color)
+        => Replace(ids, "Recolour", selected => StrokeTransform.Recolor(selected, color));
+
+    /// <summary>Deletes the strokes as one undo step; nothing remains selected (FR-51).</summary>
+    public IReadOnlyList<Guid> DeleteStrokes(IReadOnlyCollection<Guid> ids)
+    {
+        var selected = Strokes(ids);
+        if (selected.Count == 0)
+        {
+            return [];
+        }
+
+        var before = Page.Strokes;
+        var after = before.Where(s => !ids.Contains(s.Id)).ToArray();
+        _undo.Execute(new EraseStrokesCommand(Page, before, after, "Delete selection"));
+        return [];
+    }
+
+    /// <summary>
+    /// Adds copies of the clipboard strokes, <see cref="PasteOffsetPt"/> from the originals and inside the page, as
+    /// one undo step. Returns the new ids; an empty clipboard does nothing (FR-51).
+    /// </summary>
+    public IReadOnlyList<Guid> PasteStrokes(StrokeClipboard clipboard)
+    {
+        ArgumentNullException.ThrowIfNull(clipboard);
+        if (clipboard.IsEmpty)
+        {
+            return [];
+        }
+
+        var copies = StrokeTransform.Translate(clipboard.Strokes, PasteOffsetPt, PasteOffsetPt, Page.WidthPt, Page.HeightPt);
+        _undo.Execute(new AddStrokesCommand(Page, copies));
+        return copies.Select(s => s.Id).ToArray();
+    }
+
     /// <summary>Starts an eraser gesture; nothing changes until <see cref="EraserSession.Complete"/> (FR-31).</summary>
     public EraserSession BeginErase(EraserMode mode) => new(Page, _undo, mode);
+
+    private IReadOnlyList<Guid> Replace(
+        IReadOnlyCollection<Guid> ids,
+        string description,
+        Func<IReadOnlyList<InkStroke>, IReadOnlyList<InkStroke>> transform)
+    {
+        var selected = Strokes(ids);
+        if (selected.Count == 0)
+        {
+            return [];
+        }
+
+        var replaced = transform(selected);
+        var replacements = new Dictionary<Guid, InkStroke>();
+        for (var i = 0; i < selected.Count; i++)
+        {
+            replacements[selected[i].Id] = replaced[i];
+        }
+
+        var before = Page.Strokes;
+        var after = before.Select(s => replacements.GetValueOrDefault(s.Id, s)).ToArray();
+        _undo.Execute(new EraseStrokesCommand(Page, before, after, description));
+        return replaced.Select(s => s.Id).ToArray();
+    }
 
     private InkStroke[]? Add(IReadOnlyList<InkPoint> points, InkTool tool, InkColor color, double baseWidthPt, ChiselTip? chisel)
     {
