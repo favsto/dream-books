@@ -43,7 +43,11 @@ public partial class App : Application
 
         // The splash first, before the heavy start-up work, so the user sees the app at once; it closes when the window
         // is ready (no minimum time).
-        var splash = new SplashWindow();
+        // The look of the theme the app will use: the setting (one small file), or Windows when it says "sistema".
+        var dark = SplashTheme.IsDark(
+            new AppSettingsStore(AppSettingsStore.DefaultRootDirectory()).Load().ThemeMode,
+            new WindowsSystemThemeSource().IsDark);
+        var splash = new SplashWindow(dark);
         splash.Show();
         try
         {

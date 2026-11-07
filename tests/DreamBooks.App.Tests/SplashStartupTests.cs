@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using DreamBooks.App.Resources;
 using DreamBooks.App.Services;
 using DreamBooks.App.Views;
+using ThemeMode = DreamBooks.Core.Settings.ThemeMode;
 using DreamBooks.Pdf;
 using DreamBooks.Pdf.Tests;
 
@@ -69,6 +70,43 @@ public sealed class SplashStartupTests : IDisposable
                 Assert.True(splash.Indicator.IsIndeterminate);
                 splash.ReducedMotion = true;
                 Assert.False(splash.Indicator.IsIndeterminate); // static with animations off (NFR-32)
+            }
+            finally
+            {
+                splash.Close();
+            }
+        });
+    }
+
+    [Theory]
+    [InlineData(ThemeMode.System, true, true)]
+    [InlineData(ThemeMode.System, false, false)]
+    [InlineData(ThemeMode.Dark, false, true)]
+    [InlineData(ThemeMode.Light, true, false)]
+    public void The_splash_follows_the_theme_setting_and_Windows_only_when_the_setting_is_system(ThemeMode mode, bool windowsIsDark, bool expectedDark)
+    {
+        Assert.Equal(expectedDark, SplashTheme.IsDark(mode, windowsIsDark));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void The_splash_looks_light_or_dark_and_its_text_is_readable_either_way(bool dark)
+    {
+        WpfTestThread.Run(() =>
+        {
+            var splash = new SplashWindow(dark);
+            try
+            {
+                var background = ((System.Windows.Media.SolidColorBrush)splash.Background).Color;
+                var title = Find<TextBlock>(splash).First(t => t.Text == "Dream Books");
+                var text = ((System.Windows.Media.SolidColorBrush)title.Foreground).Color;
+                var tagline = Find<TextBlock>(splash).First(t => t.Text == Strings.SplashTagline);
+                var subtext = ((System.Windows.Media.SolidColorBrush)tagline.Foreground).Color;
+
+                Assert.Equal(dark, background.R < 128);
+                Assert.True(ChoiceDialogTests.Contrast(text, background) >= 4.5);
+                Assert.True(ChoiceDialogTests.Contrast(subtext, background) >= 4.5);
             }
             finally
             {

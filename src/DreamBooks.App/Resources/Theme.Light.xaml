@@ -19,13 +19,13 @@
     <SolidColorBrush x:Key="PageBackdropBrushOpaque" Color="{StaticResource PageBackdropColor}" />
 
     <!-- Floating panels (phase 4a toolbar and flyouts): a tinted translucency (WPF has no in-window backdrop blur;
-         65% tint, section 3), opaque with transparency effects off (NFR-32); two shadows, diffuse (blur 32 px, 12%)
+         90% tint, section 3), opaque with transparency effects off (NFR-32); two shadows, diffuse (blur 32 px, 12%)
          and contact (blur 4 px, 8%). -->
     <SolidColorBrush x:Key="PanelTintBrushOpaque" Color="{StaticResource ThemePanelColor}" />
     <DropShadowEffect x:Key="PanelDiffuseShadow" BlurRadius="32" ShadowDepth="4" Opacity="0.12" Color="{StaticResource ThemeShadowColor}" />
     <DropShadowEffect x:Key="PanelContactShadow" BlurRadius="4" ShadowDepth="1" Opacity="0.08" Color="{StaticResource ThemeShadowColor}" />
-    <!-- One of the two layers of a floating surface (each carries one shadow): 41% each, 65% together. -->
-    <SolidColorBrush x:Key="PanelLayerBrush" Color="{StaticResource ThemePanelColor}" Opacity="0.41" />
+    <!-- One of the two layers of a floating surface (each carries one shadow): 68% each, 90% together. -->
+    <SolidColorBrush x:Key="PanelLayerBrush" Color="{StaticResource ThemePanelColor}" Opacity="0.68" />
 
     <!-- Toolbar and flyouts (UI-02): hover and press tints of the round buttons, the separators, the active tool (an
          accent disc at 22% and an accent bar, the icon in the accent), the flyout headers, the swatch ring around the

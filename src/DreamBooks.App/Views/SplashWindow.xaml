@@ -4,7 +4,7 @@
         xmlns:res="clr-namespace:DreamBooks.App.Resources"
         Title="Dream Books" WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True"
         WindowStartupLocation="CenterScreen" SizeToContent="WidthAndHeight"
-        Background="{StaticResource SplashBackgroundBrush}"
+        Background="{DynamicResource SplashBackgroundBrush}"
         AutomationProperties.Name="{x:Static res:Strings.SplashTagline}">
     <!-- The splash (4b): shown from the start of the process until the window is ready, then closed by the app. The icon,
          the name, a short tagline and an indicator that is indeterminate, or still with Windows animations off (NFR-32).
@@ -13,12 +13,12 @@
         <Image Source="pack://application:,,,/DreamBooks.App;component/Assets/app-icon.png"
                Width="{StaticResource SplashIconSize}" Height="{StaticResource SplashIconSize}" />
         <TextBlock Text="Dream Books" FontSize="{StaticResource SplashTitleSize}" FontWeight="SemiBold" HorizontalAlignment="Center"
-                   Margin="{StaticResource SplashTitleMargin}" Foreground="{StaticResource SplashTextBrush}" />
+                   Margin="{StaticResource SplashTitleMargin}" Foreground="{DynamicResource SplashTextBrush}" />
         <TextBlock Text="{x:Static res:Strings.SplashTagline}" FontSize="{StaticResource SplashTaglineSize}" HorizontalAlignment="Center"
-                   Margin="{StaticResource SplashTaglineMargin}" Foreground="{StaticResource SplashSubtextBrush}" />
+                   Margin="{StaticResource SplashTaglineMargin}" Foreground="{DynamicResource SplashSubtextBrush}" />
         <ProgressBar x:Name="Indicator" IsIndeterminate="True" Minimum="0" Maximum="1" Value="0.4"
                      Width="{StaticResource SplashIndicatorWidth}" Height="{StaticResource SplashIndicatorHeight}"
                      Margin="{StaticResource SplashIndicatorMargin}" BorderThickness="0"
-                     Foreground="{StaticResource SplashAccentBrush}" Background="{StaticResource SplashSubtextBrush}" />
+                     Foreground="{StaticResource SplashAccentBrush}" Background="{DynamicResource SplashSubtextBrush}" />
     </StackPanel>
 </Window>

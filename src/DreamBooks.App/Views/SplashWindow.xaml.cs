@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Media;
 
 namespace DreamBooks.App.Views;
 
@@ -11,9 +12,16 @@ public partial class SplashWindow : Window
     private bool _reducedMotion;
 
     public SplashWindow()
+        : this(dark: true)
+    {
+    }
+
+    /// <param name="dark">The dark look (the theme the app will use is dark) or the light one.</param>
+    public SplashWindow(bool dark)
     {
         InitializeComponent();
         ReducedMotion = !SystemParameters.ClientAreaAnimation;
+        ApplyTheme(dark);
     }
 
     /// <summary>
@@ -22,6 +30,16 @@ public partial class SplashWindow : Window
     /// start-up waits for the answer.
     /// </summary>
     internal void YieldToMainWindow() => Topmost = false;
+
+    /// <summary>The splash takes the dark or the light look: the brushes of that look stand in for the ones the window uses.</summary>
+    private void ApplyTheme(bool dark)
+    {
+        var look = dark ? "Dark" : "Light";
+        foreach (var part in new[] { "Background", "Text", "Subtext" })
+        {
+            Resources[$"Splash{part}Brush"] = (Brush)FindResource($"Splash{look}{part}Brush");
+        }
+    }
 
     /// <summary>Windows animations off (NFR-32): the indicator stands still instead of running.</summary>
     internal bool ReducedMotion

@@ -66,7 +66,7 @@ Il documento è sempre protagonista: nessuna barra fissa, nessuna cornice, nessu
 | Elemento | Specifica |
 | --- | --- |
 | Sfondo finestra | Mica (Windows 11), visibile attorno alle pagine |
-| Pannelli flottanti | Tinta traslucida del tema al 65% (due livelli sovrapposti) con l'ombra a due livelli; WPF non sa sfocare ciò che sta dietro un elemento della finestra, quindi niente sfocatura dello sfondo (blocco 4a; l'effetto Acrylic con sfocatura 30 px resta l'obiettivo se la piattaforma lo permetterà). Con "Effetti di trasparenza" disattivati in Windows i pannelli diventano opachi (NFR-32) |
+| Pannelli flottanti | Tinta traslucida del tema al 90% (due livelli sovrapposti, resi più opachi il 07/11/2026 perché con il 65% il testo si leggeva male in tema chiaro e scuro) con l'ombra a due livelli; WPF non sa sfocare ciò che sta dietro un elemento della finestra, quindi niente sfocatura dello sfondo (blocco 4a; l'effetto Acrylic con sfocatura 30 px resta l'obiettivo se la piattaforma lo permetterà). Con "Effetti di trasparenza" disattivati in Windows i pannelli diventano opachi (NFR-32) |
 | Tema | Chiaro e scuro, segue il tema di sistema, commutabile a mano |
 | Colore accento | Colore accento di sistema, con override nelle impostazioni |
 | Sfondo attorno alle pagine | Grigio neutro scuro in tema scuro, chiaro in tema chiaro |

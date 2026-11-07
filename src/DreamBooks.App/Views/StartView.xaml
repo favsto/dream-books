@@ -42,13 +42,15 @@
                         <TextBlock Text="{Binding Title}" />
                     </Button.ToolTip>
                 </Button>
-                <!-- A file that is gone: the card says so and this removes it from the list. -->
-                <Button x:Name="RemoveButton" HorizontalAlignment="Right" VerticalAlignment="Top"
-                        Style="{StaticResource ToolbarButtonStyle}" Margin="0" Content="&#xE711;"
-                        Command="{Binding DataContext.RemoveCommand, RelativeSource={RelativeSource AncestorType=views:StartView}}"
-                        CommandParameter="{Binding}" ToolTip="{x:Static res:Strings.StartRemove}"
-                        AutomationProperties.Name="{x:Static res:Strings.StartRemove}"
-                        Visibility="{Binding IsMissing, Converter={StaticResource ShowWhen}}" />
+                <!-- Forget this recent: on every card (a file that is gone, or one the reader just does not want listed). A
+                     panel-material disc, so the cross reads on the white cover in both themes. -->
+                <views:FloatingSurface HorizontalAlignment="Right" VerticalAlignment="Top" Margin="{StaticResource StartForgetMargin}"
+                                       CornerRadius="{StaticResource PillCornerRadius}">
+                    <Button x:Name="RemoveButton" Style="{StaticResource ToolbarButtonStyle}" Margin="0" Content="&#xE711;"
+                            Command="{Binding DataContext.RemoveCommand, RelativeSource={RelativeSource AncestorType=views:StartView}}"
+                            CommandParameter="{Binding}" ToolTip="{x:Static res:Strings.StartRemove}"
+                            AutomationProperties.Name="{Binding RemoveName}" />
+                </views:FloatingSurface>
             </Grid>
         </DataTemplate>
     </UserControl.Resources>

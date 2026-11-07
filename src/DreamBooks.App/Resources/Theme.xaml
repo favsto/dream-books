@@ -475,6 +475,7 @@
     <Thickness x:Key="StartCardMargin">0,0,16,16</Thickness>
     <Thickness x:Key="StartCardTextMargin">2,8,2,0</Thickness>
     <Thickness x:Key="StartCardSubtextMargin">2,0,2,0</Thickness>
+    <Thickness x:Key="StartForgetMargin">0,6,6,0</Thickness>
     <sys:Double x:Key="StartCardTextSize">12</sys:Double>
     <sys:Double x:Key="StartProgressHeight">3</sys:Double>
     <Thickness x:Key="StartProgressMargin">0,6,0,0</Thickness>
@@ -507,10 +508,14 @@
         </Setter>
     </Style>
 
-    <!-- The splash (phase 4b): a fixed dark look, the same in both themes (it shows before the theme is applied). -->
-    <SolidColorBrush x:Key="SplashBackgroundBrush" Color="#1C1C1E" />
-    <SolidColorBrush x:Key="SplashTextBrush" Color="#F2F2F2" />
-    <SolidColorBrush x:Key="SplashSubtextBrush" Color="#9A9A9F" />
+    <!-- The splash (phase 4b) follows the theme the app will use (the setting, or Windows when it says "sistema"): it shows
+         before the theme dictionaries are merged, so it carries both looks and picks one (SplashWindow.ApplyTheme). -->
+    <SolidColorBrush x:Key="SplashDarkBackgroundBrush" Color="#1C1C1E" />
+    <SolidColorBrush x:Key="SplashDarkTextBrush" Color="#F2F2F2" />
+    <SolidColorBrush x:Key="SplashDarkSubtextBrush" Color="#9A9A9F" />
+    <SolidColorBrush x:Key="SplashLightBackgroundBrush" Color="#F3F3F3" />
+    <SolidColorBrush x:Key="SplashLightTextBrush" Color="#1A1A1A" />
+    <SolidColorBrush x:Key="SplashLightSubtextBrush" Color="#5C5C5C" />
     <SolidColorBrush x:Key="SplashAccentBrush" Color="#FF6B6B" />
     <sys:Double x:Key="SplashIconSize">96</sys:Double>
     <sys:Double x:Key="SplashTitleSize">26</sys:Double>
@@ -528,6 +533,9 @@
     <sys:Double x:Key="SettingsTitleSize">18</sys:Double>
     <Thickness x:Key="SettingsAccentFieldMargin">0,0,8,0</Thickness>
     <sys:Double x:Key="SettingsAccentFieldWidth">110</sys:Double>
+    <Thickness x:Key="SettingsAccentHelpMargin">0,0,0,6</Thickness>
+    <sys:Double x:Key="SettingsAccentPreviewSize">28</sys:Double>
+    <Thickness x:Key="SettingsAccentPreviewMargin">8,0,0,0</Thickness>
 
     <!-- The 40 px touch targets over WPF UI's Fluent styles (ControlsDictionary, merged before this dictionary). -->
     <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">

@@ -93,6 +93,8 @@ public sealed class SettingsPanelTests : IDisposable
                 Strings.Smoothing, Strings.SettingsToolbarEdgeHeader,
             ];
             Assert.All(headers, h => Assert.Contains(h, texts));
+            Assert.Contains(Strings.SettingsAccentHelp, texts); // what the accent colour is, in plain words
+            Assert.NotNull(view.AccentPreview); // and a sample of the colour in use
             Assert.NotNull(view.ToolbarFixedCheck);
             Assert.Equal(3 + 2 + 3 + 3 + 4, ToolbarViewTests.Descendants(view).OfType<RadioButton>().Count());
             Assert.NotNull(view.Preview); // the pressure curve's preview (FR-21)

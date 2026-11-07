@@ -120,22 +120,42 @@ public sealed class StartViewTests : IDisposable
     }
 
     [Fact]
-    public void A_missing_card_shows_the_remove_button_and_says_so()
+    public void Every_card_has_a_forget_button_and_pressing_it_removes_that_recent_only()
+    {
+        var recents = NewRecents(3);
+        WithWindow(recents, (window, _) =>
+        {
+            var removes = Find<Button>(window.StartScreen.CardsList).Where(b => b.Name == "RemoveButton").ToList();
+            Assert.Equal(3, removes.Count); // not only the missing ones
+            Assert.All(removes, b => Assert.Equal(Visibility.Visible, b.Visibility));
+            Assert.All(removes, b => Assert.False(string.IsNullOrEmpty(AutomationProperties.GetName(b))));
+            Assert.All(removes, b => Assert.True(b.ActualWidth >= 40 && b.ActualHeight >= 40));
+
+            var middle = removes[1]; // "libro 1": the cards are newest first
+            Assert.Equal("libro 1", ((RecentCardViewModel)middle.CommandParameter).Title);
+            ToolbarViewTests.Invoke(middle);
+            window.StartScreen.UpdateLayout();
+
+            Assert.Equal(["libro 2", "libro 0"], window.Start!.Cards.Select(c => c.Title));
+            Assert.Equal(2, recents.Entries.Count);
+        });
+    }
+
+    [Fact]
+    public void A_missing_card_still_says_so_and_can_be_forgotten()
     {
         var recents = NewRecents(2, exists: _ => false);
         WithWindow(recents, (window, _) =>
         {
-            var removes = Find<Button>(window.StartScreen.CardsList).Where(b => b.Name == "RemoveButton").ToList();
-            Assert.All(removes, b => Assert.Equal(Visibility.Collapsed, b.Visibility)); // not checked yet
-
             var check = recents.RefreshAvailabilityAsync(CancellationToken.None);
             WpfTestThread.PumpUntil(() => check.IsCompleted);
             window.StartScreen.UpdateLayout();
 
-            Assert.All(Find<Button>(window.StartScreen.CardsList).Where(b => b.Name == "RemoveButton"), b => Assert.Equal(Visibility.Visible, b.Visibility));
             Assert.All(window.Start!.Cards, c => Assert.Equal(Strings.StartMissing, c.PageText));
+            Assert.Equal(2, Find<Button>(window.StartScreen.CardsList).Count(b => b.Name == "RemoveButton" && b.Visibility == Visibility.Visible));
         });
     }
+
 
 
     [Fact]

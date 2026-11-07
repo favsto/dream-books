@@ -34,6 +34,9 @@ public sealed partial class RecentCardViewModel : ObservableObject
     /// <summary>The card as one phrase for a screen reader: title, when, page.</summary>
     public string AutomationName => string.Format(CultureInfo.CurrentCulture, Strings.StartCardNameFormat, Title, WhenText, PageText);
 
+    /// <summary>The name of the forget button, with the document (a screen reader says which one it removes).</summary>
+    public string RemoveName => string.Format(CultureInfo.CurrentCulture, Strings.StartRemoveName, Title);
+
     /// <summary>The document's path: the card's identity, never shown.</summary>
     public string DocumentPath { get; }
 
@@ -47,5 +50,6 @@ public sealed partial class RecentCardViewModel : ObservableObject
             : string.Format(CultureInfo.CurrentCulture, Strings.StartPageFormat, entry.Page + 1);
         Progress = entry.PageCount > 0 ? Math.Clamp((entry.Page + 1.0) / entry.PageCount, 0, 1) : 0;
         OnPropertyChanged(nameof(AutomationName));
+        OnPropertyChanged(nameof(RemoveName));
     }
 }

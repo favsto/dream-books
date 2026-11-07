@@ -16,12 +16,12 @@
     <SolidColorBrush x:Key="PageBackdropBrush" Color="{StaticResource PageBackdropColor}" Opacity="0.6" />
     <SolidColorBrush x:Key="PageBackdropBrushOpaque" Color="{StaticResource PageBackdropColor}" />
 
-    <!-- Floating panels: tinted translucency (65%), opaque with transparency effects off (NFR-32); two shadows. -->
+    <!-- Floating panels: tinted translucency (90%), opaque with transparency effects off (NFR-32); two shadows. -->
     <SolidColorBrush x:Key="PanelTintBrushOpaque" Color="{StaticResource ThemePanelColor}" />
     <DropShadowEffect x:Key="PanelDiffuseShadow" BlurRadius="32" ShadowDepth="4" Opacity="0.24" Color="{StaticResource ThemeShadowColor}" />
     <DropShadowEffect x:Key="PanelContactShadow" BlurRadius="4" ShadowDepth="1" Opacity="0.16" Color="{StaticResource ThemeShadowColor}" />
-    <!-- One of the two layers of a floating surface (each carries one shadow): 41% each, 65% together. -->
-    <SolidColorBrush x:Key="PanelLayerBrush" Color="{StaticResource ThemePanelColor}" Opacity="0.41" />
+    <!-- One of the two layers of a floating surface (each carries one shadow): 68% each, 90% together. -->
+    <SolidColorBrush x:Key="PanelLayerBrush" Color="{StaticResource ThemePanelColor}" Opacity="0.68" />
 
     <!-- Toolbar and flyouts (UI-02): see Theme.Light.xaml. -->
     <SolidColorBrush x:Key="ToolbarHoverBrush" Color="{StaticResource ThemeTextColor}" Opacity="0.08" />

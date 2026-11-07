@@ -1,3 +1,4 @@
+using System.Windows.Media;
 using System.Windows;
 
 namespace DreamBooks.App.Tests;
@@ -59,8 +60,8 @@ public sealed class ThemeResourcesTests
         "MenuShortcutText", "SaveProgressLineHeight", "SaveProgressBarFraction", "SaveProgressCycleDuration",
         "SaveProgressBarBrush", "TopOverlaysMargin", "NoticeBarMargin", "NoticeBarPadding", "NoticeBarMaxWidth",
         "ToolbarMarginTop", "ToolbarMarginLeft", "ToolbarMarginRight", "FlyoutMarginTop", "FlyoutMarginLeft", "FlyoutMarginRight", "ToolbarPaddingVertical", "ToolbarSeparatorMarginVertical", "ToolbarGripLength", "ToolbarGripDotSize", "ToolbarGripDotGap", "ToolbarSnapFromOpacity", "TopOverlaysMarginBelowToolbar",
-        "SettingsPanelWidth", "SettingsPanelMargin", "SettingsTitleSize", "SettingsAccentFieldMargin", "SettingsAccentFieldWidth", "MenuSubListMargin", "SplashBackgroundBrush", "SplashTextBrush", "SplashSubtextBrush", "SplashAccentBrush", "SplashIconSize", "SplashTitleSize", "SplashTaglineSize", "SplashIndicatorWidth", "SplashIndicatorHeight", "SplashPadding", "SplashTitleMargin", "SplashTaglineMargin", "SplashIndicatorMargin",
-        "StartMargin", "StartMaxWidth", "StartTitleSize", "StartHeaderMargin", "StartCardWidth", "StartCoverHeight", "StartCardGap", "StartCardMargin", "StartCardTextMargin", "StartCardSubtextMargin", "StartCardTextSize", "StartProgressHeight", "StartProgressMargin", "StartCardButtonStyle", "ErrorLineMargin", "DialogButtonStyle",
+        "SettingsPanelWidth", "SettingsPanelMargin", "SettingsTitleSize", "SettingsAccentFieldMargin", "SettingsAccentFieldWidth", "SettingsAccentHelpMargin", "SettingsAccentPreviewSize", "SettingsAccentPreviewMargin", "MenuSubListMargin", "SplashDarkBackgroundBrush", "SplashDarkTextBrush", "SplashDarkSubtextBrush", "SplashLightBackgroundBrush", "SplashLightTextBrush", "SplashLightSubtextBrush", "SplashAccentBrush", "SplashIconSize", "SplashTitleSize", "SplashTaglineSize", "SplashIndicatorWidth", "SplashIndicatorHeight", "SplashPadding", "SplashTitleMargin", "SplashTaglineMargin", "SplashIndicatorMargin",
+        "StartMargin", "StartMaxWidth", "StartTitleSize", "StartHeaderMargin", "StartCardWidth", "StartCoverHeight", "StartCardGap", "StartCardMargin", "StartCardTextMargin", "StartCardSubtextMargin", "StartForgetMargin", "StartCardTextSize", "StartProgressHeight", "StartProgressMargin", "StartCardButtonStyle", "ErrorLineMargin", "DialogButtonStyle",
         "NoticeTextMargin", "FlyoutFirstHeaderMargin", "ColorPickerHexMargin", "ColorPickerButtonMargin",
     ];
 
@@ -107,6 +108,23 @@ public sealed class ThemeResourcesTests
 
     private static string RepositoryRoot([System.Runtime.CompilerServices.CallerFilePath] string path = "") =>
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(path)!, "..", ".."));
+
+    [Theory]
+    [InlineData("Light")]
+    [InlineData("Dark")]
+    public void The_two_panel_layers_together_cover_at_least_88_percent_so_the_menus_stay_readable(string theme)
+    {
+        // Device test of 4b: at 65% the menus were hard to read over the page, in both themes.
+        WpfTestThread.Run(() =>
+        {
+            var resources = new ResourceDictionary();
+            resources.MergedDictionaries.Add(Load("Theme.xaml"));
+            resources.MergedDictionaries.Add(Load($"Theme.{theme}.xaml"));
+            var layer = ((SolidColorBrush)resources["PanelLayerBrush"]).Opacity;
+
+            Assert.True(1 - ((1 - layer) * (1 - layer)) >= 0.88, $"{layer} per layer");
+        });
+    }
 
     [Fact]
     public void The_toolbar_fade_in_the_theme_is_the_retract_the_visibility_state_waits_for()

@@ -40,7 +40,12 @@
                 </UniformGrid>
 
                 <TextBlock Text="{x:Static res:Strings.SettingsAccentHeader}" Style="{StaticResource FlyoutHeader}" />
+                <TextBlock x:Name="AccentHelp" Text="{x:Static res:Strings.SettingsAccentHelp}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource FlyoutHeaderBrush}" Margin="{StaticResource SettingsAccentHelpMargin}" />
                 <DockPanel>
+                    <Border x:Name="AccentPreview" DockPanel.Dock="Right" Width="{StaticResource SettingsAccentPreviewSize}" Height="{StaticResource SettingsAccentPreviewSize}"
+                            CornerRadius="{StaticResource InnerCornerRadius}" Margin="{StaticResource SettingsAccentPreviewMargin}"
+                            Background="{DynamicResource ToolActiveForegroundBrush}" />
                     <Button x:Name="AccentSystemButton" DockPanel.Dock="Right" Content="{x:Static res:Strings.SettingsAccentSystem}"
                             Command="{Binding ClearAccentCommand}" AutomationProperties.Name="{x:Static res:Strings.SettingsAccentSystem}" />
                     <TextBox x:Name="AccentBox" Text="{Binding AccentHex, UpdateSourceTrigger=LostFocus, TargetNullValue=''}"

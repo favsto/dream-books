@@ -399,6 +399,7 @@ internal static class Strings
     public static string TitleBarMinimize => Get(nameof(TitleBarMinimize));
     public static string TitleBarMaximize => Get(nameof(TitleBarMaximize));
     public static string TitleBarClose => Get(nameof(TitleBarClose));
+    public static string SettingsAccentHelp => Get(nameof(SettingsAccentHelp));
     public static string PngFileFilter => Get(nameof(PngFileFilter));
     public static string ErrorExportSameFile => Get(nameof(ErrorExportSameFile));
     public static string ErrorExportEncrypted => Get(nameof(ErrorExportEncrypted));

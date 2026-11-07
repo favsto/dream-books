@@ -186,6 +186,7 @@
   <data name="TitleBarMinimize" xml:space="preserve"><value>Riduci a icona</value></data>
   <data name="TitleBarMaximize" xml:space="preserve"><value>Ingrandisci</value></data>
   <data name="TitleBarClose" xml:space="preserve"><value>Chiudi</value></data>
+  <data name="SettingsAccentHelp" xml:space="preserve"><value>È il colore dei controlli attivi: lo strumento selezionato, le barre di avanzamento, le evidenziazioni. «Predefinito» usa il colore scelto in Windows.</value></data>
   <data name="PngFileFilter" xml:space="preserve"><value>Immagine PNG (*.png)|*.png</value></data>
   <data name="ErrorExportSameFile" xml:space="preserve"><value>Scegli un nome diverso da quello del documento aperto.</value></data>
   <data name="ErrorExportEncrypted" xml:space="preserve"><value>Questo PDF è protetto: non si può esportare una copia appiattita.</value></data>
