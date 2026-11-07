@@ -19,6 +19,21 @@ public class FrameTimeStatsTests
     }
 
     [Fact]
+    public void An_interval_added_directly_counts_like_one_between_two_frames()
+    {
+        var stats = new FrameTimeStats();
+        stats.AddInterval(40);
+        stats.AddInterval(300); // idle: skipped
+        stats.AddInterval(-5); // nonsense: skipped
+
+        var summary = stats.Summary();
+
+        Assert.Equal(1, summary.Frames);
+        Assert.Equal(40, summary.MaxMs);
+        Assert.Equal(1, summary.Over25Ms);
+    }
+
+    [Fact]
     public void Steady_60_fps_has_a_16_7_ms_median_and_no_slow_frames()
     {
         var summary = Frames(Enumerable.Repeat(16.67, 120).ToArray()).Summary();

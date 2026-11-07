@@ -114,6 +114,7 @@ public partial class App : Application
             () => System.Diagnostics.Stopwatch.GetTimestamp() * 1000.0 / System.Diagnostics.Stopwatch.Frequency,
             FramePerformanceProbe.DefaultPath());
         _probe = probe;
+        FramePerformanceProbe.Active = probe;
         CompositionTarget.Rendering += (_, _) => probe.OnFrame();
     }
 

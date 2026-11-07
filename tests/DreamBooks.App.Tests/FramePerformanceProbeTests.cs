@@ -60,6 +60,37 @@ public sealed class FramePerformanceProbeTests : IDisposable
     }
 
     [Fact]
+    public void Frames_during_a_pinch_are_reported_apart_from_the_rest()
+    {
+        var started = new DateTime(2026, 11, 7, 10, 0, 0, DateTimeKind.Utc);
+        var clock = 0.0;
+        var path = Path.Combine(_dir, "perf.txt");
+        var probe = new FramePerformanceProbe(started, () => started, () => clock, path);
+
+        probe.OnFrame();
+        for (var i = 0; i < 50; i++)
+        {
+            clock += 16.67; // plain scrolling: smooth
+            probe.OnFrame();
+        }
+
+        for (var i = 0; i < 20; i++)
+        {
+            clock += 40; // pinching: slow
+            probe.NoteZoom();
+            probe.OnFrame();
+        }
+
+        probe.Write();
+
+        var text = File.ReadAllText(path);
+        Assert.Contains("pinch frames: 20", text);
+        Assert.Contains("pinch over 25 ms: 20", text);
+        Assert.Contains("other over 25 ms: 0", text);
+        Assert.Contains("other frames: 50", text);
+    }
+
+    [Fact]
     public void Writing_to_an_impossible_path_never_throws()
     {
         var probe = new FramePerformanceProbe(DateTime.UtcNow, () => DateTime.UtcNow, () => 0, Path.Combine(_dir, "no", "such\0dir", "perf.txt"));

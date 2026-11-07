@@ -31,18 +31,28 @@ public sealed class FrameTimeStats
                 return;
             }
 
-            var interval = timestampMs - last;
-            if (interval <= _continuousGapMs)
-            {
-                _intervals.Enqueue(interval);
-                if (_intervals.Count > _maxIntervals)
-                {
-                    _intervals.Dequeue();
-                }
-            }
+            AddInterval(timestampMs - last);
         }
 
         _last = timestampMs;
+    }
+
+    /// <summary>
+    /// One frame interval, for a caller that sorts frames into several series and so tracks the timestamps itself. An
+    /// idle gap (longer than the continuous gap) or a negative value is ignored.
+    /// </summary>
+    public void AddInterval(double intervalMs)
+    {
+        if (intervalMs < 0 || intervalMs > _continuousGapMs)
+        {
+            return;
+        }
+
+        _intervals.Enqueue(intervalMs);
+        if (_intervals.Count > _maxIntervals)
+        {
+            _intervals.Dequeue();
+        }
     }
 
     public FrameSummary Summary()

@@ -1031,6 +1031,7 @@ public partial class DocumentView : UserControl
 
         if (Math.Abs(scale - 1) > _minScaleDelta && double.IsFinite(scale) && scale > 0)
         {
+            FramePerformanceProbe.Active?.NoteZoom();
             viewport.ZoomAt(scale, origin);
             Rail.NotifyActivity(); // a pinch is the user's zoom: the indicator shows (UI-05)
         }

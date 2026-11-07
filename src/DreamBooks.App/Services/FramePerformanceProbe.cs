@@ -19,7 +19,14 @@ public sealed class FramePerformanceProbe
     private readonly Func<DateTime> _utcNow;
     private readonly Func<double> _monotonicMs;
     private readonly string _path;
+    // A frame drawn within this long after a pinch step belongs to the pinch.
+    private const double _pinchWindowMs = 100;
+
     private readonly FrameTimeStats _stats = new();
+    private readonly FrameTimeStats _pinchStats = new();
+    private readonly FrameTimeStats _otherStats = new();
+    private double _lastZoomMs = double.NegativeInfinity;
+    private double? _lastFrameMs;
     private double? _firstFrameMs;
     private double? _readyMs;
 
@@ -38,6 +45,9 @@ public sealed class FramePerformanceProbe
         _path = path;
     }
 
+    /// <summary>The running probe, or null when it is off (the views report a pinch step to it).</summary>
+    public static FramePerformanceProbe? Active { get; set; }
+
     /// <summary>True only for the value <c>1</c>.</summary>
     public static bool IsRequested(string? value) => value == "1";
 
@@ -49,8 +59,19 @@ public sealed class FramePerformanceProbe
     public void OnFrame()
     {
         _firstFrameMs ??= (_utcNow() - _processStartUtc).TotalMilliseconds;
-        _stats.AddFrame(_monotonicMs());
+        var now = _monotonicMs();
+        _stats.AddFrame(now);
+        if (_lastFrameMs is { } previous && now >= previous)
+        {
+            // The interval belongs to the frame that ended it.
+            (now - _lastZoomMs <= _pinchWindowMs ? _pinchStats : _otherStats).AddInterval(now - previous);
+        }
+
+        _lastFrameMs = now;
     }
+
+    /// <summary>A pinch step was applied: the frames drawn soon after count as pinch frames in the report.</summary>
+    public void NoteZoom() => _lastZoomMs = _monotonicMs();
 
     /// <summary>The main window finished starting up and painted: the start screen or the document is there.</summary>
     public void MarkReady() => _readyMs ??= (_utcNow() - _processStartUtc).TotalMilliseconds;
@@ -74,6 +95,8 @@ public sealed class FramePerformanceProbe
             text.AppendLine(inv, $"slowest: {summary.MaxMs:0.0} ms");
             text.AppendLine(inv, $"over 25 ms: {summary.Over25Ms}");
             text.AppendLine(inv, $"over 50 ms: {summary.Over50Ms}");
+            AppendPart(text, "pinch", _pinchStats.Summary());
+            AppendPart(text, "other", _otherStats.Summary());
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
             File.WriteAllText(_path, text.ToString());
         }
@@ -81,5 +104,16 @@ public sealed class FramePerformanceProbe
         {
             // nothing to do: the report is a convenience
         }
+    }
+
+    private static void AppendPart(StringBuilder text, string name, FrameSummary part)
+    {
+        var inv = CultureInfo.InvariantCulture;
+        text.AppendLine(inv, $"{name} frames: {part.Frames}");
+        text.AppendLine(inv, $"{name} median: {part.MedianMs:0.0} ms");
+        text.AppendLine(inv, $"{name} 95th percentile: {part.P95Ms:0.0} ms");
+        text.AppendLine(inv, $"{name} slowest: {part.MaxMs:0.0} ms");
+        text.AppendLine(inv, $"{name} over 25 ms: {part.Over25Ms}");
+        text.AppendLine(inv, $"{name} over 50 ms: {part.Over50Ms}");
     }
 }
