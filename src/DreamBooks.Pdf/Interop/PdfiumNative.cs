@@ -139,6 +139,19 @@ internal static partial class PdfiumNative
     [LibraryImport(Library)]
     public static partial nint FPDFPage_GetAnnot(nint page, int index);
 
+    // ---- Flatten (fpdf_flatten.h) ----
+
+    /// <summary>FPDFPage_Flatten flag: flatten as the page is displayed on screen.</summary>
+    public const int FLAT_NORMALDISPLAY = 0;
+
+    public const int FLATTEN_FAIL = 0;
+    public const int FLATTEN_SUCCESS = 1;
+    public const int FLATTEN_NOTHINGTODO = 2;
+
+    /// <summary>Merges the appearance of the page's annotations and form fields into its content; they stop being annotations.</summary>
+    [LibraryImport(Library)]
+    public static partial int FPDFPage_Flatten(nint page, int flags);
+
     [LibraryImport(Library)]
     public static partial void FPDFPage_CloseAnnot(nint annotation);
 
