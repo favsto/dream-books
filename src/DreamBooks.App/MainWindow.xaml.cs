@@ -404,6 +404,8 @@ public partial class MainWindow : FluentWindow
         TitleNamePill.IsOpaque = !TransparencyEnabled();
         TitleButtonsPill.IsOpaque = !TransparencyEnabled();
         SettingsView.ApplyTransparency(TransparencyEnabled());
+        SelectionBar.TransparencyEnabled = TransparencyEnabled; // follows the window's reading of the Windows setting, live (NFR-32)
+        SelectionBar.ApplyTransparency();
     }
 
     /// <summary>
