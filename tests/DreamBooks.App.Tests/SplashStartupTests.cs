@@ -116,22 +116,58 @@ public sealed class SplashStartupTests : IDisposable
     }
 
     [Fact]
-    public void The_splash_is_on_top_until_the_main_window_is_up_and_then_steps_back_so_a_start_up_question_is_seen()
+    public void The_splash_stays_on_top_until_it_is_closed_and_closing_twice_is_harmless()
+    {
+        // Device test of 4b: a splash that stepped back while the main window was still blank showed that window's black
+        // first frame in light mode. It stays on top and goes only when the app has painted (App).
+        WpfTestThread.Run(() =>
+        {
+            var splash = new SplashWindow(dark: false);
+            splash.Show();
+            Assert.True(splash.Topmost);
+            Assert.False(splash.IsClosed);
+
+            splash.CloseOnce();
+            splash.CloseOnce(); // asked twice (the first start-up question, then the end of start-up)
+
+            Assert.True(splash.IsClosed);
+        });
+    }
+
+    [Fact]
+    public void A_start_up_question_is_announced_so_the_splash_can_go_before_the_dialog_opens()
+    {
+        var announced = 0;
+        void OnShowing() => announced++;
+        ChoiceDialog.Showing += OnShowing;
+        try
+        {
+            ChoiceDialog.NotifyShowing();
+            ChoiceDialog.NotifyShowing();
+        }
+        finally
+        {
+            ChoiceDialog.Showing -= OnShowing;
+        }
+
+        Assert.Equal(2, announced);
+    }
+
+    [Fact]
+    public void The_main_window_says_when_it_has_painted_its_first_frame()
     {
         WpfTestThread.Run(() =>
         {
-            var splash = new SplashWindow();
+            var window = new MainWindow(null, null, NewRecents()) { ShowInTaskbar = false };
             try
             {
-                Assert.True(splash.Topmost); // over everything while the app builds its window
-
-                splash.YieldToMainWindow(); // the restore may ask a question (a moved file, a journal): it must not hide under the splash
-
-                Assert.False(splash.Topmost);
+                Assert.False(window.FirstRendered.IsCompleted);
+                window.Show();
+                WpfTestThread.PumpUntil(() => window.FirstRendered.IsCompleted);
             }
             finally
             {
-                splash.Close();
+                window.CloseForTests();
             }
         });
     }

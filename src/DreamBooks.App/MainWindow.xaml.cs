@@ -439,6 +439,7 @@ public partial class MainWindow : FluentWindow
     private void OnFirstContentRendered(object? sender, EventArgs e)
     {
         ContentRendered -= OnFirstContentRendered;
+        _firstRendered.TrySetResult();
 
         // After every ContentRendered handler, WPF UI's title bar hook among them: WPF UI 4.3.0 adds its hook once, in
         // TitleBar.OnWindowContentRendered, and HwndSource calls the hooks added last first. Check this again when
@@ -497,6 +498,10 @@ public partial class MainWindow : FluentWindow
     /// the most recent journal with its unsaved changes. Never on the pen path; never crashes the app.
     /// </summary>
     private readonly TaskCompletionSource _startup = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _firstRendered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>Completes when the window has painted its first frame: the splash waits for it, so no blank frame shows.</summary>
+    internal Task FirstRendered => _firstRendered.Task;
 
     /// <summary>The file the app was started with ("Apri con"); set before the window is shown. It wins over the restore (FR-86).</summary>
     internal string? StartupFile { get; set; }

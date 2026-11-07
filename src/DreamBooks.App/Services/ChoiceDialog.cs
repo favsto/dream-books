@@ -73,6 +73,12 @@ internal sealed class ChoiceDialog : Window
     /// <summary>Index of the clicked button; null until one is clicked.</summary>
     public int? Choice { get; private set; }
 
+    /// <summary>A question is about to open: the app closes its splash first, so the question is not hidden under it.</summary>
+    internal static event Action? Showing;
+
+    /// <summary>Announces that a question is about to open (<see cref="Ask"/> does it; tests call it).</summary>
+    internal static void NotifyShowing() => Showing?.Invoke();
+
     /// <summary>Shows the question modally over the main window and returns the chosen index (Esc/close = cancel).</summary>
     public static int Ask(ChoiceQuestion question)
     {
@@ -82,6 +88,7 @@ internal sealed class ChoiceDialog : Window
             dialog.Owner = owner;
         }
 
+        NotifyShowing();
         dialog.ShowDialog();
         return dialog.Choice ?? dialog._cancelIndex;
     }

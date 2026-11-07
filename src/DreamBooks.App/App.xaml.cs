@@ -55,7 +55,7 @@ public partial class App : Application
         }
         catch
         {
-            splash.Close(); // never leave a splash over an app that failed to start
+            splash.CloseOnce(); // never leave a splash over an app that failed to start
             throw;
         }
     }
@@ -77,13 +77,20 @@ public partial class App : Application
         var window = new MainWindow(_theme, _settings, _recents, covers);
         MainWindow = window;
         window.StartupFile = StartupPlan.FileFromArguments(e.Args);
-        window.StartupCompleted.ContinueWith(
-            _ => splash.Close(),
+        // The splash goes when start-up is done and the window has painted its first frame (no blank frame shows), or before a
+        // start-up question opens (it must not hide under the splash). Until then it stays on top.
+        void CloseSplash() => splash.CloseOnce();
+        ChoiceDialog.Showing += CloseSplash;
+        Task.WhenAll(window.StartupCompleted, window.FirstRendered).ContinueWith(
+            _ =>
+            {
+                ChoiceDialog.Showing -= CloseSplash;
+                splash.CloseOnce();
+            },
             CancellationToken.None,
             TaskContinuationOptions.None,
             TaskScheduler.FromCurrentSynchronizationContext());
         window.Show();
-        splash.YieldToMainWindow(); // before the first start-up question can be asked
     }
 
     protected override void OnExit(ExitEventArgs e)
