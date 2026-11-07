@@ -22,6 +22,9 @@ public sealed partial class InkSurface
     // The barrel button of the hovering pen is down (this surface switched the tool to the lasso for it).
     private bool _barrelDown;
 
+    // The hovering pen is over this page's selection: it drags it instead of writing, so no wet ink.
+    private bool _hoverOverSelection;
+
     // The pen left (or went out of range) while a gesture was live: the lasso ends with the gesture, button or not.
     private bool _barrelDropAtEnd;
 
@@ -29,8 +32,10 @@ public sealed partial class InkSurface
     internal SelectionLayer SelectionOverlay => _selectionLayer;
 
     /// <summary>
-    /// Starts a lasso gesture at a surface position (DIPs) if the effective tool is the lasso and this is the current
-    /// page: on a handle it resizes, inside the rectangle it moves, anywhere else it starts a new loop.
+    /// Starts a lasso gesture at a surface position (DIPs). With the lasso as effective tool: on a handle it resizes,
+    /// inside the rectangle it moves, anywhere else it starts a new loop. With any other drawing tool (a selection made
+    /// with the barrel button leaves the pen active): a press on the selection's rectangle or handles still drags or
+    /// resizes it, anywhere else the pen writes (false). The eraser never starts one.
     /// </summary>
     /// <param name="stylusId">The pen's stylus device Id, or null for the mouse.</param>
     internal bool BeginSelectionGesture(int? stylusId, Point position)
@@ -39,17 +44,19 @@ public sealed partial class InkSurface
             || Editor is not { } editor
             || ViewModel is not { } vm
             || !ReferenceEquals(editor.Page, Page)
-            || vm.Tools.EffectiveTool != AppTool.Selection)
+            || vm.Tools.EffectiveTool == AppTool.Eraser)
         {
             return false;
         }
 
         var selection = vm.Selection;
         var point = StylusPointConverter.ToPage(position, Scale);
-        // A selection on another page is not this surface's to move: a press here starts a new loop.
-        var handle = selection.Bounds is { } bounds && ReferenceEquals(selection.Editor, editor)
-            ? SelectionHandles.HitTest(bounds, point, HitTolerancePt())
-            : SelectionHandle.None;
+        var handle = HandleAt(point);
+        if (handle == SelectionHandle.None && vm.Tools.EffectiveTool != AppTool.Selection)
+        {
+            return false;
+        }
+
         var gesture = new SelectionGesture(stylusId, handle, point);
         switch (handle)
         {
@@ -79,6 +86,32 @@ public sealed partial class InkSurface
         _selection = gesture;
         LockZoom(true);
         return true;
+    }
+
+    /// <summary>
+    /// What a press at <paramref name="point"/> (page points) grabs of the selection on this page. A selection on
+    /// another page is not this surface's to move: nothing.
+    /// </summary>
+    private SelectionHandle HandleAt(PointD point) =>
+        ViewModel?.Selection is { Bounds: { } bounds } selection && ReferenceEquals(selection.Editor, Editor)
+            ? SelectionHandles.HitTest(bounds, point, HitTolerancePt())
+            : SelectionHandle.None;
+
+    /// <summary>
+    /// The pen hovers at a surface position (DIPs): over the selection it drags rather than writes, so the wet ink is
+    /// off there (it would draw a stroke under the drag); elsewhere it writes as usual.
+    /// </summary>
+    internal void UpdateHoverOverSelection(Point position, StylusDevice? device)
+    {
+        var over = ViewModel is { } vm
+            && vm.Tools.EffectiveTool != AppTool.Eraser
+            && HandleAt(StylusPointConverter.ToPage(position, Scale)) != SelectionHandle.None;
+        if (_hoverOverSelection != over)
+        {
+            _hoverOverSelection = over;
+        }
+
+        UpdateRendererEnabled(device);
     }
 
     /// <summary>Feeds the live gesture a surface position (DIPs).</summary>
@@ -331,6 +364,11 @@ public sealed partial class InkSurface
             && ReferenceEquals(editor.Page, Page)
             && vm.Selection.HasSelection;
         _selectionLayer.SetBounds(shown ? ViewModel!.Selection.Bounds : null);
+        if (!shown && _hoverOverSelection)
+        {
+            _hoverOverSelection = false; // nothing left to drag: the pen writes again
+            UpdateRendererEnabled(null);
+        }
     }
 
     private sealed class SelectionGesture(int? stylusId, SelectionHandle handle, PointD start)

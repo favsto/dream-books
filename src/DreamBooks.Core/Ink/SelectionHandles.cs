@@ -10,12 +10,12 @@ public static class SelectionHandles
 
     /// <summary>
     /// The handle at <paramref name="p"/>. A corner is grabbed within <paramref name="tolerancePt"/> of it; the body
-    /// reaches half the tolerance beyond the rectangle. A rectangle smaller than the tolerance in either direction has
-    /// no corner handles (a dot or a thin line can be moved, not resized).
+    /// reaches half the tolerance beyond the rectangle. A rectangle smaller than the tolerance in both directions has
+    /// no corner handles (a dot can be moved, not resized); a straight line keeps them at its ends.
     /// </summary>
     public static SelectionHandle HitTest(RectD bounds, PointD p, double tolerancePt)
     {
-        if (bounds.Width >= tolerancePt && bounds.Height >= tolerancePt)
+        if (bounds.Width >= tolerancePt || bounds.Height >= tolerancePt)
         {
             var best = SelectionHandle.None;
             var bestDistance = tolerancePt;

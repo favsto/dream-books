@@ -151,6 +151,83 @@ public sealed class InkSurfaceSelectionTests : IDisposable
     }
 
     [Fact]
+    public async Task With_the_pen_tool_a_press_on_a_barrel_made_selection_moves_it_and_a_press_outside_does_not() // FR-28, FR-51
+    {
+        await WithDocumentAsync((vm, surface) =>
+        {
+            vm.Editor!.CommitStroke(
+                [new InkPoint(50, 50, 0.5f, null, null, null, 0), new InkPoint(80, 80, 0.5f, null, null, null, 10)],
+                InkTool.Pen,
+                InkColor.FromRgb(0, 0, 0),
+                2);
+            surface.SetBarrelHeld(true);
+            Assert.True(surface.BeginSelectionGesture(stylusId: null, View(surface, 0, 0)));
+            surface.SelectionMoveToBatch([View(surface, 120, 0), View(surface, 120, 120), View(surface, 0, 120)]);
+            surface.EndSelectionGesture();
+            surface.SetBarrelHeld(false);
+            Assert.Equal(AppTool.Pen, vm.Tools.EffectiveTool);
+            Assert.True(vm.Selection.HasSelection);
+
+            Assert.False(surface.BeginSelectionGesture(stylusId: null, View(surface, 180, 280))); // outside: the pen writes
+            Assert.True(surface.BeginSelectionGesture(stylusId: null, View(surface, 65, 65))); // inside: drag, button or not
+            surface.SelectionMoveTo(View(surface, 85, 95));
+            surface.EndSelectionGesture();
+
+            Assert.Equal(70, vm.Editor.Page.Strokes[0].Points[0].X, 6);
+        });
+    }
+
+    [Fact]
+    public async Task The_pen_corner_of_a_selection_resizes_it_with_the_pen_tool() // FR-51
+    {
+        await WithDocumentAsync((vm, surface) =>
+        {
+            vm.Editor!.CommitStroke(
+                [new InkPoint(50, 50, 0.5f, null, null, null, 0), new InkPoint(80, 80, 0.5f, null, null, null, 10)],
+                InkTool.Pen,
+                InkColor.FromRgb(0, 0, 0),
+                2);
+            surface.SetBarrelHeld(true);
+            surface.BeginSelectionGesture(stylusId: null, View(surface, 0, 0));
+            surface.SelectionMoveToBatch([View(surface, 120, 0), View(surface, 120, 120), View(surface, 0, 120)]);
+            surface.EndSelectionGesture();
+            surface.SetBarrelHeld(false);
+
+            Assert.True(surface.BeginSelectionGesture(stylusId: null, View(surface, 80, 80)));
+            surface.SelectionMoveTo(View(surface, 110, 110));
+            surface.EndSelectionGesture();
+
+            Assert.Equal(110, vm.Editor.Page.Strokes[0].Points[1].X, 6);
+        });
+    }
+
+    [Fact]
+    public async Task The_wet_ink_is_off_while_the_pen_hovers_over_a_selection() // FR-51, NFR-04
+    {
+        await WithDocumentAsync((vm, surface) =>
+        {
+            vm.Editor!.CommitStroke(
+                [new InkPoint(50, 50, 0.5f, null, null, null, 0), new InkPoint(80, 80, 0.5f, null, null, null, 10)],
+                InkTool.Pen,
+                InkColor.FromRgb(0, 0, 0),
+                2);
+            surface.SetBarrelHeld(true);
+            surface.BeginSelectionGesture(stylusId: null, View(surface, 0, 0));
+            surface.SelectionMoveToBatch([View(surface, 120, 0), View(surface, 120, 120), View(surface, 0, 120)]);
+            surface.EndSelectionGesture();
+            surface.SetBarrelHeld(false);
+            surface.UpdateHoverOverSelection(View(surface, 180, 280), device: null);
+            Assert.True(surface.ActiveRenderer.Enabled); // away from the selection the pen writes
+
+            surface.UpdateHoverOverSelection(View(surface, 65, 65), device: null);
+
+            Assert.False(surface.ActiveRenderer.Enabled); // over it the pen drags: no wet ink under the drag
+            surface.UpdateHoverOverSelection(View(surface, 180, 280), device: null);
+            Assert.True(surface.ActiveRenderer.Enabled);
+        });
+    }
+
+    [Fact]
     public async Task The_lasso_works_on_a_visible_page_that_is_not_the_current_one() // FR-50
     {
         await WithDocumentAsync((vm, _) =>

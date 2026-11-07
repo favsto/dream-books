@@ -351,6 +351,7 @@ public sealed partial class InkSurface : FrameworkElement
         {
             UpdateRendererEnabled(e.StylusDevice);
             UpdateEraserCursor(e.GetPosition(this), e.StylusDevice.Inverted);
+            UpdateHoverOverSelection(e.GetPosition(this), e.StylusDevice);
         }
     }
 
@@ -380,6 +381,12 @@ public sealed partial class InkSurface : FrameworkElement
     internal void OnPenLeft()
     {
         DropBarrelIfIdle();
+        if (_hoverOverSelection)
+        {
+            _hoverOverSelection = false;
+            UpdateRendererEnabled(null);
+        }
+
         if (_erase is null)
         {
             HideEraserCursor();
@@ -1171,6 +1178,7 @@ public sealed partial class InkSurface : FrameworkElement
         var enabled = Editor is not null
             && ViewModel is { } vm
             && vm.Tools.IsDrawingTool
+            && !_hoverOverSelection
             && device?.Inverted != true;
         if (_renderer.Enabled != enabled)
         {

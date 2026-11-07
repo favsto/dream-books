@@ -35,6 +35,32 @@ public class SelectionHandlesTests
         Assert.Equal(SelectionHandle.Inside, SelectionHandles.HitTest(dot, new PointD(50, 50), 10));
     }
 
+    [Theory]
+    [InlineData(299, 100)] // right end of a straight, horizontal highlighter line (height 0)
+    [InlineData(101, 101)] // left end
+    public void A_straight_line_can_be_resized_from_its_ends(double x, double y)
+    {
+        var line = new RectD(100, 100, 300, 100);
+
+        var handle = SelectionHandles.HitTest(line, new PointD(x, y), 10);
+
+        Assert.True(handle is SelectionHandle.TopLeft or SelectionHandle.TopRight or SelectionHandle.BottomLeft or SelectionHandle.BottomRight, handle.ToString());
+        var anchor = SelectionHandles.Opposite(line, handle);
+        Assert.Equal(x > 200 ? 100 : 300, anchor.X); // the other end stays put
+    }
+
+    [Fact]
+    public void A_vertical_line_can_be_resized_from_its_ends()
+    {
+        var line = new RectD(100, 100, 100, 300);
+
+        var handle = SelectionHandles.HitTest(line, new PointD(100, 299), 10);
+
+        Assert.NotEqual(SelectionHandle.Inside, handle);
+        Assert.NotEqual(SelectionHandle.None, handle);
+        Assert.Equal(100, SelectionHandles.Opposite(line, handle).Y);
+    }
+
     [Fact]
     public void Opposite_is_the_corner_across_the_box()
     {
