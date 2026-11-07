@@ -41,7 +41,7 @@ L'app è un'applicazione desktop nativa per Windows 11, scritta in C# su .NET (u
 | Rendering PDF | PDFium tramite wrapper .NET | Rendering veloce e fedele delle pagine |
 | Scrittura PDF | PDFium (lo stesso motore della lettura) | Salvataggio annotazioni e dati privati con riscrittura completa del file; la scrittura dei segnalibri si decide nella fase 3. PDFsharp non è usato (decisione del 30/10/2026: dopo una prova, PDFium legge e scrive senza un secondo parser che potrebbe rifiutare file che PDFium apre) |
 | Architettura | MVVM (CommunityToolkit.Mvvm) | Separazione UI e logica, testabilità |
-| Distribuzione | MSIX, con opzione installer classico | Installazione pulita e aggiornamenti |
+| Distribuzione | Privata tra amici: due installer EXE per utente (x64 e ARM64), senza diritti di amministratore, non firmati (SmartScreen avvisa la prima volta); poi forse open source | Installazione semplice sui Surface |
 
 **Vincoli di licenza.** Sono ammesse solo librerie con licenza permissiva (MIT, BSD, Apache 2.0). Librerie AGPL (es. iText) sono escluse.
 
@@ -371,7 +371,7 @@ Lo sviluppo procede in cinque fasi; ognuna termina con una build installabile da
 2. **Salvataggio e riapertura.** Salvataggio nel PDF con le due forme (visibile e modificabile), riapertura, diario delle modifiche non salvate e recupero dopo crash; i tratti di tutte le pagine restano quando si cambia pagina.
 3. **Documento completo**, in tre blocchi da provare uno alla volta: **3a** documento a più pagine (scorrimento continuo con rendering virtualizzato, zoom, vai a pagina, torna indietro, ripresa dall'ultima posizione, barra di scorrimento con anteprima); **3b** aiuti per ritrovare le cose, in due passi (3b-1: riconoscimento dei segni dalla linea laterale, tacche sulla barra, salto tra segni, elenco dei segni; 3b-2: pannello di miniature con i propri tratti, ricerca di testo); i segnalibri e la scrittura dell'indice del PDF sono rinviati; **3c** evidenziatori (tondo e a scalpello, salvati trasparenti nel PDF).
 4. **Interfaccia finale.** Toolbar flottante, pannelli a scomparsa, Mica/Acrylic, animazioni, temi, schermata iniziale, impostazioni. In due blocchi: **4a** finestra (Mica, barra del titolo trasparente), temi chiaro e scuro, file delle impostazioni (FR-110), toolbar flottante con i pannelli opzioni e la tavolozza personale, indicatore pagina, pulsanti di navigazione, pillola di ricerca, menu principale; il pannello di debug sparisce (**approvato** sulla Surface con la v4); **4b** icona e splash, schermata iniziale con i file recenti (copertine), pannello delle impostazioni, esportazione (PDF appiattito, pagina PNG) e toolbar spostabile sugli altri bordi (**approvato** sulla Surface; la fase 4 è chiusa)
-5. **Rifinitura.** Selezione con lazo, prestazioni su PDF grandi, accessibilità, pacchetto MSIX. In quattro blocchi, da provare uno alla volta: **5a** selezione con lazo (FR-28, FR-50, FR-51; **in prova** sulla Surface, non ancora approvata); **5b** accessibilità (NFR-30, NFR-31, NFR-32); **5c** prestazioni su PDF grandi (misurare il PDF di riferimento da 300 pagine, poi correggere ciò che i numeri mostrano); **5d** pacchetto MSIX (x64 e ARM64).
+5. **Rifinitura.** Selezione con lazo, prestazioni su PDF grandi, accessibilità, installer. In quattro blocchi, da provare uno alla volta: **5a** selezione con lazo (FR-28, FR-50, FR-51; **in prova** sulla Surface, non ancora approvata); **5b** accessibilità (NFR-30, NFR-31, NFR-32); **5c** prestazioni su PDF grandi (misurare il PDF di riferimento da 300 pagine, poi correggere ciò che i numeri mostrano); **5d** installer EXE per utente (due file separati, x64 e ARM64; nessun diritto di amministratore; scelta del 07/11/2026 al posto del pacchetto MSIX).
 
 ### Criteri di accettazione della v1
 
@@ -396,7 +396,7 @@ Inserimento di caselle di testo digitato, forme geometriche, immagini e note ade
 ### Domande aperte
 
 - [ ] Nome dell'app e icona
-- [ ] Distribuzione: solo uso personale, Microsoft Store o download diretto?
+- [x] Distribuzione: decisa il 07/11/2026. Primo rilascio per uso personale e distribuzione privata tra amici (nessuno Store, nessun sito pubblico): deve essere comodo da condividere e da installare sui Surface, x64 e ARM64. Dopo il primo rilascio il progetto potrebbe diventare open source: finché non è deciso, niente di privato nel repository e licenze delle dipendenze compatibili (già vincolate a MIT, BSD, Apache-2.0). Installer: due EXE per utente (x64 e ARM64), senza amministratore, non firmati.
 - [ ] Serve la ricerca di testo (FR-13) già nella v1?
 - [ ] Lingue dell'interfaccia oltre all'italiano
 - [ ] La Slim Pen 2 trasmette la rotazione attorno al proprio asse? Test: in Photoshop, pennello con Shape Dynamics → Angle Jitter → Control: Rotation, penna tenuta perpendicolare e ruotata solo tra le dita. Se il segno ruota, FR-48 passa da Could a Should e la nota sul limite hardware va rimossa
