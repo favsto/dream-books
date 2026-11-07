@@ -166,13 +166,14 @@ public sealed class MainMenuTests : IDisposable
             Assert.Contains((Key.S, ModifierKeys.Control, (ICommand)vm.SaveCommand), gestures);
             Assert.Contains((Key.S, ModifierKeys.Control | ModifierKeys.Shift, (ICommand)vm.SaveAsCommand), gestures);
 
-            // Not yet available (4b): disabled, with no command, and saying so.
-            foreach (var placeholder in new[] { menu.ExportItem })
-            {
-                Assert.False(placeholder.IsEnabled);
-                Assert.Null(placeholder.Command);
-                Assert.Equal(Strings.MenuNotYetAvailable, AutomationProperties.GetHelpText(placeholder));
-            }
+            // "Esporta" with a document open: enabled, its two entries named and bound to the exports (FR-87, FR-88).
+            Assert.True(menu.ExportItem.IsEnabled);
+            Assert.Null(menu.ExportItem.Command);
+            Assert.Same(vm.ExportFlattenedCommand, menu.ExportPdfItem.Command);
+            Assert.Same(vm.ExportPagePngCommand, menu.ExportPngItem.Command);
+            Assert.Equal(Strings.ExportPdfFlattened, AutomationProperties.GetName(menu.ExportPdfItem));
+            Assert.Equal(Strings.ExportPagePng, AutomationProperties.GetName(menu.ExportPngItem));
+
 
             // Marks: the left-edge panel on its marks tab, the menu closed.
             Invoke(menu.MarksItem);
@@ -343,7 +344,7 @@ public sealed class MainMenuTests : IDisposable
         await WithWindowAsync((vm, window) =>
         {
             var line = window.SaveLine;
-            Assert.Equal(nameof(MainViewModel.IsSaving), BindingOperations.GetBinding(line, SaveProgressLine.IsActiveProperty)?.Path.Path);
+            Assert.Equal(nameof(MainViewModel.ShowsProgress), BindingOperations.GetBinding(line, SaveProgressLine.IsActiveProperty)?.Path.Path);
             Assert.Equal(Visibility.Collapsed, line.Visibility);
             Assert.False(line.IsHitTestVisible); // the pen writes under it
             Assert.Equal(Strings.Saving, AutomationProperties.GetName(line));

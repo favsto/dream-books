@@ -10,6 +10,11 @@ internal sealed class FakeFileDialogService : IFileDialogService
     /// <summary>What <see cref="PickSavePdf"/> returns; null means the user cancelled.</summary>
     public string? NextSavePath { get; set; }
 
+    /// <summary>What <see cref="PickSavePng"/> returns; null means the user cancelled.</summary>
+    public string? NextPngPath { get; set; }
+
+    public List<string> SuggestedPngNames { get; } = [];
+
     public SaveChangesAnswer SaveChangesAnswer { get; set; } = SaveChangesAnswer.Cancel;
 
     public FileChangedAnswer FileChangedAnswer { get; set; } = FileChangedAnswer.Cancel;
@@ -27,6 +32,12 @@ internal sealed class FakeFileDialogService : IFileDialogService
     public List<string> Messages { get; } = [];
 
     public string? PickPdf() => NextPath;
+
+    public string? PickSavePng(string suggestedFileName)
+    {
+        SuggestedPngNames.Add(suggestedFileName);
+        return NextPngPath;
+    }
 
     public string? PickSavePdf(string suggestedFileName)
     {

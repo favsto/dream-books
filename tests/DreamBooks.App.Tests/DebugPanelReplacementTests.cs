@@ -78,7 +78,7 @@ public sealed class DebugPanelReplacementTests : IDisposable
             Shortcut(Key.S, ModifierKeys.Control | ModifierKeys.Shift, vm.SaveAsCommand);
 
             // The saving indicator: the line under the title bar (FR-89); the dirty mark in the title (UI-06).
-            Bound("Saving indicator", window.SaveLine, SaveProgressLine.IsActiveProperty, nameof(MainViewModel.IsSaving));
+            Bound("Saving indicator", window.SaveLine, SaveProgressLine.IsActiveProperty, nameof(MainViewModel.ShowsProgress));
             Bound("Dirty mark", window.TitleNameText, System.Windows.Controls.TextBlock.TextProperty, nameof(MainViewModel.DocumentTitle));
 
             // Previous / next page: PgUp / PgDn (FR-10, a screen at a time) and the chip's go to page.

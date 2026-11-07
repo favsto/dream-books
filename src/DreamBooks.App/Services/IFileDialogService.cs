@@ -9,6 +9,9 @@ public interface IFileDialogService
     /// <summary>Asks where to save a PDF (Save as), proposing <paramref name="suggestedFileName"/>; null if cancelled.</summary>
     string? PickSavePdf(string suggestedFileName);
 
+    /// <summary>Asks where to save a page image (PNG); null when the user cancelled.</summary>
+    string? PickSavePng(string suggestedFileName);
+
     /// <summary>The document has unsaved changes: save them, drop them, or stay (FR-85).</summary>
     SaveChangesAnswer AskSaveChanges();
 

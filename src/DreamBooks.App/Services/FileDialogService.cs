@@ -42,6 +42,19 @@ public sealed class FileDialogService : IFileDialogService
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
 
+    public string? PickSavePng(string suggestedFileName)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Filter = Strings.PngFileFilter,
+            FileName = Path.GetFileName(suggestedFileName),
+            DefaultExt = ".png",
+            AddExtension = true,
+            OverwritePrompt = true,
+        };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
+
     public string? PickSavePdf(string suggestedFileName)
     {
         var dialog = new SaveFileDialog

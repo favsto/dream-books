@@ -131,6 +131,9 @@ public sealed class MainViewModel : ObservableObject
         // meanwhile show their placeholder, and the commands may overlap.
         OpenPdfCommand = new AsyncRelayCommand(OpenPdfAsync, () => !IsSaving);
         CloseDocumentCommand = new AsyncRelayCommand(CloseDocumentAsync, () => Session is not null && !IsSaving);
+        Exports = new ExportService(dialogs);
+        ExportFlattenedCommand = new AsyncRelayCommand(() => ExportAsync((s, ct) => Exports.ExportFlattenedAsync(s, ct)), CanExport);
+        ExportPagePngCommand = new AsyncRelayCommand(() => ExportAsync((s, ct) => Exports.ExportPageAsync(s, Viewport.CurrentPage, ct)), CanExport);
         GoToPageCommand = new AsyncRelayCommand<int>(GoToPageAsync, AsyncRelayCommandOptions.AllowConcurrentExecutions);
         PreviousPageCommand = new AsyncRelayCommand(
             () => Viewport.StepPageAsync(-1), AsyncRelayCommandOptions.AllowConcurrentExecutions);
@@ -193,6 +196,8 @@ public sealed class MainViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(IsStartScreenVisible));
                 CloseDocumentCommand?.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(HasDocument));
+                NotifyExportCommands();
             }
         }
     }
@@ -255,6 +260,8 @@ public sealed class MainViewModel : ObservableObject
 
                 OpenPdfCommand.NotifyCanExecuteChanged();
                 CloseDocumentCommand.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(ShowsProgress));
+                NotifyExportCommands();
                 SaveCommand.NotifyCanExecuteChanged();
                 SaveAsCommand.NotifyCanExecuteChanged();
             }
@@ -896,6 +903,75 @@ public sealed class MainViewModel : ObservableObject
         }
 
         await PrunePositionsOnceAsync();
+    }
+
+    /// <summary>The two exports (FR-87, FR-88); the tests replace it.</summary>
+    internal ExportService Exports { get; set; }
+
+    /// <summary>The flattened PDF of the document as the reader sees it (FR-87).</summary>
+    public IAsyncRelayCommand ExportFlattenedCommand { get; }
+
+    /// <summary>The current page as a PNG (FR-88).</summary>
+    public IAsyncRelayCommand ExportPagePngCommand { get; }
+
+    private bool _isExporting;
+
+    /// <summary>True while an export runs: the progress line shows, saving waits, reading goes on.</summary>
+    public bool IsExporting
+    {
+        get => _isExporting;
+        private set
+        {
+            if (SetProperty(ref _isExporting, value))
+            {
+                OnPropertyChanged(nameof(ShowsProgress));
+                NotifyExportCommands();
+                SaveCommand.NotifyCanExecuteChanged();
+                SaveAsCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    /// <summary>The thin progress line under the title bar shows while a save or an export runs (FR-89).</summary>
+    public bool ShowsProgress => IsSaving || IsExporting;
+
+    /// <summary>True when a document is open (the menu's "Esporta" needs one).</summary>
+    public bool HasDocument => Session is not null;
+
+    private bool CanExport() => Session is not null && !IsSaving && !IsExporting;
+
+    private void NotifyExportCommands()
+    {
+        ExportFlattenedCommand?.NotifyCanExecuteChanged();
+        ExportPagePngCommand?.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// Runs one export of the open document. A request while a save or another export runs is ignored. A failure shows its
+    /// message on the error line and as a popup (like a failed save); a cancelled one says nothing. The document, its
+    /// unsaved changes and the file are never touched.
+    /// </summary>
+    private async Task ExportAsync(Func<DocumentSession, CancellationToken, Task<ExportResult>> run)
+    {
+        if (Session is not { } session || IsExporting || IsSaving)
+        {
+            return;
+        }
+
+        IsExporting = true;
+        try
+        {
+            var result = await run(session, CancellationToken.None);
+            if (result is { Outcome: ExportOutcome.Failed, Message: { } message })
+            {
+                ErrorMessage = message;
+                _dialogs.ShowMessage(message);
+            }
+        }
+        finally
+        {
+            IsExporting = false;
+        }
     }
 
     private void StartOpening()
@@ -1922,7 +1998,7 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    private bool CanSave() => Session is not null && _viewer is not null && !IsSaving;
+    private bool CanSave() => Session is not null && _viewer is not null && !IsSaving && !IsExporting;
 
     /// <summary>
     /// Runs one save; a request while another runs is ignored (never two at once). Shows the outcome's

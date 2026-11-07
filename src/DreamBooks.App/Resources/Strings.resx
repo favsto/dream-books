@@ -186,6 +186,14 @@
   <data name="TitleBarMinimize" xml:space="preserve"><value>Riduci a icona</value></data>
   <data name="TitleBarMaximize" xml:space="preserve"><value>Ingrandisci</value></data>
   <data name="TitleBarClose" xml:space="preserve"><value>Chiudi</value></data>
+  <data name="PngFileFilter" xml:space="preserve"><value>Immagine PNG (*.png)|*.png</value></data>
+  <data name="ErrorExportSameFile" xml:space="preserve"><value>Scegli un nome diverso da quello del documento aperto.</value></data>
+  <data name="ErrorExportEncrypted" xml:space="preserve"><value>Questo PDF è protetto: non si può esportare una copia appiattita.</value></data>
+  <data name="ErrorExportFailed" xml:space="preserve"><value>Non è stato possibile esportare il file. Il documento non è stato modificato.</value></data>
+  <data name="ExportPageNameFormat" xml:space="preserve"><value>{0} - pag. {1}.png</value></data>
+  <data name="ExportFlattenedNameFormat" xml:space="preserve"><value>{0} (appiattito).pdf</value></data>
+  <data name="ExportPagePng" xml:space="preserve"><value>Pagina come immagine (PNG)…</value></data>
+  <data name="ExportPdfFlattened" xml:space="preserve"><value>PDF appiattito…</value></data>
   <data name="ToolbarGrip" xml:space="preserve"><value>Sposta la barra degli strumenti</value></data>
   <data name="ShortcutSettings" xml:space="preserve"><value>Ctrl+,</value></data>
   <data name="SettingsEdgeRight" xml:space="preserve"><value>A destra</value></data>

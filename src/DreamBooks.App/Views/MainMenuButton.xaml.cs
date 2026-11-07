@@ -110,6 +110,9 @@ public partial class MainMenuButton : UserControl
     /// <summary>True while the "File recenti" list is expanded.</summary>
     internal bool IsRecentListOpen => RecentList.Visibility == Visibility.Visible;
 
+    /// <summary>True while the "Esporta" entries are expanded.</summary>
+    internal bool IsExportListOpen => ExportList.Visibility == Visibility.Visible;
+
     /// <summary>The duration of the last opening animation (tests); null when it opened at once.</summary>
     internal TimeSpan? LastOpenDuration { get; set; }
 
@@ -264,6 +267,12 @@ public partial class MainMenuButton : UserControl
     // dialog it opens, or the panel or the pill it shows, is not under the menu.
     private void OnEntryClick(object sender, RoutedEventArgs e)
     {
+        if (ReferenceEquals(e.OriginalSource, ExportItem))
+        {
+            ExportList.Visibility = ExportList.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+            return; // "Esporta" opens its two entries; choosing one closes the menu
+        }
+
         if (ReferenceEquals(e.OriginalSource, RecentItem))
         {
             RecentList.Visibility = RecentList.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;

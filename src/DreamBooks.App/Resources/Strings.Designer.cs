@@ -399,6 +399,14 @@ internal static class Strings
     public static string TitleBarMinimize => Get(nameof(TitleBarMinimize));
     public static string TitleBarMaximize => Get(nameof(TitleBarMaximize));
     public static string TitleBarClose => Get(nameof(TitleBarClose));
+    public static string PngFileFilter => Get(nameof(PngFileFilter));
+    public static string ErrorExportSameFile => Get(nameof(ErrorExportSameFile));
+    public static string ErrorExportEncrypted => Get(nameof(ErrorExportEncrypted));
+    public static string ErrorExportFailed => Get(nameof(ErrorExportFailed));
+    public static string ExportPageNameFormat => Get(nameof(ExportPageNameFormat));
+    public static string ExportFlattenedNameFormat => Get(nameof(ExportFlattenedNameFormat));
+    public static string ExportPagePng => Get(nameof(ExportPagePng));
+    public static string ExportPdfFlattened => Get(nameof(ExportPdfFlattened));
     public static string ToolbarGrip => Get(nameof(ToolbarGrip));
     public static string ShortcutSettings => Get(nameof(ShortcutSettings));
     public static string SettingsEdgeRight => Get(nameof(SettingsEdgeRight));

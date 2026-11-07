@@ -70,11 +70,21 @@
                 </Button>
                 <!-- The last few recent documents, opened by "File recenti" (the full list is the start screen). -->
                 <StackPanel x:Name="RecentList" Visibility="Collapsed" Margin="{StaticResource MenuSubListMargin}" />
-                <Button x:Name="ExportItem" Style="{StaticResource MenuItemStyle}" IsEnabled="False"
-                        AutomationProperties.Name="{x:Static res:Strings.MenuExport}"
-                        AutomationProperties.HelpText="{x:Static res:Strings.MenuNotYetAvailable}">
+                <Button x:Name="ExportItem" Style="{StaticResource MenuItemStyle}" IsEnabled="{Binding HasDocument}"
+                        AutomationProperties.Name="{x:Static res:Strings.MenuExport}">
                     <TextBlock Text="{x:Static res:Strings.MenuExport}" VerticalAlignment="Center" />
                 </Button>
+                <!-- The two exports (FR-87, FR-88), opened by "Esporta". -->
+                <StackPanel x:Name="ExportList" Visibility="Collapsed" Margin="{StaticResource MenuSubListMargin}">
+                    <Button x:Name="ExportPdfItem" Style="{StaticResource MenuItemStyle}" Command="{Binding ExportFlattenedCommand}"
+                            AutomationProperties.Name="{x:Static res:Strings.ExportPdfFlattened}">
+                        <TextBlock Text="{x:Static res:Strings.ExportPdfFlattened}" VerticalAlignment="Center" />
+                    </Button>
+                    <Button x:Name="ExportPngItem" Style="{StaticResource MenuItemStyle}" Command="{Binding ExportPagePngCommand}"
+                            AutomationProperties.Name="{x:Static res:Strings.ExportPagePng}">
+                        <TextBlock Text="{x:Static res:Strings.ExportPagePng}" VerticalAlignment="Center" />
+                    </Button>
+                </StackPanel>
 
                 <Border x:Name="Separator2" Height="{StaticResource MenuSeparatorHeight}" Margin="{StaticResource MenuSeparatorMargin}"
                         Background="{DynamicResource ToolbarSeparatorBrush}" IsHitTestVisible="False" />

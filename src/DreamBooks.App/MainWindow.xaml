@@ -120,6 +120,6 @@
 
         <!-- The save progress line (FR-89) right under the title bar while a save runs; it never takes input. -->
         <views:SaveProgressLine x:Name="SaveLine" Panel.ZIndex="1" Margin="{StaticResource TitleBarClearance}"
-                                IsActive="{Binding IsSaving, Mode=OneWay}" />
+                                IsActive="{Binding ShowsProgress, Mode=OneWay}" />
     </Grid>
 </ui:FluentWindow>
