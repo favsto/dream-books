@@ -20,6 +20,7 @@ public partial class App : Application
     private ThemeService? _theme;
     private SettingsService? _settings;
     private RecentFilesService? _recents;
+    private FramePerformanceProbe? _probe;
 
     public App() => AddThemeResources(Resources);
 
@@ -40,6 +41,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        StartProbeIfRequested();
 
         // The splash first, before the heavy start-up work, so the user sees the app at once; it closes when the window
         // is ready (no minimum time).
@@ -86,6 +88,7 @@ public partial class App : Application
             {
                 ChoiceDialog.Showing -= CloseSplash;
                 splash.CloseOnce();
+                _probe?.MarkReady();
             },
             CancellationToken.None,
             TaskContinuationOptions.None,
@@ -93,8 +96,30 @@ public partial class App : Application
         window.Show();
     }
 
+    /// <summary>
+    /// With <c>DREAMBOOKS_PERF=1</c>: counts the frames drawn from the first one on and writes a numbers-only report to
+    /// <c>perf.txt</c> at exit (NFR-01, NFR-03 on the device). Off otherwise: nothing is subscribed.
+    /// </summary>
+    private void StartProbeIfRequested()
+    {
+        if (!FramePerformanceProbe.IsRequested(Environment.GetEnvironmentVariable(FramePerformanceProbe.Variable)))
+        {
+            return;
+        }
+
+        using var process = System.Diagnostics.Process.GetCurrentProcess();
+        var probe = new FramePerformanceProbe(
+            process.StartTime.ToUniversalTime(),
+            () => DateTime.UtcNow,
+            () => System.Diagnostics.Stopwatch.GetTimestamp() * 1000.0 / System.Diagnostics.Stopwatch.Frequency,
+            FramePerformanceProbe.DefaultPath());
+        _probe = probe;
+        CompositionTarget.Rendering += (_, _) => probe.OnFrame();
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
+        _probe?.Write();
         _settings?.Flush(_flushTimeout);
         _recents?.Flush(_flushTimeout);
         _theme?.Dispose();
