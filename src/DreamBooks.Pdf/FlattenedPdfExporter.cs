@@ -44,6 +44,12 @@ public sealed class FlattenedPdfExporter
             throw new DirectoryNotFoundException("The destination folder does not exist.");
         }
 
+        // Never over the file it reads, whatever the spelling of the path (a short name, a share, a prefix, a link).
+        if (File.Exists(destination) && FileIdentity.AreSame(sourcePath, destination))
+        {
+            throw new ExportDestinationIsSourceException();
+        }
+
         ct.ThrowIfCancellationRequested();
         string? withStrokes = null;
         string? flattened = null;

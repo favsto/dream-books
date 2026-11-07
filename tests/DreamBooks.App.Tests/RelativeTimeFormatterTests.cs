@@ -27,11 +27,22 @@ public sealed class RelativeTimeFormatterTests
     }
 
     [Fact]
+    public void Days_are_the_readers_local_days_not_UTC_days()
+    {
+        // Local 01:00 and the 23:00 before it: two local days, whatever the time zone of the machine.
+        var localNow = new DateTime(2026, 11, 20, 1, 0, 0, DateTimeKind.Local);
+        var earlierSameLocalDay = localNow.AddMinutes(-30);
+        var previousLocalDay = localNow.AddHours(-2);
+
+        Assert.Equal("oggi", RelativeTimeFormatter.Format(earlierSameLocalDay.ToUniversalTime(), localNow.ToUniversalTime()));
+        Assert.Equal("ieri", RelativeTimeFormatter.Format(previousLocalDay.ToUniversalTime(), localNow.ToUniversalTime()));
+    }
+
+    [Fact]
     public void Yesterday_is_a_calendar_day_not_24_hours()
     {
-        var lateYesterday = new DateTime(2026, 11, 19, 23, 50, 0, DateTimeKind.Utc);
-        var earlyToday = new DateTime(2026, 11, 20, 0, 10, 0, DateTimeKind.Utc);
-
+        var lateYesterday = new DateTime(2026, 11, 19, 23, 50, 0, DateTimeKind.Local).ToUniversalTime();
+        var earlyToday = new DateTime(2026, 11, 20, 0, 10, 0, DateTimeKind.Local).ToUniversalTime();
         Assert.Equal("ieri", RelativeTimeFormatter.Format(lateYesterday, earlyToday));
     }
 }

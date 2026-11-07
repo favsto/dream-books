@@ -101,6 +101,22 @@ public sealed class RecentFilesStoreTests : IDisposable
     }
 
     [Fact]
+    public void One_bad_entry_is_skipped_and_the_good_ones_survive()
+    {
+        Write("""
+            {"v":1,"items":[
+              {"path":"C:/good.pdf","opened":"2026-11-01T10:00:00Z","page":1,"pages":5},
+              {"path":"C:/text.pdf","opened":"2026-11-01T10:00:00Z","page":"3","pages":5},
+              {"path":"C:/null.pdf","opened":"2026-11-01T10:00:00Z","page":null,"pages":null},
+              {"path":"C:/other.pdf","opened":"2026-11-01T10:00:00Z","page":0,"pages":2}]}
+            """);
+
+        var loaded = new RecentFilesStore(_root).Load();
+
+        Assert.Equal(["C:/good.pdf", "C:/other.pdf"], loaded.Items.Select(f => f.Path));
+    }
+
+    [Fact]
     public void The_settings_file_never_contains_a_path_after_recents_are_saved()
     {
         var settings = new AppSettingsStore(_root);

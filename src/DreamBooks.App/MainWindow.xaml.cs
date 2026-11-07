@@ -271,6 +271,7 @@ public partial class MainWindow : FluentWindow
         {
             start.CoverProvider = async (path, ct) => await covers.GetAsync(path, ct);
             covers.Stored += (_, path) => Dispatcher.BeginInvoke(() => start.ReloadCover(path));
+            recents.Dropped += (_, path) => _ = covers.DeleteAsync(path);
             _viewModel.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(MainViewModel.Session) && _viewModel.Session is { } session)

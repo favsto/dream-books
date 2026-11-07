@@ -150,8 +150,8 @@ public sealed class RecentFilesStore
             || string.IsNullOrWhiteSpace(path.GetString())
             || !item.TryGetProperty("opened", out var opened) || opened.ValueKind != JsonValueKind.String
             || !DateTime.TryParse(opened.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var when)
-            || !item.TryGetProperty("page", out var page) || !page.TryGetInt32(out var pageIndex)
-            || !item.TryGetProperty("pages", out var pages) || !pages.TryGetInt32(out var pageCount))
+            || !item.TryGetProperty("page", out var page) || page.ValueKind != JsonValueKind.Number || !page.TryGetInt32(out var pageIndex)
+            || !item.TryGetProperty("pages", out var pages) || pages.ValueKind != JsonValueKind.Number || !pages.TryGetInt32(out var pageCount))
         {
             return false;
         }

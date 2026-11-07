@@ -16,7 +16,7 @@
         <conv:EnumMatchConverter x:Key="EnumMatch" />
     </UserControl.Resources>
     <views:FloatingSurface x:Name="Surface" Width="{StaticResource SettingsPanelWidth}" CornerRadius="{StaticResource PanelCornerRadius}">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" PanningMode="None" Focusable="False">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" PanningMode="VerticalOnly" Focusable="False">
             <StackPanel Margin="{StaticResource FlyoutPadding}" KeyboardNavigation.TabNavigation="Cycle">
                 <DockPanel>
                     <Button x:Name="CloseButton" DockPanel.Dock="Right" Style="{StaticResource ToolbarButtonStyle}" Margin="0"

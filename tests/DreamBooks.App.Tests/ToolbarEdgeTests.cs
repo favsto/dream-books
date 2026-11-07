@@ -307,15 +307,26 @@ public sealed class ToolbarEdgeTests : IDisposable
     }
 
     [Fact]
-    public void The_flyout_height_on_the_sides_is_the_height_below_the_title_bar()
+    public void A_flyout_beside_a_vertical_pill_never_reaches_under_the_title_bar_or_off_the_window()
     {
-        WithWindow((window, _) =>
-        {
-            Move(window, ToolbarEdge.Left);
-            var title = ((Thickness)window.FindResource("TitleBarClearance")).Top;
-            var gap = window.FloatingToolbar.Pill.Margin.Bottom;
+        WithWindow(
+            (window, _) =>
+            {
+                var toolbar = window.FloatingToolbar;
+                var title = ((Thickness)window.FindResource("TitleBarClearance")).Top;
+                foreach (var edge in new[] { ToolbarEdge.Left, ToolbarEdge.Right })
+                {
+                    Move(window, edge, 1000, 380);
+                    ToolbarViewTests.Invoke(toolbar.PenButton);
+                    ScrollRailTests.LayOut((FrameworkElement)window.Content, 1000, 380);
 
-            Assert.Equal(600 - title - gap, window.FloatingToolbar.FlyoutHeightLimit(600), 3);
-        });
+                    var flyout = Bounds(toolbar.PenFlyout.Surface, window.PageHost);
+                    Assert.True(flyout.Top >= title - 0.5, $"{edge}: the flyout starts at {flyout.Top}, under the {title} px title bar");
+                    Assert.True(flyout.Bottom <= 380.5, $"{edge}: the flyout ends at {flyout.Bottom}");
+                    ToolbarViewTests.Invoke(toolbar.PenButton); // closes it again
+                }
+            },
+            width: 1000,
+            height: 380);
     }
 }

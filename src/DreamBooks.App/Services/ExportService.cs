@@ -22,7 +22,7 @@ internal sealed record ExportResult(ExportOutcome Outcome, string? Message = nul
 /// sees (the session, unsaved strokes included), and report the outcome. The open document, its dirty state and the
 /// original file are never touched.
 /// </summary>
-internal sealed class ExportService
+internal sealed class ExportService : IExportService
 {
     private readonly IFileDialogService _dialogs;
     private readonly FlattenedPdfExporter _pdf = new();
@@ -79,6 +79,10 @@ internal sealed class ExportService
         catch (OperationCanceledException)
         {
             return new ExportResult(ExportOutcome.Cancelled);
+        }
+        catch (ExportDestinationIsSourceException)
+        {
+            return new ExportResult(ExportOutcome.Failed, Strings.ErrorExportSameFile); // the same file under another spelling
         }
         catch (PdfSaveRefusedException)
         {

@@ -37,6 +37,11 @@ internal sealed class PageImageExporter
             throw new DirectoryNotFoundException("The destination folder does not exist.");
         }
 
+        if (File.Exists(destination) && FileIdentity.AreSame(sourcePath, destination))
+        {
+            throw new ExportDestinationIsSourceException(); // never over the file it reads
+        }
+
         var page = await _renderer.RenderAsync(sourcePath, pageIndex, changes, Dpi, ct).ConfigureAwait(false);
         var png = Encode(page);
         ct.ThrowIfCancellationRequested();

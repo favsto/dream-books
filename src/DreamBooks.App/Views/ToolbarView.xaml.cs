@@ -686,8 +686,9 @@ public partial class ToolbarView : UserControl
         var padding = TryFindResource("ToolbarPadding") is Thickness p ? Vertical(p) : 0;
         if (_vertical)
         {
-            // Beside the pill: the whole height below the title bar, less the pill's own bottom gap.
-            return Math.Max(0, slotHeight - title - Pill.Margin.Bottom);
+            // Beside the pill: the flyout is centred in the window, so it may take only what is free above and below the centre:
+            // twice the larger of the two gaps (the title bar and the menu button above, the margin below), never under the title bar.
+            return Math.Max(0, slotHeight - (2 * Math.Max(title, Math.Max(Pill.Margin.Top, Pill.Margin.Bottom))));
         }
 
         // Above (bottom edge) or below (top edge) the pill. On the top edge the pill's margin already holds the title bar.

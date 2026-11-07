@@ -16,6 +16,13 @@ public partial class SplashWindow : Window
         ReducedMotion = !SystemParameters.ClientAreaAnimation;
     }
 
+    /// <summary>
+    /// The main window is up: the splash steps back from the top of the screen. A start-up question (a restored file that was
+    /// moved, a journal that does not match) is a dialog of the main window and must not open hidden under the splash while
+    /// start-up waits for the answer.
+    /// </summary>
+    internal void YieldToMainWindow() => Topmost = false;
+
     /// <summary>Windows animations off (NFR-32): the indicator stands still instead of running.</summary>
     internal bool ReducedMotion
     {

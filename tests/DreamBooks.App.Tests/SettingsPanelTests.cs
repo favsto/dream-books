@@ -200,6 +200,7 @@ public sealed class SettingsPanelTests : IDisposable
             window.UpdateLayout();
             var scroller = ToolbarViewTests.Descendants(window.SettingsView).OfType<ScrollViewer>().First();
             Assert.True(scroller.ScrollableHeight > 0, "the panel scrolls when the window is short");
+            Assert.Equal(PanningMode.VerticalOnly, scroller.PanningMode); // a finger scrolls it, not only the thin bar
             Assert.True(window.SettingsView.PanelSurface.ActualHeight <= 300);
         });
     }

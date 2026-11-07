@@ -65,6 +65,20 @@ public sealed class CoverServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task A_dropped_cover_is_deleted_and_nothing_remains_of_the_page()
+    {
+        var store = new CoverStore(_dir);
+        var service = new CoverService(store);
+        await service.StoreAsync(@"C:\a.pdf", Page(90), CancellationToken.None);
+        await service.StoreAsync(@"C:\b.pdf", Page(90), CancellationToken.None);
+
+        await service.DeleteAsync(@"C:\a.pdf");
+
+        Assert.Null(store.TryLoad(@"C:\a.pdf"));
+        Assert.NotNull(store.TryLoad(@"C:\b.pdf"));
+    }
+
+    [Fact]
     public async Task Storing_raises_Stored_with_the_path()
     {
         var service = new CoverService(new CoverStore(_dir));

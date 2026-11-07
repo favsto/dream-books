@@ -77,6 +77,27 @@ public sealed class SplashStartupTests : IDisposable
         });
     }
 
+    [Fact]
+    public void The_splash_is_on_top_until_the_main_window_is_up_and_then_steps_back_so_a_start_up_question_is_seen()
+    {
+        WpfTestThread.Run(() =>
+        {
+            var splash = new SplashWindow();
+            try
+            {
+                Assert.True(splash.Topmost); // over everything while the app builds its window
+
+                splash.YieldToMainWindow(); // the restore may ask a question (a moved file, a journal): it must not hide under the splash
+
+                Assert.False(splash.Topmost);
+            }
+            finally
+            {
+                splash.Close();
+            }
+        });
+    }
+
     private static IEnumerable<T> Find<T>(DependencyObject root)
         where T : DependencyObject
     {

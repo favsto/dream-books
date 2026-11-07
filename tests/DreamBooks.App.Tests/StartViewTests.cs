@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using DreamBooks.App.Resources;
 using DreamBooks.App.Services;
 using DreamBooks.App.ViewModels;
@@ -136,6 +137,22 @@ public sealed class StartViewTests : IDisposable
         });
     }
 
+
+    [Fact]
+    public void With_all_the_recents_shown_in_a_short_window_the_start_screen_scrolls_by_finger_and_wheel()
+    {
+        WithWindow(NewRecents(20), (window, _) =>
+        {
+            window.Start!.ShowAllCommand.Execute(null);
+            ScrollRailTests.LayOut((FrameworkElement)window.Content, 1000, 500);
+            window.StartScreen.UpdateLayout();
+
+            var scroller = Find<ScrollViewer>(window.StartScreen).First();
+            Assert.Equal(ScrollBarVisibility.Auto, scroller.VerticalScrollBarVisibility);
+            Assert.Equal(PanningMode.VerticalOnly, scroller.PanningMode);
+            Assert.True(scroller.ScrollableHeight > 0, "the lower rows can be reached");
+        });
+    }
 
     [Fact]
     public void A_wider_window_fits_more_cards_and_Altri_shows_when_some_do_not_fit()

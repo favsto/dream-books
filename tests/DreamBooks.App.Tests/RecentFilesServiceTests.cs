@@ -117,6 +117,26 @@ public sealed class RecentFilesServiceTests : IDisposable
     }
 
     [Fact]
+    public void A_removed_recent_and_the_oldest_one_pushed_out_by_the_21st_are_reported_as_dropped()
+    {
+        var service = Create();
+        var dropped = new List<string>();
+        service.Dropped += (_, path) => dropped.Add(path);
+        for (var i = 0; i < 20; i++)
+        {
+            service.Opened($@"C:\f{i}.pdf", 0, 1);
+        }
+
+        Assert.Empty(dropped);
+        service.Opened(@"C:\f20.pdf", 0, 1); // the 21st pushes the oldest out
+        service.Remove(@"C:\f10.pdf");
+        service.Remove(@"C:\never-there.pdf"); // not in the list: nothing is dropped
+        service.Opened(@"C:\f15.pdf", 0, 1); // already there: it moves, nothing is dropped
+
+        Assert.Equal([@"C:\f0.pdf", @"C:\f10.pdf"], dropped);
+    }
+
+    [Fact]
     public void Load_reads_the_saved_list_with_the_progress()
     {
         new RecentFilesStore(_dir).Save(new RecentFilesList([new RecentFile(@"C:\a.pdf", _now.AddDays(-1), 130, 400)]));

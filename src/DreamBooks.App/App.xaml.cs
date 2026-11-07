@@ -79,6 +79,7 @@ public partial class App : Application
             TaskContinuationOptions.None,
             TaskScheduler.FromCurrentSynchronizationContext());
         window.Show();
+        splash.YieldToMainWindow(); // before the first start-up question can be asked
     }
 
     protected override void OnExit(ExitEventArgs e)

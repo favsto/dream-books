@@ -27,6 +27,9 @@ internal sealed class CoverService
     public Task<BitmapSource?> GetAsync(string documentPath, CancellationToken ct) =>
         Task.Run(() => Decode(_store.TryLoad(documentPath)), ct);
 
+    /// <summary>Deletes a document's cover (it left the recent list): the picture is document content and is not kept. Never throws.</summary>
+    public Task DeleteAsync(string documentPath) => Task.Run(() => _store.Delete(documentPath));
+
     /// <summary>Keeps <paramref name="firstPage"/> as the document's cover. Never throws.</summary>
     public async Task StoreAsync(string documentPath, BitmapSource firstPage, CancellationToken ct)
     {

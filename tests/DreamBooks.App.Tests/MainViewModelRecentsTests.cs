@@ -157,6 +157,167 @@ public sealed class MainViewModelRecentsTests : IDisposable
     }
 
     [Fact]
+    public async Task Closing_a_document_clears_its_warnings_and_old_messages_but_not_a_message_the_close_itself_made()
+    {
+        var (vm, _) = Create();
+        _dialogs.NextPath = WritePdf("a.pdf", (612, 792));
+        try
+        {
+            await vm.OpenPdfCommand.ExecuteAsync(null);
+            vm.Saved += (_, _) => throw new InvalidOperationException("a listener of the save fails");
+            Assert.True(vm.Editor!.CommitStroke(_dot, InkTool.Pen, Palette.Colors[0], 1));
+            await vm.SaveCommand.ExecuteAsync(null);
+            Assert.NotNull(vm.JournalWarning); // the listener's failure is shown
+            vm.ShowError("an old error line");
+
+            await vm.CloseDocumentCommand.ExecuteAsync(null);
+
+            Assert.Null(vm.Session);
+            Assert.Null(vm.JournalWarning); // it belonged to the document that is gone
+            Assert.Null(vm.ErrorMessage);
+            Assert.Null(vm.Notice);
+        }
+        finally
+        {
+            await CleanUpAsync(vm);
+        }
+    }
+
+    [Fact]
+    public async Task Cancelling_the_close_keeps_the_messages_of_the_open_document()
+    {
+        var (vm, _) = Create();
+        _dialogs.NextPath = WritePdf("a.pdf", (612, 792));
+        try
+        {
+            await vm.OpenPdfCommand.ExecuteAsync(null);
+            Assert.True(vm.Editor!.CommitStroke(_dot, InkTool.Pen, Palette.Colors[0], 1));
+            vm.ShowError("an error that stays");
+            _dialogs.SaveChangesAnswer = SaveChangesAnswer.Cancel;
+
+            await vm.CloseDocumentCommand.ExecuteAsync(null);
+
+            Assert.NotNull(vm.Session);
+            Assert.Equal("an error that stays", vm.ErrorMessage);
+        }
+        finally
+        {
+            await CleanUpAsync(vm);
+        }
+    }
+
+    [Fact]
+    public async Task A_document_chosen_while_a_save_runs_is_ignored_and_changes_nothing()
+    {
+        var (vm, _) = Create();
+        var writer = new FakeDocumentWriter();
+        vm.SaveService = new DocumentSaveService(writer, _dialogs);
+        _dialogs.NextPath = WritePdf("a.pdf", (612, 792));
+        var other = WritePdf("b.pdf", (612, 792));
+        try
+        {
+            await vm.OpenPdfCommand.ExecuteAsync(null);
+            Assert.True(vm.Editor!.CommitStroke(_dot, InkTool.Pen, Palette.Colors[0], 1));
+            writer.Gate = new TaskCompletionSource();
+            var saving = vm.SaveCommand.ExecuteAsync(null);
+            WpfTestThread.PumpUntil(() => vm.IsSaving);
+
+            await vm.OpenRecentAsync(other); // a drop or a menu choice during the save
+            await vm.OpenStartupFileAsync(other);
+
+            Assert.Equal(_dialogs.NextPath, vm.Session!.Path);
+            Assert.Equal(0, _dialogs.SaveChangesAsks);
+            writer.Gate.SetResult();
+            await saving;
+        }
+        finally
+        {
+            await CleanUpAsync(vm);
+        }
+    }
+
+    [Fact]
+    public async Task Two_opens_at_once_open_one_document_and_Close_waits_for_the_open()
+    {
+        var (vm, recents) = Create();
+        var a = WritePdf("a.pdf", (612, 792));
+        var b = WritePdf("b.pdf", (612, 792));
+        try
+        {
+            var first = vm.OpenRecentAsync(a);
+            Assert.False(vm.CloseDocumentCommand.CanExecute(null));
+            var second = vm.OpenRecentAsync(b); // while the first is still running
+            await Task.WhenAll(first, second);
+
+            Assert.Equal(a, vm.Session!.Path);
+            Assert.Single(recents.Entries);
+            Assert.True(vm.CloseDocumentCommand.CanExecute(null));
+
+            var reopen = vm.OpenRecentAsync(a);
+            Assert.False(vm.CloseDocumentCommand.CanExecute(null)); // no close in the middle of a reopen
+            await reopen;
+        }
+        finally
+        {
+            await CleanUpAsync(vm);
+        }
+    }
+
+    [Fact]
+    public async Task A_close_asked_while_an_export_runs_waits_for_it_and_no_save_starts_meanwhile()
+    {
+        var (vm, _) = Create();
+        var export = new GatedExportService();
+        vm.Exports = export;
+        var writer = new FakeDocumentWriter();
+        vm.SaveService = new DocumentSaveService(writer, _dialogs);
+        _dialogs.NextPath = WritePdf("a.pdf", (612, 792));
+        _dialogs.SaveChangesAnswer = SaveChangesAnswer.Save;
+        try
+        {
+            await vm.OpenPdfCommand.ExecuteAsync(null);
+            Assert.True(vm.Editor!.CommitStroke(_dot, InkTool.Pen, Palette.Colors[0], 1));
+            var exporting = vm.ExportFlattenedCommand.ExecuteAsync(null);
+            WpfTestThread.PumpUntil(() => vm.IsExporting);
+            Assert.False(vm.CloseDocumentCommand.CanExecute(null));
+
+            var closing = vm.CanCloseAsync(); // the window is closed during the export
+            await Task.Delay(100);
+
+            Assert.False(closing.IsCompleted);
+            Assert.Empty(writer.Calls); // the save the close asks for does not overlap the export
+            export.Release();
+            await exporting;
+            Assert.True(await closing);
+            Assert.Single(writer.Calls); // now it saved
+        }
+        finally
+        {
+            await CleanUpAsync(vm);
+        }
+    }
+
+    /// <summary>An export that waits until the test lets it go.</summary>
+    private sealed class GatedExportService : IExportService
+    {
+        private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void Release() => _gate.SetResult();
+
+        public async Task<ExportResult> ExportFlattenedAsync(DreamBooks.Core.Documents.DocumentSession session, CancellationToken ct)
+        {
+            await _gate.Task;
+            return new ExportResult(ExportOutcome.Done);
+        }
+
+        public async Task<ExportResult> ExportPageAsync(DreamBooks.Core.Documents.DocumentSession session, int pageIndex, CancellationToken ct)
+        {
+            await _gate.Task;
+            return new ExportResult(ExportOutcome.Done);
+        }
+    }
+
+    [Fact]
     public async Task A_closed_document_can_be_opened_again()
     {
         var (vm, recents) = Create();

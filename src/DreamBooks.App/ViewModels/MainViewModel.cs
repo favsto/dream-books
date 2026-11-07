@@ -55,6 +55,7 @@ public sealed class MainViewModel : ObservableObject
     private PageEditor? _editor;
     private bool _isSaving;
     private Task<SaveOutcome>? _runningSave;
+    private Task? _runningExport;
     private int _pageNumber;
     private int _pageCount;
     private string? _errorMessage;
@@ -130,7 +131,7 @@ public sealed class MainViewModel : ObservableObject
         // Navigation stays available while a save runs (the earlier lock is gone): pages that cannot be loaded
         // meanwhile show their placeholder, and the commands may overlap.
         OpenPdfCommand = new AsyncRelayCommand(OpenPdfAsync, () => !IsSaving);
-        CloseDocumentCommand = new AsyncRelayCommand(CloseDocumentAsync, () => Session is not null && !IsSaving);
+        CloseDocumentCommand = new AsyncRelayCommand(CloseDocumentAsync, () => Session is not null && !IsSaving && !IsExporting && _opening == 0);
         Exports = new ExportService(dialogs);
         ExportFlattenedCommand = new AsyncRelayCommand(() => ExportAsync((s, ct) => Exports.ExportFlattenedAsync(s, ct)), CanExport);
         ExportPagePngCommand = new AsyncRelayCommand(() => ExportAsync((s, ct) => Exports.ExportPageAsync(s, Viewport.CurrentPage, ct)), CanExport);
@@ -468,6 +469,11 @@ public sealed class MainViewModel : ObservableObject
             await running; // never faults
         }
 
+        if (_runningExport is { } exporting)
+        {
+            await exporting; // never faults: an export in flight is let finish before the document is closed
+        }
+
         switch (await ResolveUnsavedChangesAsync())
         {
             case UnsavedChanges.Discard:
@@ -737,6 +743,11 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     private async Task OpenPathAsync(string path, bool quietIfInUse, CancellationToken ct)
     {
+        if (IsSaving || _opening > 0)
+        {
+            return; // one open at a time, and none while a save is writing the file (a request meanwhile is ignored)
+        }
+
         StartOpening();
         try
         {
@@ -906,7 +917,7 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>The two exports (FR-87, FR-88); the tests replace it.</summary>
-    internal ExportService Exports { get; set; }
+    internal IExportService Exports { get; set; }
 
     /// <summary>The flattened PDF of the document as the reader sees it (FR-87).</summary>
     public IAsyncRelayCommand ExportFlattenedCommand { get; }
@@ -926,6 +937,7 @@ public sealed class MainViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(ShowsProgress));
                 NotifyExportCommands();
+                CloseDocumentCommand.NotifyCanExecuteChanged();
                 SaveCommand.NotifyCanExecuteChanged();
                 SaveAsCommand.NotifyCanExecuteChanged();
             }
@@ -957,7 +969,9 @@ public sealed class MainViewModel : ObservableObject
         {
             return;
         }
-
+        IsExporting = true;
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _runningExport = completion.Task; // a close request waits for it (it would leave temporary files behind)
         IsExporting = true;
         try
         {
@@ -971,12 +985,15 @@ public sealed class MainViewModel : ObservableObject
         finally
         {
             IsExporting = false;
+            _runningExport = null;
+            completion.SetResult();
         }
     }
 
     private void StartOpening()
     {
         _opening++;
+        CloseDocumentCommand.NotifyCanExecuteChanged();
         if (_opening == 1)
         {
             OnPropertyChanged(nameof(IsStartScreenVisible));
@@ -986,6 +1003,7 @@ public sealed class MainViewModel : ObservableObject
     private void FinishOpening()
     {
         _opening--;
+        CloseDocumentCommand.NotifyCanExecuteChanged();
         if (_opening == 0)
         {
             OnPropertyChanged(nameof(IsStartScreenVisible));
@@ -1009,10 +1027,19 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     private async Task CloseDocumentAsync()
     {
-        if (Session is null || !await CanCloseAsync())
+        if (Session is null)
         {
             return;
         }
+
+        // What the document showed before the close question: cleared once it is closed, unless the close itself said
+        // something new (a copy kept, a journal that could not be deleted).
+        var (oldError, oldNotice) = (ErrorMessage, Notice);
+        if (!await CanCloseAsync())
+        {
+            return;
+        }
+
 
         CancelErase();
         _pendingSettle?.Dispose();
@@ -1039,9 +1066,20 @@ public sealed class MainViewModel : ObservableObject
         Session = null;
         Viewport.Attach(null, null, null);
         PageCount = 0;
-        ErrorMessage = null;
+        if (ErrorMessage == oldError)
+        {
+            ErrorMessage = null;
+        }
+
         _noticeShown = false;
-        Notice = null;
+        if (Notice == oldNotice)
+        {
+            Notice = null;
+        }
+
+        _listenerFailed = false; // the warnings belonged to the document that is gone
+        _reportedLoadFailures.Clear();
+        UpdateJournalWarning();
         ShowCurrentPage();
         OnPropertyChanged(nameof(Undo));
         OnPropertyChanged(nameof(Renderer));
@@ -2006,7 +2044,7 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     private async Task<SaveOutcome> SaveCoreAsync(bool saveAs)
     {
-        if (IsSaving || Session is not { } session || _viewer is not { } viewer)
+        if (IsSaving || IsExporting || Session is not { } session || _viewer is not { } viewer)
         {
             return SaveOutcome.Cancelled;
         }

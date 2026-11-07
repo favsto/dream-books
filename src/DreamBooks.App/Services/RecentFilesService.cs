@@ -40,6 +40,9 @@ internal sealed class RecentFilesService
     /// <summary>The entries, their progress or their availability changed.</summary>
     public event EventHandler? Changed;
 
+    /// <summary>A document left the list (removed, or pushed out by newer ones): its cover is not kept (the picture is document content).</summary>
+    public event EventHandler<string>? Dropped;
+
     /// <summary>Reads the saved list (one small file; never throws).</summary>
     public void Load()
     {
@@ -51,7 +54,9 @@ internal sealed class RecentFilesService
     public void Opened(string path, int page, int pageCount)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
+        var before = _list.Items.Select(f => f.Path).ToList();
         _list.Touch(new RecentFile(path, _utcNow(), page, pageCount));
+        RaiseDropped(before);
         Publish();
     }
 
@@ -64,9 +69,11 @@ internal sealed class RecentFilesService
 
     public void Remove(string path)
     {
+        var before = _list.Items.Select(f => f.Path).ToList();
         if (_list.Remove(path))
         {
             _exists.Remove(path);
+            RaiseDropped(before);
             Publish();
         }
     }
@@ -111,6 +118,16 @@ internal sealed class RecentFilesService
         }
 
         _writes.Wait(timeout);
+    }
+
+    /// <summary>Tells who left the list since <paramref name="before"/> (the paths it held).</summary>
+    private void RaiseDropped(IReadOnlyList<string> before)
+    {
+        var now = _list.Items.Select(f => f.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in before.Where(p => !now.Contains(p)))
+        {
+            Dropped?.Invoke(this, path);
+        }
     }
 
     private bool Check(string path)

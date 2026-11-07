@@ -186,6 +186,33 @@ public sealed class ExportServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task The_open_file_under_another_spelling_is_refused_too_for_both_exports()
+    {
+        var path = NewPdf();
+        var (session, opened) = await OpenAsync(path);
+        try
+        {
+            var before = File.ReadAllBytes(path);
+            var spelled = new string((char)92, 2) + "?" + (char)92 + Path.GetFullPath(path); // the extended-length spelling
+            _dialogs.NextSavePath = spelled;
+            _dialogs.NextPngPath = spelled;
+            var service = new ExportService(_dialogs);
+
+            var pdf = await service.ExportFlattenedAsync(session, CancellationToken.None);
+            var png = await service.ExportPageAsync(session, 0, CancellationToken.None);
+
+            Assert.Equal((ExportOutcome.Failed, Strings.ErrorExportSameFile), (pdf.Outcome, pdf.Message));
+            Assert.Equal((ExportOutcome.Failed, Strings.ErrorExportSameFile), (png.Outcome, png.Message));
+            Assert.Equal(before, File.ReadAllBytes(path));
+            Assert.Single(Directory.GetFiles(_dir));
+        }
+        finally
+        {
+            await CloseAsync(session, opened);
+        }
+    }
+
+    [Fact]
     public async Task A_failure_says_so_in_Italian_without_paths_and_leaves_nothing_behind()
     {
         var path = NewPdf();

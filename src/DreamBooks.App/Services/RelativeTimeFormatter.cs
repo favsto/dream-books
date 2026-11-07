@@ -3,7 +3,7 @@ using DreamBooks.App.Resources;
 
 namespace DreamBooks.App.Services;
 
-/// <summary>Italian words for how long ago a document was opened ("ieri", "3 giorni fa"): calendar days, never negative.</summary>
+/// <summary>Italian words for how long ago a document was opened ("ieri", "3 giorni fa"): the reader's local calendar days, never negative.</summary>
 internal static class RelativeTimeFormatter
 {
     private const int _daysPerWeek = 7;
@@ -11,7 +11,7 @@ internal static class RelativeTimeFormatter
 
     public static string Format(DateTime openedUtc, DateTime nowUtc)
     {
-        var days = Math.Max(0, (nowUtc.Date - openedUtc.Date).Days);
+        var days = Math.Max(0, (nowUtc.ToLocalTime().Date - openedUtc.ToLocalTime().Date).Days); // the reader's days, not UTC days
         if (days == 0)
         {
             return Strings.WhenToday;

@@ -4,7 +4,7 @@
              xmlns:res="clr-namespace:DreamBooks.App.Resources"
              xmlns:views="clr-namespace:DreamBooks.App.Views"
              xmlns:vm="clr-namespace:DreamBooks.App.ViewModels"
-             HorizontalAlignment="Stretch" VerticalAlignment="Top" Focusable="False" IsTabStop="False"
+             HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Focusable="False" IsTabStop="False"
              MaxWidth="{StaticResource StartMaxWidth}" Margin="{StaticResource StartMargin}"
              AutomationProperties.Name="{x:Static res:Strings.StartLabel}">
     <!-- The start screen (FR-03): with no document open, "Riprendi a leggere" with the "Apri PDF…" button and the recent
@@ -52,6 +52,7 @@
             </Grid>
         </DataTemplate>
     </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" PanningMode="VerticalOnly" Focusable="False">
     <StackPanel>
         <DockPanel Margin="{StaticResource StartHeaderMargin}">
             <Button x:Name="OpenButton" DockPanel.Dock="Right" Command="{Binding OpenPdfCommand}"
@@ -73,4 +74,5 @@
                 AutomationProperties.Name="{x:Static res:Strings.StartAllName}"
                 Visibility="{Binding ShowMore, Converter={StaticResource ShowWhen}}" />
     </StackPanel>
+    </ScrollViewer>
 </UserControl>
