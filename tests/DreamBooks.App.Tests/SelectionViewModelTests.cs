@@ -220,16 +220,46 @@ public class SelectionViewModelTests
     }
 
     [Fact]
-    public void Changing_page_clears_selection()
+    public void Selection_stays_on_its_own_page_when_the_current_page_changes() // FR-50
     {
         var f = new Fixture();
         f.Selection.SelectLoop(_loop);
 
         f.Current = new PageEditor(new Page(1, 200, 200), f.Undo);
+        Assert.True(f.Selection.HasSelection);
         f.Selection.Delete();
 
         Assert.Equal(SelectionState.None, f.Selection.State);
+        Assert.Single(f.Editor.Page.Strokes); // deleted on the page it was selected on
+    }
+
+    [Fact]
+    public void SelectLoop_on_a_given_editor_works_when_it_is_not_the_current_page() // FR-50
+    {
+        var f = new Fixture();
+        f.Current = new PageEditor(new Page(1, 200, 200), f.Undo);
+
+        f.Selection.SelectLoop(_loop, f.Editor);
+
+        Assert.True(f.Selection.HasSelection);
+        Assert.Same(f.Editor, f.Selection.Editor);
+        Assert.Equal(f.Editor.Page.Strokes[0].Id, Assert.Single(f.Selection.Selected).Id);
+    }
+
+    [Fact]
+    public void Paste_goes_to_the_current_page_not_the_selections_page() // FR-51
+    {
+        var f = new Fixture();
+        f.Selection.SelectLoop(_loop, f.Editor);
+        f.Selection.Copy();
+        var other = new PageEditor(new Page(1, 200, 200), f.Undo);
+        f.Current = other;
+
+        f.Selection.Paste();
+
+        Assert.Single(other.Page.Strokes);
         Assert.Equal(2, f.Editor.Page.Strokes.Count);
+        Assert.Same(other, f.Selection.Editor);
     }
 
     [Fact]

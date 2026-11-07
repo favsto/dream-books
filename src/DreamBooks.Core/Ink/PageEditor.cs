@@ -125,7 +125,20 @@ public sealed class PageEditor
             return [];
         }
 
-        var copies = StrokeTransform.Translate(clipboard.Strokes, PasteOffsetPt, PasteOffsetPt, Page.WidthPt, Page.HeightPt);
+        // Copies from a bigger page (or document) are shrunk to fit, so nothing is written outside this page.
+        var source = clipboard.Strokes;
+        if (SelectionGeometry.Bounds(source) is { } bounds)
+        {
+            var fit = Math.Min(
+                bounds.Width > Page.WidthPt ? Page.WidthPt / bounds.Width : 1,
+                bounds.Height > Page.HeightPt ? Page.HeightPt / bounds.Height : 1);
+            if (fit < 1)
+            {
+                source = StrokeTransform.Scale(source, fit, new PointD(0, 0), Page.WidthPt, Page.HeightPt);
+            }
+        }
+
+        var copies = StrokeTransform.Translate(source, PasteOffsetPt, PasteOffsetPt, Page.WidthPt, Page.HeightPt);
         _undo.Execute(new AddStrokesCommand(Page, copies));
         return copies.Select(s => s.Id).ToArray();
     }

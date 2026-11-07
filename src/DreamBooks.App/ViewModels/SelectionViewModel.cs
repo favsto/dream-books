@@ -51,6 +51,9 @@ public sealed class SelectionViewModel : ObservableObject
 
     public IRelayCommand PasteCommand { get; }
 
+    /// <summary>The editor of the page the selection is on, or null when nothing is selected.</summary>
+    public PageEditor? Editor => _editor;
+
     public SelectionState State => _state;
 
     public bool HasSelection => _state != SelectionState.None;
@@ -66,11 +69,14 @@ public sealed class SelectionViewModel : ObservableObject
 
     public bool CanPaste => !_clipboard.IsEmpty;
 
-    /// <summary>Selects the strokes the loop encloses; a loop that encloses none clears the selection.</summary>
-    public void SelectLoop(IReadOnlyList<PointD> loop)
+    /// <summary>
+    /// Selects the strokes the loop encloses on <paramref name="editor"/>'s page (the current page when null); a loop that
+    /// encloses none clears the selection. The selection stays on that page, whichever page becomes current.
+    /// </summary>
+    public void SelectLoop(IReadOnlyList<PointD> loop, PageEditor? editor = null)
     {
         ArgumentNullException.ThrowIfNull(loop);
-        var editor = _currentEditor();
+        editor ??= _currentEditor();
         if (editor is null)
         {
             Clear();
@@ -135,7 +141,7 @@ public sealed class SelectionViewModel : ObservableObject
     /// <summary>Applies the drag or resize in progress to the page as one undo step.</summary>
     public void Commit()
     {
-        if (_state is not (SelectionState.Moving or SelectionState.Resizing) || _editor is not { } editor || !IsCurrent(editor))
+        if (_state is not (SelectionState.Moving or SelectionState.Resizing) || _editor is not { } editor)
         {
             Clear();
             return;
@@ -171,7 +177,7 @@ public sealed class SelectionViewModel : ObservableObject
 
     public void Delete()
     {
-        if (!HasSelection || _editor is not { } editor || !IsCurrent(editor))
+        if (!HasSelection || _editor is not { } editor)
         {
             Clear();
             return;
@@ -237,7 +243,7 @@ public sealed class SelectionViewModel : ObservableObject
 
     private void Apply(Func<PageEditor, IReadOnlyList<Guid>> edit)
     {
-        if (!HasSelection || _editor is not { } editor || !IsCurrent(editor))
+        if (!HasSelection || _editor is not { } editor)
         {
             Clear();
             return;
@@ -258,8 +264,6 @@ public sealed class SelectionViewModel : ObservableObject
     }
 
     private IReadOnlyCollection<Guid> Ids() => _selected.Select(s => s.Id).ToArray();
-
-    private bool IsCurrent(PageEditor editor) => ReferenceEquals(_currentEditor(), editor);
 
     private void Reselect(PageEditor editor, IReadOnlyList<Guid> ids)
     {

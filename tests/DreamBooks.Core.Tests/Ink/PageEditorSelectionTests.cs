@@ -142,6 +142,23 @@ public class PageEditorSelectionTests
     }
 
     [Fact]
+    public void Paste_of_strokes_larger_than_the_page_is_fitted_inside_it()
+    {
+        var (page, _, editor) = Setup(); // 200 x 200
+        var wide = new InkStroke(Guid.NewGuid(), InkTool.Pen, _black, 4, [P(0, 10), P(400, 110)]);
+        var clipboard = new StrokeClipboard();
+        clipboard.Set([wide]);
+
+        var pasted = editor.PasteStrokes(clipboard);
+
+        Assert.Single(pasted);
+        var stroke = Assert.Single(page.Strokes);
+        Assert.All(stroke.Points, p => Assert.InRange(p.X, 0, 200));
+        Assert.All(stroke.Points, p => Assert.InRange(p.Y, 0, 200));
+        Assert.True(stroke.BaseWidthPt < 4); // scaled with the drawing
+    }
+
+    [Fact]
     public void Paste_works_on_another_page()
     {
         var (_, _, first) = Setup(0);

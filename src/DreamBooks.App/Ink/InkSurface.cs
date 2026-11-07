@@ -339,6 +339,7 @@ public sealed partial class InkSurface : FrameworkElement
         if (IsPen(e.StylusDevice))
         {
             NotifyPenNearby(); // hovering from another page onto this one
+            SyncBarrelOnEnter(e.StylusDevice);
         }
     }
 
@@ -360,6 +361,7 @@ public sealed partial class InkSurface : FrameworkElement
         if (IsPen(e.StylusDevice))
         {
             _hoverInverted = false;
+            DropBarrelIfIdle();
             HideEraserCursor();
         }
     }
@@ -377,6 +379,7 @@ public sealed partial class InkSurface : FrameworkElement
     /// <summary>A hovering pen left the surface: hide the cursor unless an erase gesture is still live.</summary>
     internal void OnPenLeft()
     {
+        DropBarrelIfIdle();
         if (_erase is null)
         {
             HideEraserCursor();
@@ -1008,6 +1011,14 @@ public sealed partial class InkSurface : FrameworkElement
             oldValue.Tools.Highlighter.SettingsChanged -= OnHighlighterSettingsChanged;
             oldValue.ErasePreviewChanged -= OnErasePreviewChanged;
             oldValue.Selection.PropertyChanged -= OnSelectionChanged;
+            if (_selection is not null)
+            {
+                _selection = null; // the view model that owned the gesture is gone: nothing to commit
+                _selectionLayer.SetLoop([]);
+                oldValue.Selection.Cancel();
+                oldValue.ZoomVm.IsLocked = false;
+            }
+
             if (_barrelDown)
             {
                 _barrelDown = false;

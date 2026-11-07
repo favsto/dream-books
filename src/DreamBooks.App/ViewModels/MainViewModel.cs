@@ -253,7 +253,6 @@ public sealed class MainViewModel : ObservableObject
             if (SetProperty(ref _editor, value))
             {
                 Toolbar?.Eraser.Refresh();
-                Selection.Clear(); // a selection belongs to the page it was made on (FR-50)
             }
         }
     }

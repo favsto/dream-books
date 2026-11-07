@@ -22,6 +22,9 @@ public sealed partial class InkSurface
     // The barrel button of the hovering pen is down (this surface switched the tool to the lasso for it).
     private bool _barrelDown;
 
+    // The pen left (or went out of range) while a gesture was live: the lasso ends with the gesture, button or not.
+    private bool _barrelDropAtEnd;
+
     /// <summary>The loop, rectangle and handles of the lasso; exposed for tests.</summary>
     internal SelectionLayer SelectionOverlay => _selectionLayer;
 
@@ -36,7 +39,6 @@ public sealed partial class InkSurface
             || Editor is not { } editor
             || ViewModel is not { } vm
             || !ReferenceEquals(editor.Page, Page)
-            || !ReferenceEquals(editor, vm.Editor)
             || vm.Tools.EffectiveTool != AppTool.Selection)
         {
             return false;
@@ -44,7 +46,8 @@ public sealed partial class InkSurface
 
         var selection = vm.Selection;
         var point = StylusPointConverter.ToPage(position, Scale);
-        var handle = selection.Bounds is { } bounds
+        // A selection on another page is not this surface's to move: a press here starts a new loop.
+        var handle = selection.Bounds is { } bounds && ReferenceEquals(selection.Editor, editor)
             ? SelectionHandles.HitTest(bounds, point, HitTolerancePt())
             : SelectionHandle.None;
         var gesture = new SelectionGesture(stylusId, handle, point);
@@ -136,7 +139,7 @@ public sealed partial class InkSurface
                     _selectionLayer.SetLoop([]);
                     if (gesture.Loop.Count >= 3)
                     {
-                        vm.Selection.SelectLoop(gesture.Loop);
+                        vm.Selection.SelectLoop(gesture.Loop, Editor);
                     }
                 }
                 else
@@ -159,10 +162,9 @@ public sealed partial class InkSurface
     {
         ArgumentNullException.ThrowIfNull(e);
         base.OnStylusButtonDown(e);
-        if (IsBarrel(e) && !e.StylusDevice.Inverted && !IsInking && ViewModel is { } vm)
+        if (IsBarrel(e) && !e.StylusDevice.Inverted)
         {
-            _barrelDown = true;
-            vm.Tools.BeginBarrelSelection();
+            SetBarrelHeld(true);
         }
     }
 
@@ -170,19 +172,79 @@ public sealed partial class InkSurface
     {
         ArgumentNullException.ThrowIfNull(e);
         base.OnStylusButtonUp(e);
-        if (IsBarrel(e) && _barrelDown)
+        if (IsBarrel(e))
         {
-            _barrelDown = false;
-            if (_selection is null)
+            SetBarrelHeld(false); // whichever page the pen is over when the button comes up
+        }
+    }
+
+    /// <summary>
+    /// The barrel button went down or up. The lasso it switches on belongs to the shared tools, so a release seen by any
+    /// surface ends it; a gesture still live on this surface ends it at pen-up instead.
+    /// </summary>
+    internal void SetBarrelHeld(bool held)
+    {
+        if (ViewModel is not { } vm)
+        {
+            return;
+        }
+
+        if (held)
+        {
+            if (!IsInking)
             {
-                ViewModel?.Tools.EndBarrelSelection(); // a gesture still live ends it at pen-up
+                _barrelDown = true;
+                _barrelDropAtEnd = false;
+                vm.Tools.BeginBarrelSelection();
             }
+
+            return;
+        }
+
+        _barrelDown = false;
+        if (_selection is null)
+        {
+            vm.Tools.EndBarrelSelection();
+        }
+    }
+
+    /// <summary>The pen left this surface or the detection range with the button held, and no gesture needs the lasso.</summary>
+    private void DropBarrelIfIdle()
+    {
+        if (!_barrelDown)
+        {
+            return;
+        }
+
+        if (_selection is null)
+        {
+            SetBarrelHeld(false);
+        }
+        else
+        {
+            _barrelDropAtEnd = true;
+        }
+    }
+
+    /// <summary>The pen entered with the barrel button already held (it went down over another page or the toolbar).</summary>
+    private void SyncBarrelOnEnter(StylusDevice device)
+    {
+        if (IsPen(device) && !device.Inverted && device.StylusButtons.Any(
+                b => b.Guid == StylusPointProperties.BarrelButton.Id && b.StylusButtonState == StylusButtonState.Down))
+        {
+            SetBarrelHeld(true);
         }
     }
 
     /// <summary>Hands the lasso back to the previous tool once neither the button nor a gesture needs it.</summary>
     private void ReleaseBarrelSelection()
     {
+        if (_barrelDropAtEnd)
+        {
+            _barrelDropAtEnd = false;
+            _barrelDown = false;
+        }
+
         if (!_barrelDown && ViewModel?.Tools.IsBarrelSelection == true)
         {
             ViewModel.Tools.EndBarrelSelection();
@@ -195,9 +257,30 @@ public sealed partial class InkSurface
     private void SelectionStylusPoints(StylusEventArgs e)
     {
         var points = e.GetStylusPoints(this);
-        for (var i = 0; i < points.Count; i++)
+        SelectionMoveToBatch([.. Enumerable.Range(0, points.Count).Select(i => new Point(points[i].X, points[i].Y))]);
+    }
+
+    /// <summary>
+    /// Feeds a batch of samples (surface DIPs). A loop keeps every point; a move or resize only needs where the pen
+    /// ended up, so it previews once per batch instead of rebuilding the strokes for every sample (NFR-04).
+    /// </summary>
+    internal void SelectionMoveToBatch(IReadOnlyList<Point> positions)
+    {
+        if (_selection is not { } gesture || positions.Count == 0)
         {
-            SelectionMoveTo(new Point(points[i].X, points[i].Y));
+            return;
+        }
+
+        if (gesture.Handle == SelectionHandle.None)
+        {
+            foreach (var position in positions)
+            {
+                SelectionMoveTo(position);
+            }
+        }
+        else
+        {
+            SelectionMoveTo(positions[^1]);
         }
     }
 
@@ -214,7 +297,7 @@ public sealed partial class InkSurface
         if (ViewModel is not { } vm
             || vm.Selection is not { State: SelectionState.Moving or SelectionState.Resizing } selection
             || Editor is not { } editor
-            || !ReferenceEquals(editor, vm.Editor)
+            || !ReferenceEquals(editor, selection.Editor)
             || !ReferenceEquals(editor.Page, Page))
         {
             return null;
@@ -244,7 +327,7 @@ public sealed partial class InkSurface
     {
         var shown = ViewModel is { } vm
             && Editor is { } editor
-            && ReferenceEquals(editor, vm.Editor)
+            && ReferenceEquals(editor, vm.Selection.Editor)
             && ReferenceEquals(editor.Page, Page)
             && vm.Selection.HasSelection;
         _selectionLayer.SetBounds(shown ? ViewModel!.Selection.Bounds : null);
