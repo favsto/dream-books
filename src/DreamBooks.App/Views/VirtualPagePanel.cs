@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using DreamBooks.App.Services;
 using DreamBooks.Core.Layout;
 using DreamBooks.Core.Model;
 
@@ -147,12 +148,14 @@ public sealed class VirtualPagePanel : Panel
 
     protected override Size MeasureOverride(Size availableSize)
     {
+        var start = FramePerformanceProbe.Begin();
         foreach (UIElement child in InternalChildren)
         {
             var rect = ArrangedRect(GetPageIndex(child)); // only its size counts here
             child.Measure(rect.IsEmpty ? default : rect.Size);
         }
 
+        FramePerformanceProbe.End("page panel measure", start);
         return _layout is { } layout
             ? new Size(layout.ExtentWidthDip(_zoom, _viewportWidthDip), layout.ExtentHeightDip(_zoom))
             : default;
@@ -160,12 +163,14 @@ public sealed class VirtualPagePanel : Panel
 
     protected override Size ArrangeOverride(Size finalSize)
     {
+        var start = FramePerformanceProbe.Begin();
         foreach (UIElement child in InternalChildren)
         {
             var rect = ArrangedRect(GetPageIndex(child));
             child.Arrange(rect.IsEmpty ? default : rect);
         }
 
+        FramePerformanceProbe.End("page panel arrange", start);
         return finalSize;
     }
 }

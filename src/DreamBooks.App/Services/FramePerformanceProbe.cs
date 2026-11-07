@@ -25,6 +25,7 @@ public sealed class FramePerformanceProbe
     private readonly FrameTimeStats _stats = new();
     private readonly FrameTimeStats _pinchStats = new();
     private readonly FrameTimeStats _otherStats = new();
+    private readonly Dictionary<string, FrameTimeStats> _timings = [];
     private double _lastZoomMs = double.NegativeInfinity;
     private double? _lastFrameMs;
     private double? _firstFrameMs;
@@ -73,6 +74,37 @@ public sealed class FramePerformanceProbe
     /// <summary>A pinch step was applied: the frames drawn soon after count as pinch frames in the report.</summary>
     public void NoteZoom() => _lastZoomMs = _monotonicMs();
 
+    /// <summary>The start of a timed stretch of work (<see cref="End"/> closes it); 0 and free when the probe is off.</summary>
+    public static long Begin() => Active is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
+
+    /// <summary>Closes a stretch opened with <see cref="Begin"/>: its duration is kept under <paramref name="name"/>.</summary>
+    public static void End(string name, long start)
+    {
+        if (start != 0 && Active is { } probe)
+        {
+            probe.Record(name, System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds);
+        }
+    }
+
+    /// <summary>
+    /// How long a piece of UI-thread work took. Kept only while a pinch is going on (the work that makes it slow is what
+    /// the report is for); UI thread only.
+    /// </summary>
+    public void Record(string name, double milliseconds)
+    {
+        if (_monotonicMs() - _lastZoomMs > _pinchWindowMs)
+        {
+            return;
+        }
+
+        if (!_timings.TryGetValue(name, out var stats))
+        {
+            _timings[name] = stats = new FrameTimeStats();
+        }
+
+        stats.AddInterval(milliseconds);
+    }
+
     /// <summary>The main window finished starting up and painted: the start screen or the document is there.</summary>
     public void MarkReady() => _readyMs ??= (_utcNow() - _processStartUtc).TotalMilliseconds;
 
@@ -97,6 +129,12 @@ public sealed class FramePerformanceProbe
             text.AppendLine(inv, $"over 50 ms: {summary.Over50Ms}");
             AppendPart(text, "pinch", _pinchStats.Summary());
             AppendPart(text, "other", _otherStats.Summary());
+            foreach (var (name, stats) in _timings.OrderBy(t => t.Key, StringComparer.Ordinal))
+            {
+                var t = stats.Summary();
+                text.AppendLine(inv, $"pinch time {name}: {t.Frames} calls, median {t.MedianMs:0.0} ms, 95th percentile {t.P95Ms:0.0} ms, slowest {t.MaxMs:0.0} ms");
+            }
+
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
             File.WriteAllText(_path, text.ToString());
         }

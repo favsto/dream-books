@@ -410,8 +410,12 @@ public partial class DocumentView : UserControl
 
     private void OnPositionChanged(object? sender, EventArgs e)
     {
+        var start = FramePerformanceProbe.Begin();
         ApplyPosition();
+        FramePerformanceProbe.End("ApplyPosition", start);
+        start = FramePerformanceProbe.Begin();
         UpdateSurfaces();
+        FramePerformanceProbe.End("UpdateSurfaces", start);
     }
 
     private void OnViewportPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -1032,7 +1036,9 @@ public partial class DocumentView : UserControl
         if (Math.Abs(scale - 1) > _minScaleDelta && double.IsFinite(scale) && scale > 0)
         {
             FramePerformanceProbe.Active?.NoteZoom();
+            var zoomStart = FramePerformanceProbe.Begin();
             viewport.ZoomAt(scale, origin);
+            FramePerformanceProbe.End("ZoomAt with every handler", zoomStart);
             Rail.NotifyActivity(); // a pinch is the user's zoom: the indicator shows (UI-05)
         }
     }

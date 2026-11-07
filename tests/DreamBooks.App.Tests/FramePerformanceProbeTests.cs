@@ -91,6 +91,29 @@ public sealed class FramePerformanceProbeTests : IDisposable
     }
 
     [Fact]
+    public void Timings_are_kept_only_while_pinching_and_listed_by_name()
+    {
+        var started = new DateTime(2026, 11, 7, 10, 0, 0, DateTimeKind.Utc);
+        var clock = 0.0;
+        var path = Path.Combine(_dir, "perf.txt");
+        var probe = new FramePerformanceProbe(started, () => started, () => clock, path);
+
+        probe.Record("layout", 99); // no pinch yet: not kept
+        probe.NoteZoom();
+        probe.Record("layout", 10);
+        probe.Record("layout", 30);
+        probe.Record("surfaces", 4);
+        clock += 500; // the pinch is over
+        probe.Record("layout", 99);
+        probe.Write();
+
+        var text = File.ReadAllText(path);
+        Assert.Contains("pinch time layout: 2 calls", text);
+        Assert.Contains("slowest 30.0 ms", text);
+        Assert.Contains("pinch time surfaces: 1 calls", text);
+    }
+
+    [Fact]
     public void Writing_to_an_impossible_path_never_throws()
     {
         var probe = new FramePerformanceProbe(DateTime.UtcNow, () => DateTime.UtcNow, () => 0, Path.Combine(_dir, "no", "such\0dir", "perf.txt"));
