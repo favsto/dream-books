@@ -29,6 +29,32 @@ cannot measure for itself (frame rate while scrolling, cold start), and a budget
   goes over the network (NFR-40). WPF draws only when something changes, so a gap longer than 250 ms between two frames
   is idle time, not a slow frame, and is left out (`Core/Rendering/FrameTimeStats`, tested).
 
+## Device results and the one fix (NFR-01, NFR-03)
+
+Measured with the probe on the Surface, on a 236-page, image-heavy PDF:
+
+- **Startup (NFR-01):** window ready in 1.44-1.50 s on warm launches (borderline). The first launch of a freshly
+  built exe is slower (1.9-4.2 s: Defender's first scan), so it is not a fair measure.
+- **Scrolling:** no lag seen by Fausto. About 23% of the frames still take over 25 ms (95th percentile about 39 ms);
+  left as it is because nothing is perceived.
+- **Pinch zoom:** felt choppy. The probe now splits pinch frames from the rest and times the work of each step. The
+  UI-thread work was negligible (`ApplyPosition`, `UpdateSurfaces`, page-panel measure/arrange: median 0.0-0.1 ms;
+  `ZoomAt` with every handler: median 0.2 ms), so the cost was drawing: every visible bitmap was stretched with the
+  `HighQuality` filter at each frame.
+- **Fix:** while a zoom is settling (`PageBitmapCoordinator.IsZoomSettling`, `ZoomSettlingChanged`), page surfaces
+  stretch their bitmap with the `Linear` filter (`InkSurface.FastStretch`); after the 150 ms of stillness the sharp
+  render replaces it.
+
+| Pinch | Before | After |
+|---|---|---|
+| Median | 29.9 ms | 32.6 ms |
+| 95th percentile | 44.4 ms | 39.7 ms |
+| Slowest | 140.7 ms | 56.7 ms |
+| Frames over 50 ms | 26 | 9 |
+
+The heavy hitches are nearly gone; the median stays near 30 fps, which looks like the rate at which the touch gesture
+delivers its steps, not a drawing delay. Fausto judged the pinch "much better" and approved the block.
+
 ## Using the probe on the Surface
 
 In PowerShell, from the folder of the published exe:
