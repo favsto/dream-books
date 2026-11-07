@@ -279,7 +279,20 @@ public partial class DocumentView : UserControl
         var coordinator = new PageBitmapCoordinator(_bitmapRenderer, new DispatcherDelayScheduler(), SurfaceFor);
         coordinator.ThumbnailScaleChanged += (_, e) => ThumbnailScaleChanged?.Invoke(this, e);
         coordinator.ThumbnailRetryRequested += (_, e) => ThumbnailRetryRequested?.Invoke(this, e);
+        coordinator.ZoomSettlingChanged += (_, settling) => SetFastStretch(settling);
         return coordinator;
+    }
+
+    // While a zoom is going on the shown bitmaps are stretched with the cheap filter (NFR-03); sharp ones replace them after.
+    private bool _fastStretch;
+
+    private void SetFastStretch(bool value)
+    {
+        _fastStretch = value;
+        foreach (var slot in _slots.Values)
+        {
+            slot.Surface.FastStretch = value;
+        }
     }
 
     /// <summary>
@@ -727,6 +740,7 @@ public partial class DocumentView : UserControl
         surface.Editor = null;
         surface.Page = null;
         surface.PageImage = null;
+        surface.FastStretch = _fastStretch;
         surface.PageSizePt = VirtualPagePanel.PageSizePt(layout, pageIndex);
         surface.Scale = Pages.Scale;
         ShowSearchHighlights(surface, pageIndex); // this page's own results: a recycled surface keeps none of its last page

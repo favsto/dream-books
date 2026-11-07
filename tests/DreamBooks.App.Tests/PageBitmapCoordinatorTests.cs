@@ -613,6 +613,30 @@ public sealed class PageBitmapCoordinatorTests
     }
 
     [Fact]
+    public void The_view_is_told_when_a_zoom_starts_and_when_it_has_settled()
+    {
+        WpfTestThread.Run(() =>
+        {
+            using var f = new Fixture(30) { Renderer = { Auto = true } };
+            f.Coordinator.SetDocument(f.Layout);
+            f.Coordinator.SetZoom(1);
+            f.Show(0, 1, [0]);
+            f.Idle(); // a sharp bitmap is on screen: later zooms settle first
+            var changes = new List<bool>();
+            f.Coordinator.ZoomSettlingChanged += (_, settling) => changes.Add(settling);
+
+            f.Coordinator.SetZoom(2);
+            f.Coordinator.SetZoom(2.2); // a pinch goes on: still the same settling
+            Assert.Equal([true], changes);
+            Assert.True(f.Coordinator.IsZoomSettling);
+
+            f.Delays.Advance(PageBitmapCoordinator.ZoomSettleDelay);
+            Assert.Equal([true, false], changes);
+            Assert.False(f.Coordinator.IsZoomSettling);
+        });
+    }
+
+    [Fact]
     public void A_screen_scale_change_and_a_renderer_swap_are_signalled_to_the_thumbnails()
     {
         WpfTestThread.Run(() =>

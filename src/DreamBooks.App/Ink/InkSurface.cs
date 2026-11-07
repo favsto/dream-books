@@ -113,6 +113,19 @@ public sealed partial class InkSurface : FrameworkElement
     private PointD? _cursorCenterPt;
     private bool _hoverInverted;
 
+    /// <summary>
+    /// While true the page bitmap is stretched with the cheap linear filter instead of the high-quality one: a zoom in
+    /// progress redraws every visible bitmap each frame, and the sharp render replaces them once it settles (NFR-03).
+    /// </summary>
+    public bool FastStretch
+    {
+        get => RenderOptions.GetBitmapScalingMode(_image) == BitmapScalingMode.Linear;
+        set => RenderOptions.SetBitmapScalingMode(_image, value ? BitmapScalingMode.Linear : BitmapScalingMode.HighQuality);
+    }
+
+    /// <summary>The filter the page bitmap is stretched with now.</summary>
+    internal BitmapScalingMode BitmapScaling => RenderOptions.GetBitmapScalingMode(_image);
+
     public InkSurface()
     {
         _image = new Image { Stretch = Stretch.Fill, IsHitTestVisible = false };

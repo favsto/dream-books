@@ -179,9 +179,19 @@ internal sealed class PageBitmapCoordinator : IDisposable
         _settle = _delays.Schedule(ZoomSettleDelay, SettleZoom);
         if (starting)
         {
+            ZoomSettlingChanged?.Invoke(this, true);
             Push(invalidateAll: false); // previews only from now on: no sharp render at a size about to be obsolete
         }
     }
+
+    /// <summary>True from the first step of a zoom until it has been still for <see cref="ZoomSettleDelay"/>.</summary>
+    public bool IsZoomSettling => _settle is not null;
+
+    /// <summary>
+    /// A zoom started (true) or has settled (false). While it is going on the view stretches the shown bitmaps with a
+    /// cheap filter (NFR-03). UI thread.
+    /// </summary>
+    public event EventHandler<bool>? ZoomSettlingChanged;
 
     /// <summary>The screen scale (device pixels per DIP) changed: every page is rendered again at once.</summary>
     public void SetDpiScale(double dpiScale)
@@ -519,13 +529,19 @@ internal sealed class PageBitmapCoordinator : IDisposable
 
     private void CancelSettle()
     {
+        var was = _settle is not null;
         _settle?.Dispose();
         _settle = null;
+        if (was)
+        {
+            ZoomSettlingChanged?.Invoke(this, false);
+        }
     }
 
     private void SettleZoom()
     {
         _settle = null;
+        ZoomSettlingChanged?.Invoke(this, false);
         if (_targetZoom != _zoom)
         {
             _zoom = _targetZoom;
