@@ -98,7 +98,7 @@ public sealed class SplashStartupTests : IDisposable
             var splash = new SplashWindow(dark);
             try
             {
-                var background = ((System.Windows.Media.SolidColorBrush)splash.Background).Color;
+                var background = ((System.Windows.Media.SolidColorBrush)splash.Backdrop.Background).Color;
                 var title = Find<TextBlock>(splash).First(t => t.Text == "Dream Books");
                 var text = ((System.Windows.Media.SolidColorBrush)title.Foreground).Color;
                 var tagline = Find<TextBlock>(splash).First(t => t.Text == Strings.SplashTagline);
@@ -110,6 +110,37 @@ public sealed class SplashStartupTests : IDisposable
             }
             finally
             {
+                splash.Close();
+            }
+        });
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void The_splash_keeps_its_look_when_the_theme_manager_repaints_every_open_window(bool dark)
+    {
+        // Device test of 4b: the app applies its theme while the splash is up, and WPF UI changes the background of every
+        // open window (a transparent one, for Mica): the splash went black in light mode. The look lives in a child that
+        // covers the window, so the window's own background no longer matters.
+        WpfTestThread.Run(() =>
+        {
+            var splash = new SplashWindow(dark);
+            try
+            {
+                splash.Background = System.Windows.Media.Brushes.Transparent; // what the theme manager does to it
+                Wpf.Ui.Appearance.ApplicationThemeManager.Apply(
+                    dark ? Wpf.Ui.Appearance.ApplicationTheme.Dark : Wpf.Ui.Appearance.ApplicationTheme.Light,
+                    Wpf.Ui.Controls.WindowBackdropType.Mica);
+
+                var backdrop = (System.Windows.Media.SolidColorBrush)splash.Backdrop.Background;
+                Assert.Equal(dark, backdrop.Color.R < 128);
+                Assert.Same(splash.Content, splash.Backdrop); // the child fills the whole window
+                Assert.Equal(HorizontalAlignment.Stretch, splash.Backdrop.HorizontalAlignment);
+            }
+            finally
+            {
+                Wpf.Ui.Appearance.ApplicationThemeManager.Apply(Wpf.Ui.Appearance.ApplicationTheme.Light, Wpf.Ui.Controls.WindowBackdropType.Mica);
                 splash.Close();
             }
         });

@@ -8,7 +8,10 @@
         AutomationProperties.Name="{x:Static res:Strings.SplashTagline}">
     <!-- The splash (4b): shown from the start of the process until the window is ready, then closed by the app. The icon,
          the name, a short tagline and an indicator that is indeterminate, or still with Windows animations off (NFR-32).
-         A fixed dark look: it shows before the settings and the theme are loaded. -->
+         It takes the look of the theme the app will use. The look is painted by the Backdrop child, not by the window's own
+         background: WPF UI repaints every open window when the app applies its theme (a transparent background, for Mica),
+         and that turned the splash black in light mode. -->
+    <Border x:Name="Backdrop" Background="{DynamicResource SplashBackgroundBrush}">
     <StackPanel Margin="{StaticResource SplashPadding}" HorizontalAlignment="Center">
         <Image Source="pack://application:,,,/DreamBooks.App;component/Assets/app-icon.png"
                Width="{StaticResource SplashIconSize}" Height="{StaticResource SplashIconSize}" />
@@ -21,4 +24,5 @@
                      Margin="{StaticResource SplashIndicatorMargin}" BorderThickness="0"
                      Foreground="{StaticResource SplashAccentBrush}" Background="{DynamicResource SplashSubtextBrush}" />
     </StackPanel>
+    </Border>
 </Window>
