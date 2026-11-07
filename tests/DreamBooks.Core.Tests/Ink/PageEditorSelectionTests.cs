@@ -7,7 +7,7 @@ namespace DreamBooks.Core.Tests.Ink;
 
 public class PageEditorSelectionTests
 {
-    private static readonly InkColor Black = InkColor.FromRgb(0, 0, 0);
+    private static readonly InkColor _black = InkColor.FromRgb(0, 0, 0);
 
     private static InkPoint P(double x, double y) => new(x, y, 0.5f, null, null, null, 0);
 
@@ -21,8 +21,8 @@ public class PageEditorSelectionTests
     /// <summary>Adds two strokes: a at (10,10)-(20,20) and b at (100,100)-(110,110), returning their ids.</summary>
     private static (Guid A, Guid B) Seed(PageEditor editor)
     {
-        editor.CommitStroke([P(10, 10), P(20, 20)], InkTool.Pen, Black, 2);
-        editor.CommitStroke([P(100, 100), P(110, 110)], InkTool.Pen, Black, 2);
+        editor.CommitStroke([P(10, 10), P(20, 20)], InkTool.Pen, _black, 2);
+        editor.CommitStroke([P(100, 100), P(110, 110)], InkTool.Pen, _black, 2);
         return (editor.Page.Strokes[0].Id, editor.Page.Strokes[1].Id);
     }
 
@@ -89,7 +89,7 @@ public class PageEditorSelectionTests
 
         Assert.Single(result);
         Assert.Equal(red, page.Strokes[1].Color);
-        Assert.Equal(Black, page.Strokes[0].Color);
+        Assert.Equal(_black, page.Strokes[0].Color);
         Assert.Equal(3, CountUndo(undo));
     }
 
@@ -127,7 +127,7 @@ public class PageEditorSelectionTests
         var (a, _) = Seed(editor);
         var clipboard = new StrokeClipboard();
         clipboard.Set(editor.Strokes([a]));
-        var corner = new InkStroke(Guid.NewGuid(), InkTool.Pen, Black, 2, [P(195, 195), P(199, 199)]);
+        var corner = new InkStroke(Guid.NewGuid(), InkTool.Pen, _black, 2, [P(195, 195), P(199, 199)]);
         var edgeClipboard = new StrokeClipboard();
         edgeClipboard.Set([corner]);
 

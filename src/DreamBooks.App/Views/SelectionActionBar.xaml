@@ -1,0 +1,39 @@
+<UserControl x:Class="DreamBooks.App.Views.SelectionActionBar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:res="clr-namespace:DreamBooks.App.Resources"
+             xmlns:views="clr-namespace:DreamBooks.App.Views"
+             HorizontalAlignment="Center" VerticalAlignment="Top" Margin="{StaticResource SelectionBarMargin}"
+             Focusable="False" IsTabStop="False">
+    <UserControl.Style>
+        <Style TargetType="views:SelectionActionBar">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSelectionBarVisible}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Style>
+    <!-- The lasso's actions (FR-51): the preset colours, copy, paste (when something was copied) and delete, in a
+         floating panel at the top centre under the notices. The data context is the MainViewModel; the commands are the
+         SelectionViewModel's, so a button is disabled while its action has nothing to act on.
+         Pen rule: only the surface hit-tests and it carries the inert stylus plug-in; the pen presses the buttons and
+         inks around it. -->
+    <views:FloatingSurface x:Name="Surface" CornerRadius="{StaticResource PanelCornerRadius}"
+                           Stylus.IsPressAndHoldEnabled="False"
+                           AutomationProperties.Name="{x:Static res:Strings.SelectionBarLabel}">
+        <StackPanel Orientation="Horizontal" Margin="{StaticResource SelectionBarPadding}">
+            <StackPanel x:Name="SwatchRow" Orientation="Horizontal" VerticalAlignment="Center" />
+            <Button x:Name="CopyButtonElement" Style="{StaticResource ToolbarButtonStyle}" Content="{StaticResource GlyphCopy}"
+                    Command="{Binding Selection.CopyCommand}" ToolTip="{x:Static res:Strings.SelectionCopy}"
+                    AutomationProperties.Name="{x:Static res:Strings.SelectionCopy}" />
+            <Button x:Name="PasteButtonElement" Style="{StaticResource ToolbarButtonStyle}" Content="{StaticResource GlyphPaste}"
+                    Command="{Binding Selection.PasteCommand}" ToolTip="{x:Static res:Strings.SelectionPaste}"
+                    AutomationProperties.Name="{x:Static res:Strings.SelectionPaste}" />
+            <Button x:Name="DeleteButtonElement" Style="{StaticResource ToolbarButtonStyle}" Content="{StaticResource GlyphDelete}"
+                    Command="{Binding Selection.DeleteCommand}" ToolTip="{x:Static res:Strings.SelectionDelete}"
+                    AutomationProperties.Name="{x:Static res:Strings.SelectionDelete}" />
+        </StackPanel>
+    </views:FloatingSurface>
+</UserControl>

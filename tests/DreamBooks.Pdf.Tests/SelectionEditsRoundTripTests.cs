@@ -11,8 +11,8 @@ namespace DreamBooks.Pdf.Tests;
 /// <summary>Strokes edited with the lasso operations survive save and reopen unchanged (FR-51, FR-83).</summary>
 public sealed class SelectionEditsRoundTripTests : IDisposable
 {
-    private const double PageW = 595;
-    private const double PageH = 842;
+    private const double _pageW = 595;
+    private const double _pageH = 842;
 
     private readonly string _dir;
 
@@ -97,7 +97,7 @@ public sealed class SelectionEditsRoundTripTests : IDisposable
         var ids = SeedPen(first, 100, 200);
         var clipboard = new StrokeClipboard();
         clipboard.Set(first.Strokes([ids[0]]));
-        var second = new PageEditor(new Page(1, PageW, PageH), new UndoManager());
+        var second = new PageEditor(new Page(1, _pageW, _pageH), new UndoManager());
         var before = second.Page.Strokes.ToArray();
 
         second.PasteStrokes(clipboard);
@@ -110,8 +110,8 @@ public sealed class SelectionEditsRoundTripTests : IDisposable
     private async Task<(string Path, PageEditor Editor)> StartAsync(int pages)
     {
         string path = Path.Combine(_dir, "source.pdf");
-        WriteWithText(path, "Selection round trip", Enumerable.Repeat((PageW, PageH), pages).ToArray());
-        var editor = new PageEditor(new Page(0, PageW, PageH), new UndoManager());
+        WriteWithText(path, "Selection round trip", Enumerable.Repeat((_pageW, _pageH), pages).ToArray());
+        var editor = new PageEditor(new Page(0, _pageW, _pageH), new UndoManager());
         await Task.CompletedTask;
         return (path, editor);
     }

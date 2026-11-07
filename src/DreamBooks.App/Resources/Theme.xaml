@@ -28,6 +28,10 @@
 
     <!-- Eraser cursor (FR-32): accent colour brushes in the theme dictionaries, 1 DIP outline. -->
     <sys:Double x:Key="EraserCursorOutlineThickness">1</sys:Double>
+    <!-- Lasso (FR-50, FR-51): outline width, dash pattern (in outline widths), handle size (DIPs; the hit area is larger). -->
+    <sys:Double x:Key="SelectionOutlineThickness">1.5</sys:Double>
+    <sys:Double x:Key="SelectionHandleSize">12</sys:Double>
+    <sys:Double x:Key="SelectionHandleHitSize">44</sys:Double>
 
     <!-- Document view (phase 3a): neutral backdrop around the pages; a page not rendered yet is white paper that
          fades in lightly (instant when Windows animations are off, NFR-03, NFR-32). The backdrop brushes are in the
@@ -262,6 +266,9 @@
     <sys:String x:Key="GlyphHighlighter">&#xE7E6;</sys:String>
     <sys:String x:Key="GlyphEraser">&#xE75C;</sys:String>
     <sys:String x:Key="GlyphSelection">&#xE8B3;</sys:String>
+    <sys:String x:Key="GlyphCopy">&#xE8C8;</sys:String>
+    <sys:String x:Key="GlyphPaste">&#xE77F;</sys:String>
+    <sys:String x:Key="GlyphDelete">&#xE74D;</sys:String>
     <sys:String x:Key="GlyphUndo">&#xE7A7;</sys:String>
     <sys:String x:Key="GlyphRedo">&#xE7A6;</sys:String>
     <sys:String x:Key="GlyphBookmark">&#xE728;</sys:String>
@@ -303,6 +310,10 @@
     <Thickness x:Key="NoticeBarMargin">0,8,0,0</Thickness>
     <Thickness x:Key="NoticeBarPadding">14,4,4,4</Thickness>
     <sys:Double x:Key="NoticeBarMaxWidth">520</sys:Double>
+    <!-- The lasso bar (FR-51), under the notices at the top centre. -->
+    <Thickness x:Key="SelectionBarMargin">0,8,0,0</Thickness>
+    <Thickness x:Key="SelectionBarPadding">6,2,6,2</Thickness>
+    <Thickness x:Key="SelectionBarSwatchMargin">2,0</Thickness>
     <Thickness x:Key="NoticeTextMargin">0,8,8,8</Thickness>
 
     <!-- The page indicator chip (UI-05, FR-09) at the bottom right, left of the rail's 40 px strip, and the navigation

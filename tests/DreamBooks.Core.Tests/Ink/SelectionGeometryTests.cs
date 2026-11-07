@@ -6,7 +6,7 @@ namespace DreamBooks.Core.Tests.Ink;
 
 public class SelectionGeometryTests
 {
-    private static readonly PointD[] Square = [new(0, 0), new(100, 0), new(100, 100), new(0, 100)];
+    private static readonly PointD[] _square = [new(0, 0), new(100, 0), new(100, 100), new(0, 100)];
 
     private static InkStroke Stroke(params (double X, double Y)[] points)
         => new(
@@ -19,9 +19,9 @@ public class SelectionGeometryTests
     [Fact]
     public void ContainsPoint_square_inside_and_outside()
     {
-        Assert.True(SelectionGeometry.ContainsPoint(Square, new PointD(50, 50)));
-        Assert.False(SelectionGeometry.ContainsPoint(Square, new PointD(150, 50)));
-        Assert.False(SelectionGeometry.ContainsPoint(Square, new PointD(-1, 50)));
+        Assert.True(SelectionGeometry.ContainsPoint(_square, new PointD(50, 50)));
+        Assert.False(SelectionGeometry.ContainsPoint(_square, new PointD(150, 50)));
+        Assert.False(SelectionGeometry.ContainsPoint(_square, new PointD(-1, 50)));
     }
 
     [Fact]
@@ -29,7 +29,7 @@ public class SelectionGeometryTests
     {
         var inside = Stroke((10, 10), (50, 50), (90, 90));
 
-        var selected = SelectionGeometry.StrokesInLoop([inside], Square);
+        var selected = SelectionGeometry.StrokesInLoop([inside], _square);
 
         Assert.Same(inside, Assert.Single(selected));
     }
@@ -39,7 +39,7 @@ public class SelectionGeometryTests
     {
         var half = Stroke((50, 50), (60, 60), (150, 50), (160, 60));
 
-        Assert.Single(SelectionGeometry.StrokesInLoop([half], Square));
+        Assert.Single(SelectionGeometry.StrokesInLoop([half], _square));
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public class SelectionGeometryTests
     {
         var graze = Stroke((50, 50), (150, 50), (160, 60), (170, 70));
 
-        Assert.Empty(SelectionGeometry.StrokesInLoop([graze], Square));
+        Assert.Empty(SelectionGeometry.StrokesInLoop([graze], _square));
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public class SelectionGeometryTests
     {
         var dot = Stroke((20, 20));
 
-        Assert.Single(SelectionGeometry.StrokesInLoop([dot], Square));
+        Assert.Single(SelectionGeometry.StrokesInLoop([dot], _square));
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public class SelectionGeometryTests
         var a = Stroke((10, 10));
         var b = Stroke((20, 20));
 
-        var selected = SelectionGeometry.StrokesInLoop([a, b], Square);
+        var selected = SelectionGeometry.StrokesInLoop([a, b], _square);
 
         Assert.Equal([a, b], selected);
     }

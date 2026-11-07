@@ -57,6 +57,37 @@ public sealed class MainViewModelToolbarTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task The_selection_bar_shows_for_a_selection_or_for_paste_with_the_lasso_tool() // FR-51
+    {
+        var vm = await OpenAsync();
+        try
+        {
+            var changed = new List<string?>();
+            vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+            PointD[] around = [new(0, 0), new(612, 0), new(612, 792), new(0, 792)];
+            vm.Editor!.CommitStroke(_line, InkTool.Pen, InkColor.FromRgb(0, 0, 0), 2);
+            Assert.False(vm.IsSelectionBarVisible);
+
+            vm.Tools.ActiveTool = AppTool.Selection;
+            Assert.False(vm.IsSelectionBarVisible); // nothing selected, nothing to paste
+
+            vm.Selection.SelectLoop(around);
+            Assert.True(vm.IsSelectionBarVisible);
+            vm.Selection.Copy();
+            vm.Selection.Clear();
+            Assert.True(vm.IsSelectionBarVisible); // lasso tool and something to paste
+
+            vm.Tools.ActiveTool = AppTool.Pen;
+            Assert.False(vm.IsSelectionBarVisible);
+            Assert.Contains(nameof(MainViewModel.IsSelectionBarVisible), changed);
+        }
+        finally
+        {
+            await CleanUpAsync(vm);
+        }
+    }
+
     [Theory]
     [InlineData(true, 2)] // partial: the middle goes, both ends stay
     [InlineData(false, 0)] // whole stroke: the stroke goes

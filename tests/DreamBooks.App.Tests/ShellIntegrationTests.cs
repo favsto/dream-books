@@ -252,6 +252,8 @@ public sealed class ShellIntegrationTests : IDisposable
                 window.SearchBar.ApplyTransparency();
                 window.Notices.TransparencyEnabled = () => false;
                 window.Notices.ApplyTransparency();
+                window.SelectionBar.TransparencyEnabled = () => false;
+                window.SelectionBar.ApplyTransparency();
                 Lay(window);
 
                 // Every floating surface in the window, in the visual and the logical tree (closed flyouts too): none

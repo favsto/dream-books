@@ -69,6 +69,8 @@
                             Margin="{StaticResource TopOverlaysMargin}">
                     <views:SearchPill x:Name="SearchBar" Margin="0" DataContext="{Binding Search}" IsOpen="{Binding IsOpen, Mode=OneWay}" />
                     <views:NoticeBar x:Name="Notices" />
+                    <!-- The lasso's actions (FR-51): colours, copy, paste, delete; shown while something is selected. -->
+                    <views:SelectionActionBar x:Name="SelectionBar" />
                 </StackPanel>
 
                 <!-- The main menu (UI-03): the round button at the top left, below the title bar, and its panel. Under the

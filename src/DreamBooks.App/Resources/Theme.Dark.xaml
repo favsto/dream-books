@@ -38,6 +38,11 @@
     <SolidColorBrush x:Key="EraserCursorFill" Color="{DynamicResource SystemAccentColorPrimary}" Opacity="0.2" />
     <SolidColorBrush x:Key="EraserCursorOutline" Color="{DynamicResource SystemAccentColorPrimary}" />
 
+    <!-- Lasso (FR-50, FR-51): the accent for the loop, the rectangle and the handles; handles filled like the page. -->
+    <SolidColorBrush x:Key="SelectionOutline" Color="{DynamicResource SystemAccentColorPrimary}" />
+    <SolidColorBrush x:Key="SelectionTint" Color="{DynamicResource SystemAccentColorPrimary}" Opacity="0.08" />
+    <SolidColorBrush x:Key="SelectionHandleFill" Color="White" />
+
     <!-- Scroll rail (UI-07). -->
     <SolidColorBrush x:Key="RailTrackBrush" Color="{StaticResource ThemeControlDarkColor}" Opacity="0.55" />
     <SolidColorBrush x:Key="RailTrackBrushOpaque" Color="{StaticResource ThemeControlDarkColor}" />

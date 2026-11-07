@@ -29,7 +29,7 @@ namespace DreamBooks.App.Ink;
 /// (FR-30, FR-34): the gesture runs through <see cref="MainViewModel.BeginErase(PageEditor)"/> on this page, and
 /// the working copy is drawn as committed ink until it ends. A circle shows the eraser area while hovering (FR-32).
 /// </summary>
-public sealed class InkSurface : FrameworkElement
+public sealed partial class InkSurface : FrameworkElement
 {
     public static readonly DependencyProperty ViewModelProperty = DependencyProperty.Register(
         nameof(ViewModel), typeof(MainViewModel), typeof(InkSurface),
@@ -87,6 +87,7 @@ public sealed class InkSurface : FrameworkElement
     private readonly CustomInkLayer _customLayer;
     private readonly InkPresenter _presenter;
     private readonly Canvas _overlay;
+    private readonly SelectionLayer _selectionLayer;
     private readonly Ellipse _eraserCursor;
     private readonly Visual[] _children;
 
@@ -127,7 +128,8 @@ public sealed class InkSurface : FrameworkElement
         _overlay = new Canvas { IsHitTestVisible = false };
         _overlay.Children.Add(_eraserCursor);
         // Search highlights between the bitmap and the ink; highlighter strokes under the pen ink (FR-40, FR-105).
-        _children = [_image, _highlights, _highlighterLayer, _customLayer, _presenter, _overlay];
+        _selectionLayer = new SelectionLayer();
+        _children = [_image, _highlights, _highlighterLayer, _customLayer, _presenter, _selectionLayer, _overlay];
         foreach (var child in _children)
         {
             AddVisualChild(child);
@@ -143,6 +145,7 @@ public sealed class InkSurface : FrameworkElement
         _highlights.Scale = Scale;
         _highlighterLayer.Scale = Scale;
         _customLayer.Scale = Scale;
+        _selectionLayer.Scale = Scale;
         _customLayer.Curve = Curve;
         _customLayer.Smoothing = Smoothing;
         StylusPlugIns.Add(_renderer);
@@ -220,7 +223,7 @@ public sealed class InkSurface : FrameworkElement
     }
 
     /// <summary>True while a pen or mouse stroke or an eraser gesture is live; the viewport must not pan or zoom then.</summary>
-    public bool IsInking => _penPoints is not null || _mousePoints is not null || _erase is not null;
+    public bool IsInking => _penPoints is not null || _mousePoints is not null || _erase is not null || _selection is not null;
 
     /// <summary>Raised when a stroke or eraser gesture ends (committed or cancelled): <see cref="IsInking"/> is false again.</summary>
     public event EventHandler? InkingEnded;
@@ -406,6 +409,12 @@ public sealed class InkSurface : FrameworkElement
             return;
         }
 
+        if (!device.Inverted && BeginSelectionGesture(device.Id, e.GetPosition(this)))
+        {
+            device.Capture(this);
+            return;
+        }
+
         if (!CanInk(device))
         {
             return;
@@ -428,6 +437,11 @@ public sealed class InkSurface : FrameworkElement
         else if (_erase is { StylusId: { } id } && e.StylusDevice.Id == id)
         {
             EraseStylusPoints(e);
+            e.Handled = true;
+        }
+        else if (_selection is { StylusId: { } selectionId } && e.StylusDevice.Id == selectionId)
+        {
+            SelectionStylusPoints(e);
             e.Handled = true;
         }
         else if (!IsInking && IsPen(e.StylusDevice))
@@ -453,6 +467,12 @@ public sealed class InkSurface : FrameworkElement
             EndEraseGesture();
             UpdateEraserCursor(e.GetPosition(this), e.StylusDevice.Inverted); // still hovering
         }
+        else if (_selection is { StylusId: { } selectionId } && e.StylusDevice.Id == selectionId)
+        {
+            SelectionStylusPoints(e);
+            e.Handled = true;
+            EndSelectionGesture();
+        }
     }
 
     protected override void OnLostStylusCapture(StylusEventArgs e)
@@ -466,6 +486,10 @@ public sealed class InkSurface : FrameworkElement
         {
             EndEraseGesture();
             HideEraserCursor(); // shown again by the next hover move
+        }
+        else if (_selection is { StylusId: not null })
+        {
+            EndSelectionGesture();
         }
     }
 
@@ -481,6 +505,13 @@ public sealed class InkSurface : FrameworkElement
         if (BeginEraseGesture(inverted: false, stylusId: null))
         {
             EraseAtView(e.GetPosition(this));
+            CaptureMouse();
+            e.Handled = true;
+            return;
+        }
+
+        if (BeginSelectionGesture(stylusId: null, e.GetPosition(this)))
+        {
             CaptureMouse();
             e.Handled = true;
             return;
@@ -519,6 +550,12 @@ public sealed class InkSurface : FrameworkElement
             return;
         }
 
+        if (_selection is { StylusId: null })
+        {
+            SelectionMoveTo(position);
+            return;
+        }
+
         if (_mousePoints is null)
         {
             if (!IsInking)
@@ -549,6 +586,12 @@ public sealed class InkSurface : FrameworkElement
             e.Handled = true;
             EndEraseGesture();
         }
+        else if (_selection is { StylusId: null } && e.StylusDevice is null)
+        {
+            SelectionMoveTo(e.GetPosition(this));
+            e.Handled = true;
+            EndSelectionGesture();
+        }
     }
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
@@ -561,6 +604,10 @@ public sealed class InkSurface : FrameworkElement
         else if (_erase is { StylusId: null })
         {
             EndEraseGesture();
+        }
+        else if (_selection is { StylusId: null })
+        {
+            EndSelectionGesture();
         }
     }
 
@@ -704,6 +751,15 @@ public sealed class InkSurface : FrameworkElement
             }
         }
 
+        if (_selection is not null)
+        {
+            _selection = null;
+            _selectionLayer.SetLoop([]);
+            vm?.Selection.Cancel();
+            LockZoom(false);
+            ReleaseBarrelSelection();
+        }
+
         if (Stylus.Captured == this)
         {
             Stylus.Capture(null);
@@ -845,7 +901,7 @@ public sealed class InkSurface : FrameworkElement
         && ReferenceEquals(erasePage, editor)
         && ReferenceEquals(editor.Page, Page)
             ? erase.Strokes
-            : Page?.Strokes ?? Array.Empty<InkStroke>();
+            : SelectionPreviewStrokes() ?? Page?.Strokes ?? Array.Empty<InkStroke>();
 
     private void OnErasePreviewChanged(object? sender, EventArgs e) =>
         SetCurrentValue(DisplayStrokesProperty, CurrentStrokes());
@@ -951,6 +1007,12 @@ public sealed class InkSurface : FrameworkElement
             oldValue.Tools.PropertyChanged -= OnToolsChanged;
             oldValue.Tools.Highlighter.SettingsChanged -= OnHighlighterSettingsChanged;
             oldValue.ErasePreviewChanged -= OnErasePreviewChanged;
+            oldValue.Selection.PropertyChanged -= OnSelectionChanged;
+            if (_barrelDown)
+            {
+                _barrelDown = false;
+                oldValue.Tools.EndBarrelSelection();
+            }
         }
 
         if (newValue is not null)
@@ -958,7 +1020,10 @@ public sealed class InkSurface : FrameworkElement
             newValue.Tools.PropertyChanged += OnToolsChanged;
             newValue.Tools.Highlighter.SettingsChanged += OnHighlighterSettingsChanged;
             newValue.ErasePreviewChanged += OnErasePreviewChanged;
+            newValue.Selection.PropertyChanged += OnSelectionChanged;
         }
+
+        ShowSelection();
 
         UpdateRendererSettings();
         UpdateRendererEnabled(null);
@@ -1026,6 +1091,7 @@ public sealed class InkSurface : FrameworkElement
         _customLayer.Scale = Scale;
         _highlighterLayer.Scale = Scale;
         _highlights.Scale = Scale;
+        _selectionLayer.Scale = Scale;
         UpdateRendererSettings();
         PlaceEraserCursor();
     }

@@ -118,6 +118,13 @@ public sealed class MainViewModel : ObservableObject
         Clipboard = new StrokeClipboard();
         Selection = new SelectionViewModel(() => Editor, Clipboard);
         Tools.PropertyChanged += OnActiveToolChanged;
+        Selection.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(SelectionViewModel.HasSelection) or nameof(SelectionViewModel.CanPaste))
+            {
+                OnPropertyChanged(nameof(IsSelectionBarVisible));
+            }
+        };
         ZoomVm = new ZoomViewModel();
         Viewport = new DocumentViewportViewModel(ZoomVm, _scheduler) { PageNavigator = NavigateToPageAsync };
         Viewport.PositionChanged += OnViewportPositionChanged;
@@ -181,6 +188,13 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>The lasso selection on the current page (FR-50, FR-51).</summary>
     public SelectionViewModel Selection { get; }
+
+    /// <summary>
+    /// The lasso's action bar shows while something is selected, and with the lasso tool when there is something to
+    /// paste (FR-51).
+    /// </summary>
+    public bool IsSelectionBarVisible =>
+        Selection.HasSelection || (Tools.ActiveTool == AppTool.Selection && Selection.CanPaste);
 
     public ZoomViewModel ZoomVm { get; }
 
@@ -2326,6 +2340,7 @@ public sealed class MainViewModel : ObservableObject
         if (e.PropertyName == nameof(ToolsViewModel.ActiveTool))
         {
             Selection.Clear();
+            OnPropertyChanged(nameof(IsSelectionBarVisible));
         }
     }
 

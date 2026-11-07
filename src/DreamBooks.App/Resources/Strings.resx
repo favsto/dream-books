@@ -166,6 +166,7 @@
   <data name="SelectionCopy" xml:space="preserve"><value>Copia</value></data>
   <data name="SelectionPaste" xml:space="preserve"><value>Incolla</value></data>
   <data name="SelectionDelete" xml:space="preserve"><value>Elimina</value></data>
+  <data name="SelectionBarLabel" xml:space="preserve"><value>Azioni sulla selezione</value></data>
   <data name="ToolBookmark" xml:space="preserve"><value>Segnalibro sulla pagina</value></data>
   <data name="PenBlack" xml:space="preserve"><value>Nero</value></data>
   <data name="PenDarkBlue" xml:space="preserve"><value>Blu scuro</value></data>

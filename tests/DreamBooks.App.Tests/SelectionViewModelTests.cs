@@ -8,8 +8,8 @@ namespace DreamBooks.App.Tests;
 
 public class SelectionViewModelTests
 {
-    private static readonly InkColor Black = InkColor.FromRgb(0, 0, 0);
-    private static readonly PointD[] Loop = [new(0, 0), new(50, 0), new(50, 50), new(0, 50)];
+    private static readonly InkColor _black = InkColor.FromRgb(0, 0, 0);
+    private static readonly PointD[] _loop = [new(0, 0), new(50, 0), new(50, 50), new(0, 50)];
 
     private static InkPoint P(double x, double y) => new(x, y, 0.5f, null, null, null, 0);
 
@@ -19,8 +19,8 @@ public class SelectionViewModelTests
         {
             Undo = new UndoManager();
             Editor = new PageEditor(new Page(0, 200, 200), Undo);
-            Editor.CommitStroke([P(10, 10), P(20, 20)], InkTool.Pen, Black, 2);
-            Editor.CommitStroke([P(100, 100), P(110, 110)], InkTool.Pen, Black, 2);
+            Editor.CommitStroke([P(10, 10), P(20, 20)], InkTool.Pen, _black, 2);
+            Editor.CommitStroke([P(100, 100), P(110, 110)], InkTool.Pen, _black, 2);
             Clipboard = new StrokeClipboard();
             Current = Editor;
             Selection = new SelectionViewModel(() => Current, Clipboard);
@@ -42,7 +42,7 @@ public class SelectionViewModelTests
     {
         var f = new Fixture();
 
-        f.Selection.SelectLoop(Loop);
+        f.Selection.SelectLoop(_loop);
 
         Assert.Equal(SelectionState.Selected, f.Selection.State);
         Assert.True(f.Selection.HasSelection);
@@ -76,7 +76,7 @@ public class SelectionViewModelTests
     public void Move_previews_without_touching_the_page_until_Commit()
     {
         var f = new Fixture();
-        f.Selection.SelectLoop(Loop);
+        f.Selection.SelectLoop(_loop);
         var original = f.Editor.Page.Strokes.ToArray();
 
         f.Selection.BeginMove();
@@ -97,7 +97,7 @@ public class SelectionViewModelTests
     public void Commit_move_is_one_undo_step()
     {
         var f = new Fixture();
-        f.Selection.SelectLoop(Loop);
+        f.Selection.SelectLoop(_loop);
         f.Selection.BeginMove();
         f.Selection.MoveBy(5, 5);
         f.Selection.MoveBy(30, 40);
@@ -113,7 +113,7 @@ public class SelectionViewModelTests
     public void Resize_commits_one_scaled_step()
     {
         var f = new Fixture();
-        f.Selection.SelectLoop(Loop);
+        f.Selection.SelectLoop(_loop);
 
         f.Selection.BeginResize(new PointD(10, 10));
         f.Selection.ScaleTo(2);
@@ -128,7 +128,7 @@ public class SelectionViewModelTests
     public void Cancel_restores_the_page()
     {
         var f = new Fixture();
-        f.Selection.SelectLoop(Loop);
+        f.Selection.SelectLoop(_loop);
         var original = f.Editor.Page.Strokes.ToArray();
         f.Selection.BeginMove();
         f.Selection.MoveBy(30, 40);
@@ -144,7 +144,7 @@ public class SelectionViewModelTests
     public void Recolor_changes_colour_and_keeps_the_selection()
     {
         var f = new Fixture();
-        f.Selection.SelectLoop(Loop);
+        f.Selection.SelectLoop(_loop);
 
         f.Selection.Recolor(InkColor.FromRgb(255, 0, 0));
 
@@ -157,7 +157,7 @@ public class SelectionViewModelTests
     public void Delete_removes_strokes_and_clears_selection()
     {
         var f = new Fixture();
-        f.Selection.SelectLoop(Loop);
+        f.Selection.SelectLoop(_loop);
 
         f.Selection.Delete();
 
@@ -170,7 +170,7 @@ public class SelectionViewModelTests
     {
         var f = new Fixture();
         Assert.False(f.Selection.CanPaste);
-        f.Selection.SelectLoop(Loop);
+        f.Selection.SelectLoop(_loop);
 
         f.Selection.Copy();
 
@@ -182,7 +182,7 @@ public class SelectionViewModelTests
     public void Copy_then_Paste_on_other_page()
     {
         var f = new Fixture();
-        f.Selection.SelectLoop(Loop);
+        f.Selection.SelectLoop(_loop);
         f.Selection.Copy();
         var other = new PageEditor(new Page(1, 200, 200), f.Undo);
         f.Current = other;
@@ -210,7 +210,7 @@ public class SelectionViewModelTests
     public void Undo_clears_selection()
     {
         var f = new Fixture();
-        f.Selection.SelectLoop(Loop);
+        f.Selection.SelectLoop(_loop);
         f.Selection.Recolor(InkColor.FromRgb(255, 0, 0));
         Assert.True(f.Selection.HasSelection);
 
@@ -223,7 +223,7 @@ public class SelectionViewModelTests
     public void Changing_page_clears_selection()
     {
         var f = new Fixture();
-        f.Selection.SelectLoop(Loop);
+        f.Selection.SelectLoop(_loop);
 
         f.Current = new PageEditor(new Page(1, 200, 200), f.Undo);
         f.Selection.Delete();
@@ -238,7 +238,7 @@ public class SelectionViewModelTests
         var f = new Fixture();
         f.Current = null;
 
-        f.Selection.SelectLoop(Loop);
+        f.Selection.SelectLoop(_loop);
         f.Selection.Paste();
         f.Selection.Delete();
 
@@ -247,10 +247,33 @@ public class SelectionViewModelTests
     }
 
     [Fact]
+    public void Commands_follow_the_selection_and_the_clipboard() // FR-51, NFR-31
+    {
+        var f = new Fixture();
+        Assert.False(f.Selection.CopyCommand.CanExecute(null));
+        Assert.False(f.Selection.DeleteCommand.CanExecute(null));
+        Assert.False(f.Selection.RecolorCommand.CanExecute(InkColor.FromRgb(1, 2, 3)));
+        Assert.False(f.Selection.PasteCommand.CanExecute(null));
+
+        f.Selection.SelectLoop(_loop);
+        Assert.True(f.Selection.CopyCommand.CanExecute(null));
+        Assert.True(f.Selection.DeleteCommand.CanExecute(null));
+        Assert.True(f.Selection.RecolorCommand.CanExecute(InkColor.FromRgb(1, 2, 3)));
+
+        f.Selection.CopyCommand.Execute(null);
+        Assert.True(f.Selection.PasteCommand.CanExecute(null));
+        f.Selection.RecolorCommand.Execute(InkColor.FromRgb(9, 9, 9));
+        Assert.Equal(InkColor.FromRgb(9, 9, 9), f.Editor.Page.Strokes[0].Color);
+        f.Selection.DeleteCommand.Execute(null);
+        Assert.Single(f.Editor.Page.Strokes);
+        Assert.False(f.Selection.DeleteCommand.CanExecute(null));
+    }
+
+    [Fact]
     public void Clear_returns_to_None_and_raises_property_changes()
     {
         var f = new Fixture();
-        f.Selection.SelectLoop(Loop);
+        f.Selection.SelectLoop(_loop);
         var changed = new List<string?>();
         f.Selection.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
 

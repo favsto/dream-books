@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using DreamBooks.Core.Geometry;
 using DreamBooks.Core.Ink;
 using DreamBooks.Core.Model;
@@ -30,8 +31,25 @@ public sealed class SelectionViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(clipboard);
         _currentEditor = currentEditor;
         _clipboard = clipboard;
-        _clipboard.Changed += (_, _) => OnPropertyChanged(nameof(CanPaste));
+        RecolorCommand = new RelayCommand<InkColor>(Recolor, _ => HasSelection);
+        CopyCommand = new RelayCommand(Copy, () => HasSelection);
+        DeleteCommand = new RelayCommand(Delete, () => HasSelection);
+        PasteCommand = new RelayCommand(Paste, () => CanPaste);
+        _clipboard.Changed += (_, _) =>
+        {
+            OnPropertyChanged(nameof(CanPaste));
+            PasteCommand.NotifyCanExecuteChanged();
+        };
     }
+
+    /// <summary>Gives the selection a colour (FR-51); the parameter is the <see cref="InkColor"/>.</summary>
+    public IRelayCommand<InkColor> RecolorCommand { get; }
+
+    public IRelayCommand CopyCommand { get; }
+
+    public IRelayCommand DeleteCommand { get; }
+
+    public IRelayCommand PasteCommand { get; }
 
     public SelectionState State => _state;
 
@@ -288,6 +306,9 @@ public sealed class SelectionViewModel : ObservableObject
         _state = state;
         OnPropertyChanged(nameof(State));
         OnPropertyChanged(nameof(HasSelection));
+        RecolorCommand.NotifyCanExecuteChanged();
+        CopyCommand.NotifyCanExecuteChanged();
+        DeleteCommand.NotifyCanExecuteChanged();
     }
 
     private void Detach()

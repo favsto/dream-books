@@ -346,6 +346,9 @@ internal static class Strings
     /// <summary>Selection action bar: delete the selected strokes (FR-51).</summary>
     public static string SelectionDelete => Get(nameof(SelectionDelete));
 
+    /// <summary>Name of the lasso action bar for screen readers (NFR-31).</summary>
+    public static string SelectionBarLabel => Get(nameof(SelectionBarLabel));
+
     /// <summary>Toolbar button of the page bookmark, disabled until bookmarks exist (UI-02).</summary>
     public static string ToolBookmark => Get(nameof(ToolBookmark));
 

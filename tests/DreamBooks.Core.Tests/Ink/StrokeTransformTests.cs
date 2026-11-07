@@ -6,8 +6,8 @@ namespace DreamBooks.Core.Tests.Ink;
 
 public class StrokeTransformTests
 {
-    private const double PageW = 200;
-    private const double PageH = 200;
+    private const double _pageW = 200;
+    private const double _pageH = 200;
 
     private static InkStroke Stroke(InkTool tool = InkTool.Pen, InkColor? color = null, double width = 2, ChiselTip? chisel = null, params (double X, double Y)[] points)
         => new(
@@ -25,7 +25,7 @@ public class StrokeTransformTests
     {
         var s = Simple((10, 10), (20, 30));
 
-        var moved = Assert.Single(StrokeTransform.Translate([s], 5, 7, PageW, PageH));
+        var moved = Assert.Single(StrokeTransform.Translate([s], 5, 7, _pageW, _pageH));
 
         Assert.Equal(15, moved.Points[0].X);
         Assert.Equal(17, moved.Points[0].Y);
@@ -41,7 +41,7 @@ public class StrokeTransformTests
     {
         var s = Simple((150, 10), (190, 30));
 
-        var moved = Assert.Single(StrokeTransform.Translate([s], 100, -50, PageW, PageH));
+        var moved = Assert.Single(StrokeTransform.Translate([s], 100, -50, _pageW, _pageH));
 
         Assert.Equal(200, moved.Points[1].X);
         Assert.Equal(0, moved.Points[0].Y);
@@ -52,7 +52,7 @@ public class StrokeTransformTests
     {
         var s = Simple((10, 10), (20, 20));
 
-        var scaled = Assert.Single(StrokeTransform.Scale([s], 2, new PointD(10, 10), PageW, PageH));
+        var scaled = Assert.Single(StrokeTransform.Scale([s], 2, new PointD(10, 10), _pageW, _pageH));
 
         Assert.Equal(10, scaled.Points[0].X);
         Assert.Equal(30, scaled.Points[1].X);
@@ -65,7 +65,7 @@ public class StrokeTransformTests
     {
         var s = Simple((10, 10), (110, 10));
 
-        var scaled = Assert.Single(StrokeTransform.Scale([s], -3, new PointD(10, 10), PageW, PageH));
+        var scaled = Assert.Single(StrokeTransform.Scale([s], -3, new PointD(10, 10), _pageW, _pageH));
 
         Assert.Equal(30, scaled.Points[1].X, 6);
         Assert.Equal(0.4, scaled.BaseWidthPt, 6);
@@ -76,10 +76,10 @@ public class StrokeTransformTests
     {
         var s = Simple((100, 100), (150, 150));
 
-        var scaled = Assert.Single(StrokeTransform.Scale([s], 10, new PointD(100, 100), PageW, PageH));
+        var scaled = Assert.Single(StrokeTransform.Scale([s], 10, new PointD(100, 100), _pageW, _pageH));
 
-        Assert.All(scaled.Points, p => Assert.InRange(p.X, 0, PageW));
-        Assert.All(scaled.Points, p => Assert.InRange(p.Y, 0, PageH));
+        Assert.All(scaled.Points, p => Assert.InRange(p.X, 0, _pageW));
+        Assert.All(scaled.Points, p => Assert.InRange(p.Y, 0, _pageH));
         Assert.Equal(200, scaled.Points[1].X, 6);
     }
 
@@ -89,7 +89,7 @@ public class StrokeTransformTests
         var chisel = new ChiselTip(30, 0.4);
         var s = Stroke(InkTool.Highlighter, chisel: chisel, points: [(10, 10), (20, 20)]);
 
-        var scaled = Assert.Single(StrokeTransform.Scale([s], 1.5, new PointD(10, 10), PageW, PageH));
+        var scaled = Assert.Single(StrokeTransform.Scale([s], 1.5, new PointD(10, 10), _pageW, _pageH));
 
         Assert.Equal(chisel, scaled.Chisel);
     }
@@ -121,8 +121,8 @@ public class StrokeTransformTests
     {
         var s = Simple((10, 10), (20, 20));
 
-        Assert.NotEqual(s.Id, StrokeTransform.Translate([s], 1, 1, PageW, PageH)[0].Id);
-        Assert.NotEqual(s.Id, StrokeTransform.Scale([s], 1.1, new PointD(0, 0), PageW, PageH)[0].Id);
+        Assert.NotEqual(s.Id, StrokeTransform.Translate([s], 1, 1, _pageW, _pageH)[0].Id);
+        Assert.NotEqual(s.Id, StrokeTransform.Scale([s], 1.1, new PointD(0, 0), _pageW, _pageH)[0].Id);
         Assert.NotEqual(s.Id, StrokeTransform.Recolor([s], InkColor.FromRgb(1, 2, 3))[0].Id);
     }
 }
