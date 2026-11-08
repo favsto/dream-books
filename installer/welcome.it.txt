@@ -1,0 +1,11 @@
+﻿Dream Books è un lettore di PDF per Windows pensato per leggere e annotare con la penna del Surface (Surface Slim Pen 2): inchiostro sensibile alla pressione, evidenziatori, gomma sul retro della penna, segnalibri, annulla e ripeti. I PDF si salvano in formato standard e si aprono con qualsiasi altro lettore.
+
+Cosa viene installato
+- L'applicazione Dream Books, completa di tutto ciò che serve per funzionare: non occorre installare altro.
+- Solo per il tuo utente: non servono i diritti di amministratore e non viene toccato nulla del sistema, a parte le scelte che farai nelle pagine seguenti (icone e apertura dei file PDF).
+
+Privacy
+Dream Books funziona senza connessione e non invia nulla all'esterno.
+
+Avviso di Windows
+Questo programma di installazione non è firmato, quindi Windows può mostrare un avviso (SmartScreen) la prima volta. Per continuare scegli "Maggiori informazioni" e poi "Esegui comunque".

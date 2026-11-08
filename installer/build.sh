@@ -23,6 +23,12 @@ if grep -qiE 'HKLM|HKEY_LOCAL_MACHINE|\{commonpf|\{commondesktop|\{commonprogram
   echo "The installer must not write machine-wide" >&2; exit 1
 fi
 
+for needed in 'Name: "desktopicon"' 'Name: "pdfassoc"' 'InfoBeforeFile=' 'Software\\Classes\\.pdf\\OpenWithProgids' \
+              'Software\\RegisteredApplications' 'ms-settings:defaultapps' 'uninsdeletekey'; do
+  grep -qF -- "$(printf '%b' "$needed")" "$script" || { echo "The installer script lacks: $needed" >&2; exit 1; }
+done
+[ -f "$root/installer/welcome.it.txt" ] || { echo "installer/welcome.it.txt is missing" >&2; exit 1; }
+
 publish="$root/artifacts/publish/$arch"
 dotnet publish "$root/src/DreamBooks.App" -c Release -r "win-$arch" --self-contained -o "$publish"
 
