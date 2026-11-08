@@ -11,6 +11,7 @@ namespace DreamBooks.Pdf.Tests;
 /// of the fixtures folder (the e-book; skipped when there is none), saved, saved again with one new stroke, and read
 /// back. Only counts, times, sizes and memory are reported (NFR-12); the real file is only ever read as a copy.
 /// </summary>
+[Collection(LargeDocumentCollection.Name)]
 public sealed class LargeDocumentTests : IDisposable
 {
     private const string _realDocumentsFolder = @"C:\Users\Favsto\workspace\temp";

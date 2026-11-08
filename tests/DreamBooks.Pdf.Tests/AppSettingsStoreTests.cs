@@ -246,8 +246,10 @@ public sealed class AppSettingsStoreTests : IDisposable
                         Interlocked.Increment(ref torn);
                     }
                 }
-                catch (IOException)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
+                    // Windows answers "access denied" to an open that meets the file while it is being replaced (delete
+                    // pending): a moment of the swap, not a torn file.
                 }
             }
         })).ToArray();

@@ -229,8 +229,10 @@ public sealed class ViewPositionStoreTests : IDisposable
                 {
                     Interlocked.Increment(ref missing);
                 }
-                catch (IOException)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
+                    // Windows answers "access denied" (not an IO error) to an open that meets the file while it is being
+                    // replaced (delete pending): a moment of the swap, not a torn file.
                 }
             }
         })).ToArray();

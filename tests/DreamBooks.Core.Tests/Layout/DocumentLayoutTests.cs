@@ -290,8 +290,10 @@ public class DocumentLayoutTests
     {
         var l = new DocumentLayout(Enumerable.Range(0, 10_000).Select(i => new PageDimensions(400 + (i % 5 * 50), 600 + (i % 7 * 40))).ToArray());
         int sink = 0;
-        long elapsedMs = 0;
-        for (int pass = 0; pass < 2; pass++) // first pass warms up the JIT
+        long elapsedMs = long.MaxValue;
+        // The first pass warms up the JIT. The fastest of the others counts: on a busy machine the scheduler can stall one
+        // pass, whereas a slow algorithm (a linear scan) makes every pass slow.
+        for (int pass = 0; pass < 6; pass++)
         {
             var rnd = new Random(1);
             var sw = Stopwatch.StartNew();
@@ -303,7 +305,10 @@ public class DocumentLayoutTests
             }
 
             sw.Stop();
-            elapsedMs = sw.ElapsedMilliseconds;
+            if (pass > 0)
+            {
+                elapsedMs = Math.Min(elapsedMs, sw.ElapsedMilliseconds);
+            }
         }
 
         Assert.True(elapsedMs < 50, $"took {elapsedMs} ms (sink {sink})");
