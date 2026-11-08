@@ -109,6 +109,8 @@
                 </UniformGrid>
                 <CheckBox x:Name="ToolbarFixedCheck" Content="{x:Static res:Strings.SettingsToolbarFixed}" Margin="{StaticResource SectionGap}"
                           IsChecked="{Binding ToolbarFixed}" AutomationProperties.Name="{x:Static res:Strings.SettingsToolbarFixed}" />
+                <TextBlock x:Name="VersionLabel" Text="{Binding VersionText}" Margin="{StaticResource SectionGap}"
+                           Foreground="{DynamicResource FlyoutHeaderBrush}" />
             </StackPanel>
         </ScrollViewer>
     </views:FloatingSurface>

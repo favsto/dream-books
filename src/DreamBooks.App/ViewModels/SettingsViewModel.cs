@@ -35,6 +35,10 @@ public sealed class SettingsViewModel : ObservableObject
         private set => SetProperty(ref _isOpen, value);
     }
 
+    /// <summary>The app's name and version, shown at the bottom of the settings.</summary>
+    public string VersionText { get; } = string.Format(
+        System.Globalization.CultureInfo.CurrentCulture, Resources.Strings.SettingsVersionFormat, AppVersion.Current);
+
     public IRelayCommand OpenCommand { get; }
 
     public IRelayCommand CloseCommand { get; }

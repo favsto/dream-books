@@ -428,6 +428,7 @@ internal static class Strings
     public static string SettingsEdgeBottom => Get(nameof(SettingsEdgeBottom));
     public static string SettingsToolbarEdgeHeader => Get(nameof(SettingsToolbarEdgeHeader));
     public static string SettingsToolbarFixed => Get(nameof(SettingsToolbarFixed));
+    public static string SettingsVersionFormat => Get(nameof(SettingsVersionFormat));
     public static string SettingsAccentHexName => Get(nameof(SettingsAccentHexName));
     public static string SettingsAccentSystem => Get(nameof(SettingsAccentSystem));
     public static string SettingsAccentHeader => Get(nameof(SettingsAccentHeader));
