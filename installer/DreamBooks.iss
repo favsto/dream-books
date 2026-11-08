@@ -81,6 +81,7 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 Root: HKCU; Subkey: "Software\Classes\DreamBooks.Pdf"; ValueType: string; ValueName: ""; ValueData: "{cm:PdfProgId}"; Flags: uninsdeletekey; Tasks: pdfassoc
 Root: HKCU; Subkey: "Software\Classes\DreamBooks.Pdf\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExe},0"; Tasks: pdfassoc
 Root: HKCU; Subkey: "Software\Classes\DreamBooks.Pdf\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""; Tasks: pdfassoc
+Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExe}"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "{#AppName}"; Flags: uninsdeletekey; Tasks: pdfassoc
 Root: HKCU; Subkey: "Software\Classes\.pdf\OpenWithProgids"; ValueType: string; ValueName: "DreamBooks.Pdf"; ValueData: ""; Flags: uninsdeletevalue; Tasks: pdfassoc
 Root: HKCU; Subkey: "Software\DreamBooks"; Flags: uninsdeletekeyifempty; Tasks: pdfassoc
 Root: HKCU; Subkey: "Software\DreamBooks\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "{#AppName}"; Flags: uninsdeletekey; Tasks: pdfassoc

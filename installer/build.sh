@@ -35,6 +35,10 @@ publish="$root/artifacts/publish/$arch"
 dotnet publish "$root/src/DreamBooks.App" -c Release -r "win-$arch" --self-contained -o "$publish"
 
 win() { cygpath -w "$1"; }
+
+# Windows shows the exe's file description in "Apri con" and Default apps.
+description="$(powershell -NoProfile -Command "(Get-Item '$(win "$publish")\\DreamBooks.App.exe').VersionInfo.FileDescription" | tr -d '\r')"
+[ "$description" = "Dream Books" ] || { echo "The exe's file description is '$description', expected 'Dream Books'" >&2; exit 1; }
 MSYS2_ARG_CONV_EXCL="*" "$iscc" "/DAppVersion=$version" "/DArch=$arch" "/DSourceDir=$(win "$publish")" "$(win "$script")"
 
 setup="$root/artifacts/installers/DreamBooks-$version-$arch-setup.exe"
