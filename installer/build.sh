@@ -24,7 +24,9 @@ if grep -qiE 'HKLM|HKEY_LOCAL_MACHINE|\{commonpf|\{commondesktop|\{commonprogram
 fi
 
 for needed in 'Name: "desktopicon"' 'Name: "pdfassoc"' 'InfoBeforeFile=' 'Software\\Classes\\.pdf\\OpenWithProgids' \
-              'Software\\RegisteredApplications' 'ms-settings:defaultapps' 'uninsdeletekey'; do
+              'Software\\RegisteredApplications' 'ms-settings:defaultapps' 'uninsdeletekey' \
+              'function InstalledVersion' 'function InitializeSetup' 'CloseApplications=yes' \
+              'procedure CurUninstallStepChanged' 'UsePreviousTasks=yes'; do
   grep -qF -- "$(printf '%b' "$needed")" "$script" || { echo "The installer script lacks: $needed" >&2; exit 1; }
 done
 [ -f "$root/installer/welcome.it.txt" ] || { echo "installer/welcome.it.txt is missing" >&2; exit 1; }

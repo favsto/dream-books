@@ -42,6 +42,11 @@ ArchitecturesInstallIn64BitMode=x64compatible
 #endif
 
 InfoBeforeFile=welcome.it.txt
+; An update asks to close a running Dream Books, reuses the folder and the choices of the first install.
+CloseApplications=yes
+RestartApplications=no
+UsePreviousAppDir=yes
+UsePreviousTasks=yes
 
 [Languages]
 Name: "italian"; MessagesFile: "compiler:Languages\Italian.isl"
@@ -55,6 +60,10 @@ italian.PdfProgId=Documento PDF
 italian.PdfDescription=Legge e annota i PDF con la penna del Surface.
 italian.RunApp=Avvia Dream Books
 italian.RunDefaultApps=Scegli Dream Books come app predefinita per i PDF (si apre la pagina di Windows)
+italian.UpdateAsk=È installata la versione %1 di Dream Books.%nAggiornare alla versione %2?
+italian.ReinstallAsk=La versione %1 di Dream Books è già installata.%nReinstallarla?
+italian.DowngradeRefused=È già installata una versione più recente di Dream Books (%1).%nQuesta procedura non la sostituisce.
+italian.DeleteDataAsk=Eliminare anche le impostazioni e le posizioni di lettura di Dream Books?%n%nI tuoi file PDF non vengono toccati.
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:TaskDesktop}"; GroupDescription: "{cm:TaskIcons}"; Flags: unchecked
@@ -86,6 +95,48 @@ Filename: "ms-settings:defaultapps"; Description: "{cm:RunDefaultApps}"; Flags: 
 [Code]
 procedure SHChangeNotify(wEventId, uFlags, dwItem1, dwItem2: Integer);
   external 'SHChangeNotify@shell32.dll stdcall';
+
+// The version of the install already on this user's PC, or '' (read from Inno's own uninstall entry).
+function InstalledVersion(): String;
+begin
+  if not RegQueryStringValue(HKCU,
+      ExpandConstant('Software\Microsoft\Windows\CurrentVersion\Uninstall\{#emit SetupSetting("AppId")}_is1'),
+      'DisplayVersion', Result) then
+    Result := '';
+end;
+
+// Update, reinstall and downgrade (never replaces a newer version with this older one).
+function InitializeSetup(): Boolean;
+var
+  Installed: String;
+  InstalledPacked, ThisPacked: Int64;
+  Order: Integer;
+begin
+  Result := True;
+  Installed := InstalledVersion();
+  if Installed = '' then
+    Exit;
+  if not (StrToVersion(Installed, InstalledPacked) and StrToVersion('{#AppVersion}', ThisPacked)) then
+    Exit; // an unreadable version: treat it as an update
+  Order := ComparePackedVersion(InstalledPacked, ThisPacked);
+  if Order < 0 then
+    Result := MsgBox(FmtMessage(CustomMessage('UpdateAsk'), [Installed, '{#AppVersion}']), mbConfirmation, MB_YESNO) = IDYES
+  else if Order = 0 then
+    Result := MsgBox(FmtMessage(CustomMessage('ReinstallAsk'), ['{#AppVersion}']), mbConfirmation, MB_YESNO) = IDYES
+  else
+  begin
+    MsgBox(FmtMessage(CustomMessage('DowngradeRefused'), [Installed]), mbError, MB_OK);
+    Result := False;
+  end;
+end;
+
+// The user's settings, reading positions and recovery journals stay unless asked (default: keep).
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then
+    if MsgBox(CustomMessage('DeleteDataAsk'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+      DelTree(ExpandConstant('{localappdata}\DreamBooks'), True, True, True);
+end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
