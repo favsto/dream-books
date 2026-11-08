@@ -23,13 +23,19 @@ reading positions or recovery journals without asking.
 ## Design (my calls are marked "call")
 
 **Files.** `installer/DreamBooks.iss` (the Inno script, one script for both architectures, chosen by a define),
-`installer/build.ps1` (publishes self-contained for the architecture, then runs `ISCC`), `installer/welcome.it.txt`
+`installer/build.sh` (bash, not PowerShell: scripts are blocked by the execution policy on this machine; publishes
+self-contained for the architecture, then runs `ISCC`), `installer/bump-version.sh`, `installer/welcome.it.txt`
 (the Italian text of the first page). Output goes to `artifacts/installers/` (git-ignored):
 `DreamBooks-<version>-x64-setup.exe` and `DreamBooks-<version>-arm64-setup.exe`.
 
-**Version (call).** One source: `<Version>` in `src/DreamBooks.App/DreamBooks.App.csproj`. `build.ps1` reads it and
-passes it to `ISCC` (`/DAppVersion=`); the installer and "App installate" show the same number. First value `0.5.0`
-(phase 5), raised by hand at each release.
+**Version (call).** One source: `<Version>` in `Directory.Build.props`. `build.sh` reads it and passes it to `ISCC`
+(`/DAppVersion=`); the exe, the installer, "App installate" and the line at the bottom of the app's settings
+(`AppVersion.Current`, read from the build) show the same number. First value `0.5.0` (phase 5);
+`bump-version.sh major|minor|patch|X.Y.Z` raises it.
+
+**Name in Windows (call).** The "Apri con" list and Default apps show the exe's file description, set in the App csproj
+(`AssemblyTitle`, `Product` = "Dream Books"); the installer also registers `FriendlyAppName`. Changing the working
+name later means changing those two places and `AppName` in the script.
 
 **Per user.** `PrivilegesRequired=lowest`, install under `{autopf}` (resolves to `%LocalAppData%\Programs\Dream Books`
 without admin). A fixed `AppId` GUID identifies the app across versions. Uninstall appears in Windows "App installate".

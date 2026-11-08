@@ -5,7 +5,6 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets/app-icon.ico</ApplicationIcon>
-    <Version>0.5.0</Version>
     <!-- The name Windows shows for the app ("Apri con", Default apps, Task Manager): the file description of the exe. -->
     <AssemblyTitle>Dream Books</AssemblyTitle>
     <Product>Dream Books</Product>

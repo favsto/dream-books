@@ -7,6 +7,7 @@ arch="${1:-x64}"
 case "$arch" in x64|arm64) ;; *) echo "Architecture must be x64 or arm64" >&2; exit 2 ;; esac
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+props="$root/Directory.Build.props"
 csproj="$root/src/DreamBooks.App/DreamBooks.App.csproj"
 script="$root/installer/DreamBooks.iss"
 iscc="$LOCALAPPDATA/Programs/Inno Setup 6/ISCC.exe"
@@ -14,8 +15,9 @@ iscc="$LOCALAPPDATA/Programs/Inno Setup 6/ISCC.exe"
 [ -f "$iscc" ] || { echo "Inno Setup not found at $iscc" >&2; exit 1; }
 [ -f "$script" ] || { echo "Installer script not found: $script" >&2; exit 1; }
 
-version="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$csproj" | head -1)"
-[ -n "$version" ] || { echo "No <Version> in the app csproj" >&2; exit 1; }
+version="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$props" | head -1)"
+[ -n "$version" ] || { echo "No <Version> in Directory.Build.props" >&2; exit 1; }
+! grep -q '<Version>' "$csproj" || { echo "The version lives only in Directory.Build.props, not in the app csproj" >&2; exit 1; }
 
 # The script must keep its promises (the installer itself can only be tried on a device).
 grep -q 'PrivilegesRequired=lowest' "$script" || { echo "The installer must be per user (PrivilegesRequired=lowest)" >&2; exit 1; }
