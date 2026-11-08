@@ -100,6 +100,9 @@ implementation, review). Project-specific additions:
   used.
 - `tests/DreamBooks.Core.Tests/`, `tests/DreamBooks.Pdf.Tests/`,
   `tests/DreamBooks.App.Tests/` — xUnit.
+- `installer/` — Inno Setup script (`DreamBooks.iss`, Italian texts in its
+  `[CustomMessages]`), `welcome.it.txt` and `build.sh`. PowerShell scripts are
+  blocked on this machine (execution policy): use bash.
 - `docs/` — requirements and plans.
 
 Specific rules live in `.claude/rules/` and load automatically.
@@ -127,6 +130,7 @@ Run from the repository root.
 | `dotnet format --verify-no-changes` | Check formatting |
 | `dotnet run --project src/DreamBooks.App` | Launch the app (opens a window: only when Fausto asks) |
 | `dotnet publish src/DreamBooks.App -c Release -r win-x64 --self-contained` | Release build for on-device testing; Fausto runs `src/DreamBooks.App/bin/Release/net10.0-windows/win-x64/publish/DreamBooks.App.exe` |
+| `bash installer/build.sh [x64\|arm64]` | Builds the per-user installer into `artifacts/installers/` (publishes self-contained, compiles `installer/DreamBooks.iss` with Inno Setup 6, checks the result). Version: `<Version>` in the App csproj. Fausto tries `DreamBooks-<version>-x64-setup.exe` |
 | `dotnet publish src/DreamBooks.App -c Release -r win-arm64 --self-contained` | Release build for on-device testing: build check only (NFR-21); delete the output afterwards |
 
 Before declaring any task done: `dotnet build` with no new warnings and
