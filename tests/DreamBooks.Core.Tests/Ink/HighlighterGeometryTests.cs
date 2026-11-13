@@ -198,7 +198,7 @@ public class HighlighterGeometryTests
         nearlyStraight[^1] = nearlyStraight[^1] with { Y = 96 };
 
         var wavy = Line(0, 100, 100, 100, 2)
-            .Select((p, i) => p with { Y = p.Y + (3 * Math.Sin(i * 0.5)) })
+            .Select((p, i) => p with { Y = p.Y + (6 * Math.Sin(i * 0.5)) })
             .ToArray();
         wavy[0] = wavy[0] with { Y = 100 };
         wavy[^1] = wavy[^1] with { Y = 100 };
@@ -208,6 +208,39 @@ public class HighlighterGeometryTests
         Assert.NotNull(HighlighterGeometry.StraightenIfNearHorizontal(nearlyStraight));
         Assert.Null(HighlighterGeometry.StraightenIfNearHorizontal(wavy));
         Assert.Null(HighlighterGeometry.StraightenIfNearHorizontal(tilted));
+    }
+
+    [Fact]
+    public void Straightening_a_short_highlight_tolerates_the_hand_s_tremor() // FR-44
+    {
+        // One word, 40 pt: the ends 2.5 pt apart in height (3.6 degrees) and a wobble of 2 pt (5% of the chord), both
+        // within the 4 pt floor; on the Surface such strokes stayed as drawn.
+        var word = Line(200, 300, 240, 302.5, 1)
+            .Select((p, i) => p with { Y = p.Y + (2 * Math.Sin(i * 0.4)) })
+            .ToArray();
+        word[0] = word[0] with { Y = 300 };
+        word[^1] = word[^1] with { Y = 302.5 };
+
+        var straight = HighlighterGeometry.StraightenIfNearHorizontal(word);
+
+        Assert.NotNull(straight);
+        Assert.Equal(2, straight.Count);
+        Assert.Equal(301.25, straight[0].Y, 1e-9);
+        Assert.Equal(301.25, straight[1].Y, 1e-9);
+    }
+
+    [Fact]
+    public void Straightening_a_short_stroke_still_rejects_a_slope_or_a_wave_beyond_the_floor() // FR-44
+    {
+        var sloped = Line(200, 300, 240, 305, 1); // 5 pt over 40 pt
+        var wavy = Line(200, 300, 240, 300, 1).Select((p, i) => p with { Y = p.Y + (5 * Math.Sin(i * 0.3)) }).ToArray();
+        wavy[0] = wavy[0] with { Y = 300 };
+        wavy[^1] = wavy[^1] with { Y = 300 };
+        var tick = Line(200, 300, 201, 303, 0.5); // a tiny mostly vertical tick never becomes a horizontal line
+
+        Assert.Null(HighlighterGeometry.StraightenIfNearHorizontal(sloped));
+        Assert.Null(HighlighterGeometry.StraightenIfNearHorizontal(wavy));
+        Assert.Null(HighlighterGeometry.StraightenIfNearHorizontal(tick));
     }
 
     [Fact]
