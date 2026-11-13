@@ -30,7 +30,7 @@ namespace DreamBooks.App.Views;
 /// transparency effects off the surfaces are opaque.
 /// Pen rule (FR-30, UI-02): only the pill and the open flyout hit-test, and both carry an inert stylus plug-in (no wet
 /// ink under them, <see cref="FloatingSurface"/>). On them the pen presses the controls like a finger or the mouse (the
-/// pen's back end too). <see cref="RoutePress"/> closes an open flyout on a press outside it (fingers and the mouse
+/// pen's back end too; the pill's buttons click from the pen's own events, <see cref="PenTapButtons"/>). <see cref="RoutePress"/> closes an open flyout on a press outside it (fingers and the mouse
 /// are taken, the pen inks). This differs on purpose from the left-edge panel, where a pen press on the sheet closes it.
 /// A flyout is never taller than the space between the title bar and the pill (<see cref="MeasureOverride"/>): its
 /// content scrolls.
@@ -55,6 +55,7 @@ public partial class ToolbarView : UserControl
         }
 
         Separators = [Separator1, Separator2];
+        PenTaps = PenTapButtons.Attach(Pill); // the first pen tap after writing acts
         WireGrip();
 
         // No boundary feedback from the flyouts moves the whole window (they do not pan; kept as a guard).
@@ -89,6 +90,9 @@ public partial class ToolbarView : UserControl
     internal Func<bool> TransparencyEnabled { get; set; } = TransparencySetting.IsEnabled;
 
     internal ToolbarViewModel? ViewModel => _viewModel;
+
+    /// <summary>The pen's taps on the pill's buttons (<see cref="PenTapButtons"/>).</summary>
+    internal PenTapButtons PenTaps { get; }
 
     /// <summary>The two separators: after Selection and after Redo.</summary>
     internal IReadOnlyList<FrameworkElement> Separators { get; }

@@ -22,6 +22,7 @@ public partial class SelectionActionBar : UserControl
     public SelectionActionBar()
     {
         InitializeComponent();
+        PenTaps = PenTapButtons.Attach(Surface); // the first pen tap after the lasso acts
         DataContextChanged += (_, _) => BuildSwatches();
         IsVisibleChanged += (_, _) => ApplyTransparency();
         Loaded += (_, _) =>
@@ -30,6 +31,9 @@ public partial class SelectionActionBar : UserControl
             ApplyTransparency();
         };
     }
+
+    /// <summary>The pen's taps on the bar's buttons (<see cref="PenTapButtons"/>).</summary>
+    internal PenTapButtons PenTaps { get; }
 
     /// <summary>The colour buttons, left to right; exposed for tests.</summary>
     internal IReadOnlyList<Button> SwatchButtons => [.. SwatchRow.Children.OfType<Button>()];
