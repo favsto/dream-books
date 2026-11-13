@@ -474,7 +474,9 @@
     <!-- The start screen (FR-03, phase 4b): the recent documents as cover cards under "Riprendi a leggere" and the
          "Apri PDF…" button. A card is a cover (a floating surface) with the title, when it was opened and the page
          reached, and a thin reading-progress bar. -->
-    <Thickness x:Key="StartMargin">44,72,44,24</Thickness>
+    <!-- The top clears the main menu button (MainMenuMargin top 48 + 40 px) by 16 DIP: in a window narrower than
+         StartMaxWidth plus the margins the title would otherwise sit under the button. -->
+    <Thickness x:Key="StartMargin">44,104,44,24</Thickness>
     <!-- The error line over the page, above the floating toolbar. -->
     <Thickness x:Key="ErrorLineMargin">0,0,0,96</Thickness>
     <sys:Double x:Key="StartMaxWidth">920</sys:Double>

@@ -18,6 +18,7 @@ public static class HighlighterGeometry
     private const double _angleEpsilon = 1e-9;
     private const double _maxStraightAngleDeg = 3;
     private const double _maxStraightDeviation = 0.02;
+    private const double _straightToleranceFloorPt = 4;
 
     /// <summary>
     /// The inked outline of a highlighter stroke: the chisel outline if it has a nib (FR-46), the constant-width one
@@ -148,7 +149,9 @@ public static class HighlighterGeometry
     /// Straight-line mode (FR-44): when the chord from the first to the last point is within 3° of
     /// horizontal and every point lies within 2% of the chord length from it, returns the two end points
     /// made horizontal (both at the mean height of the ends; x, timestamps and the other samples kept).
-    /// Otherwise, or with fewer than two points or no chord, returns null.
+    /// Both tolerances are at least 4 pt (a quarter of the highlighter's width, well inside a text line), so a
+    /// short highlight over a word or two, where 3° and 2% are a fraction of a point, still straightens despite the
+    /// hand's tremor. Otherwise, or with fewer than two points or no chord, returns null.
     /// </summary>
     public static IReadOnlyList<InkPoint>? StraightenIfNearHorizontal(IReadOnlyList<InkPoint> points)
     {
@@ -168,12 +171,13 @@ public static class HighlighterGeometry
             return null;
         }
 
-        if (Math.Atan2(Math.Abs(dy), Math.Abs(dx)) > _maxStraightAngleDeg * Math.PI / 180)
+        if (Math.Atan2(Math.Abs(dy), Math.Abs(dx)) > _maxStraightAngleDeg * Math.PI / 180
+            && !(Math.Abs(dy) <= _straightToleranceFloorPt && Math.Abs(dy) < Math.Abs(dx)))
         {
             return null;
         }
 
-        var limit = _maxStraightDeviation * length;
+        var limit = Math.Max(_maxStraightDeviation * length, _straightToleranceFloorPt);
         foreach (var p in points)
         {
             var t = Math.Clamp((((p.X - first.X) * dx) + ((p.Y - first.Y) * dy)) / (length * length), 0, 1);
