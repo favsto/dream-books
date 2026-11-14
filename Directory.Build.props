@@ -6,6 +6,6 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <!-- The one place of the app's version: the exe, the settings and the installers all read it. Raise it with
          installer/bump-version.sh. -->
-    <Version>0.5.1</Version>
+    <Version>0.6.0</Version>
   </PropertyGroup>
 </Project>

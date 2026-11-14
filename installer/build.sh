@@ -10,7 +10,23 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 props="$root/Directory.Build.props"
 csproj="$root/src/DreamBooks.App/DreamBooks.App.csproj"
 script="$root/installer/DreamBooks.iss"
-iscc="$LOCALAPPDATA/Programs/Inno Setup 6/ISCC.exe"
+
+# Git Bash (MSYS) and WSL both run this script: cygpath or wslpath converts Windows paths.
+if command -v cygpath >/dev/null 2>&1; then
+  win() { cygpath -w "$1"; }
+  unix() { cygpath -u "$1"; }
+else
+  win() { wslpath -w "$1"; }
+  unix() { wslpath -u "$1"; }
+fi
+
+# LOCALAPPDATA is not exported to WSL: ask Windows for it when it is missing.
+local_appdata="${LOCALAPPDATA:-}"
+if [ -z "$local_appdata" ]; then
+  local_appdata="$(cmd.exe /d /c "echo %LOCALAPPDATA%" 2>/dev/null </dev/null | tr -d '\r' | grep -m1 ':\\' || true)"
+  [ -n "$local_appdata" ] && local_appdata="$(unix "$local_appdata")"
+fi
+iscc="$local_appdata/Programs/Inno Setup 6/ISCC.exe"
 
 [ -f "$iscc" ] || { echo "Inno Setup not found at $iscc" >&2; exit 1; }
 [ -f "$script" ] || { echo "Installer script not found: $script" >&2; exit 1; }
@@ -35,8 +51,6 @@ done
 
 publish="$root/artifacts/publish/$arch"
 dotnet publish "$root/src/DreamBooks.App" -c Release -r "win-$arch" --self-contained -o "$publish"
-
-win() { cygpath -w "$1"; }
 
 # Windows shows the exe's file description in "Apri con" and Default apps.
 description="$(powershell -NoProfile -Command "(Get-Item '$(win "$publish")\\DreamBooks.App.exe').VersionInfo.FileDescription" | tr -d '\r')"
